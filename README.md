@@ -44,10 +44,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ```bash
 # Basic install
-pip install git+https://github.com/youruser/alpha-parser.git
+uv pip install git+https://github.com/youruser/alpha-parser.git
 
 # With optional dependencies
-pip install "alpha-parser[all] @ git+https://github.com/youruser/alpha-parser.git"
+uv pip install "alpha-parser[all] @ git+https://github.com/youruser/alpha-parser.git"
 ```
 
 **Option 2: Local development**
