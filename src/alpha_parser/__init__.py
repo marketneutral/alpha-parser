@@ -47,11 +47,13 @@ from .primitives import Returns, Volatility, Volume, Adv, returns, volatility, v
 
 # Time-series operations
 from .timeseries import (
-    TsMean, TsStd, TsSum, TsMax, TsMin, Delay, Delta, TsRank, FillForward,
-    TsCorr, TsCov, Ewma, TsArgmax, TsArgmin, TsSkew, TsKurt, DecayLinear,
+    TsMean, TsStd, TsSum, TsMax, TsMin, TsVar, Delay, Delta, TsRank, FillForward,
+    TsCorr, TsCov, Ewma, EwmaVar, EwmaCov, TsBeta, TsBetaEwma,
+    TsArgmax, TsArgmin, TsSkew, TsKurt, DecayLinear,
     TsMeanEvents, TsStdEvents, TsSumEvents, TsCountEvents,
-    ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
-    ts_corr, ts_cov, ewma, ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
+    ts_mean, ts_std, ts_sum, ts_max, ts_min, ts_var, delay, delta, ts_rank, fill_forward,
+    ts_corr, ts_cov, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_ewma,
+    ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 
@@ -66,8 +68,8 @@ from .conditional import Where, where
 
 # Group operations
 from .groups import (
-    GroupRank, GroupDemean, GroupCountValid,
-    group_rank, group_demean, group_count_valid,
+    GroupRank, GroupDemean, GroupCountValid, GroupStd,
+    group_rank, group_demean, group_count_valid, group_std,
 )
 
 # Parser
@@ -158,6 +160,7 @@ __all__ = [
     'TsSum',
     'TsMax',
     'TsMin',
+    'TsVar',
     'Delay',
     'Delta',
     'TsRank',
@@ -165,6 +168,10 @@ __all__ = [
     'TsCorr',
     'TsCov',
     'Ewma',
+    'EwmaVar',
+    'EwmaCov',
+    'TsBeta',
+    'TsBetaEwma',
     'TsArgmax',
     'TsArgmin',
     'TsSkew',
@@ -175,6 +182,7 @@ __all__ = [
     'ts_sum',
     'ts_max',
     'ts_min',
+    'ts_var',
     'delay',
     'delta',
     'ts_rank',
@@ -182,6 +190,10 @@ __all__ = [
     'ts_corr',
     'ts_cov',
     'ewma',
+    'ewma_var',
+    'ewma_cov',
+    'ts_beta',
+    'ts_beta_ewma',
     'ts_argmax',
     'ts_argmin',
     'ts_skew',
@@ -220,9 +232,11 @@ __all__ = [
     'GroupRank',
     'GroupDemean',
     'GroupCountValid',
+    'GroupStd',
     'group_rank',
     'group_demean',
     'group_count_valid',
+    'group_std',
 
     # Parser
     'AlphaParser',

@@ -4,15 +4,16 @@ import numpy as np
 import pandas as pd
 
 from .signal import Signal
+from .operators import Constant, _ensure_signal
 
 
 class Where(Signal):
     """Ternary operator: where(condition, if_true, if_false)."""
 
     def __init__(self, condition: Signal, if_true: Signal, if_false: Signal):
-        self.condition = condition
-        self.if_true = if_true
-        self.if_false = if_false
+        self.condition = _ensure_signal(condition)
+        self.if_true = _ensure_signal(if_true)
+        self.if_false = _ensure_signal(if_false)
 
     def _compute(self, data):
         cond = self.condition.evaluate(data).astype(bool)
