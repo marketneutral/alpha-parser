@@ -22,7 +22,11 @@ PYTHONPATH=src pytest tests/ -v
   - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`), comparison, validity (`is_valid`), and math ops (`log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min`)
   - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`)
   - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`)
-  - `groups.py` - Group-neutral operations (`group_rank`, `group_demean`, `group_neutralize`, `group_count_valid`)
+  - `groups.py` - Group-neutral operations (`group_rank`, `group_demean`, `group_count_valid`)
+  - `evaluation/` - Backtesting and evaluation module
+    - `backtest.py` - `Backtest` class with `BacktestResult`
+    - `metrics.py` - Performance metrics (`sharpe_ratio`, `max_drawdown`, `top_drawdowns`, etc.)
+    - `quantile.py` - `QuantileAnalysis` with `QuantileResult`
   - `primitives.py` - Basic signals (`returns`, `volatility`, `volume`, `adv`)
   - `data.py` - Data field access (`close`, `open`, `high`, `low`, `field`) and `LazyData`
   - `conditional.py` - Conditional logic (`where`)
@@ -77,6 +81,32 @@ risk_model = FactorRiskModel(factors=PRICE_ONLY_FACTORS)
 results = risk_model.fit(data)
 ```
 
+## Evaluation & Backtesting
+
+```python
+from alpha_parser import alpha, Backtest, QuantileAnalysis
+
+# Backtest a signal
+signal = alpha("rank(returns(20)) - 0.5")
+bt = Backtest(signal, transaction_cost=0.001)
+result = bt.run(data)
+print(result.summary())
+
+# Quantile analysis
+qa = QuantileAnalysis(signal, n_quantiles=5)
+qa_result = qa.run(data)
+print(qa_result.summary())
+
+# IC analysis
+ic_stats = qa.ic_summary(data)
+```
+
+Key metrics available:
+- `sharpe_ratio`, `sortino_ratio`, `calmar_ratio`
+- `max_drawdown`, `top_drawdowns`
+- `annualized_return`, `annualized_volatility`
+- `return_on_gmv` (return on gross market value)
+
 ## Testing
 
 Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture provides synthetic price/volume data with 8 tickers over 4 years.
@@ -84,7 +114,8 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_examples.py` - Core functionality tests
 - `test_events.py` - Sparse/event data tests (PEAD-style alphas)
 - `test_lazy.py` - LazyData on-demand loading tests
-- `test_operators.py` - Comprehensive tests for all operators (73 tests)
+- `test_operators.py` - Comprehensive tests for all operators (82 tests)
+- `test_evaluation.py` - Backtest and quantile analysis tests (30 tests)
 
 ## Data Fetching
 

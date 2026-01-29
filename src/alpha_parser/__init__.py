@@ -76,6 +76,14 @@ from .parser import AlphaParser, alpha, compute_weights
 # Risk model
 from .risk import FactorRiskModel, FactorDefinition, RiskModelResults, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
 
+# Evaluation
+from .evaluation import (
+    Backtest, BacktestResult,
+    QuantileAnalysis, QuantileResult,
+    sharpe_ratio, max_drawdown, top_drawdowns, return_on_gmv,
+    annualized_return, annualized_volatility, calmar_ratio, sortino_ratio,
+)
+
 
 __all__ = [
     # Context
@@ -223,4 +231,18 @@ __all__ = [
     'RiskModelResults',
     'DEFAULT_STYLE_FACTORS',
     'PRICE_ONLY_FACTORS',
+
+    # Evaluation
+    'Backtest',
+    'BacktestResult',
+    'QuantileAnalysis',
+    'QuantileResult',
+    'sharpe_ratio',
+    'max_drawdown',
+    'top_drawdowns',
+    'return_on_gmv',
+    'annualized_return',
+    'annualized_volatility',
+    'calmar_ratio',
+    'sortino_ratio',
 ]

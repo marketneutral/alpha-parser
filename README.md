@@ -360,13 +360,19 @@ alpha-parser/
 │       ├── groups.py         # Group operations
 │       ├── conditional.py    # Conditional (where) operations
 │       ├── parser.py         # Expression parser
-│       └── risk.py           # Multi-factor risk model
+│       ├── risk.py           # Multi-factor risk model
+│       └── evaluation/       # Backtesting & evaluation
+│           ├── __init__.py
+│           ├── backtest.py   # Backtest engine
+│           ├── metrics.py    # Performance metrics
+│           └── quantile.py   # Quantile analysis
 ├── tests/
 │   ├── conftest.py           # Test fixtures
 │   ├── test_examples.py      # Example-based tests
 │   ├── test_events.py        # Event/sparse data tests
 │   ├── test_lazy.py          # LazyData tests
-│   └── test_operators.py     # Comprehensive operator tests
+│   ├── test_operators.py     # Comprehensive operator tests
+│   └── test_evaluation.py    # Backtest & evaluation tests
 ├── data/
 │   ├── fetch_fmp.py          # FMP data fetcher
 │   └── .env.example          # API key template
@@ -502,6 +508,146 @@ custom_factors = [
 
 risk_model = FactorRiskModel(factors=custom_factors)
 ```
+
+## Signal Evaluation & Backtesting
+
+The evaluation module provides WorldQuant-style backtesting and quantile analysis:
+
+### Basic Backtest
+
+```python
+from alpha_parser import alpha, Backtest
+
+# Create a signal
+signal = alpha("rank(returns(20)) - 0.5")
+
+# Run backtest
+bt = Backtest(signal)
+result = bt.run(data)
+
+# Print summary
+print(result.summary())
+```
+
+**Output:**
+```
+==================================================
+BACKTEST RESULTS
+==================================================
+
+Performance Metrics:
+  Total Return:        12.34%
+  Annual Return:        6.52%
+  Annual Volatility:   15.21%
+  Sharpe Ratio:         0.43
+  Sortino Ratio:        0.61
+  Calmar Ratio:         0.38
+  Max Drawdown:        17.12%
+  Return on GMV:        5.87%
+
+Position Statistics:
+  Avg Long Count:       25.0
+  Avg Short Count:      25.0
+  Avg Daily Turnover:   8.52%
+
+Top Drawdowns:
+  1. Drawdown(17.1% from 2022-01-03 to 2022-06-15, duration=163d, recovery=89d)
+  2. Drawdown(9.8% from 2020-02-20 to 2020-03-23, duration=32d, recovery=45d)
+==================================================
+```
+
+### Backtest with Transaction Costs
+
+```python
+# Add 10bps round-trip transaction cost
+bt = Backtest(signal, transaction_cost=0.001)
+result = bt.run(data)
+```
+
+### Quantile Analysis
+
+Understand signal performance across quintiles:
+
+```python
+from alpha_parser import alpha, QuantileAnalysis
+
+signal = alpha("rank(returns(60)) - 0.5")
+
+# Run quintile analysis
+qa = QuantileAnalysis(signal, n_quantiles=5)
+result = qa.run(data)
+
+print(result.summary())
+```
+
+**Output:**
+```
+==================================================
+QUANTILE ANALYSIS
+==================================================
+
+Quantiles: 5
+Days: 1000
+Avg Stocks/Day: 50
+
+Returns by Quantile (annualized):
+  Q1:  -3.21%  Sharpe: -0.25  Hit:  48.2%
+  Q2:   1.05%  Sharpe:  0.08  Hit:  50.1%
+  Q3:   2.41%  Sharpe:  0.18  Hit:  51.3%
+  Q4:   4.12%  Sharpe:  0.31  Hit:  52.8%
+  Q5:   7.85%  Sharpe:  0.59  Hit:  54.6%
+
+Long-Short Spread (Q5 - Q1):
+  Annual Return:   11.06%
+  Sharpe Ratio:     0.84
+
+Rank IC: 0.032
+Monotonic: Yes
+==================================================
+```
+
+### Information Coefficient (IC) Analysis
+
+```python
+ic_stats = qa.ic_summary(data)
+print(ic_stats)
+```
+
+**Output:**
+```
+Mean Rank IC       0.032
+Std Rank IC        0.089
+IC IR (Rank)       0.360
+% Positive IC      0.584
+```
+
+### Walk-Forward Analysis
+
+Test signal stability across time:
+
+```python
+# Rolling out-of-sample tests
+wf_results = bt.run_walk_forward(
+    data,
+    train_period=252,  # 1 year training
+    test_period=63,    # 1 quarter testing
+)
+
+print(wf_results)
+```
+
+### Available Metrics
+
+The evaluation module provides these metrics:
+
+- **sharpe_ratio** - Annualized Sharpe ratio
+- **sortino_ratio** - Sortino ratio (downside deviation)
+- **calmar_ratio** - Return / max drawdown
+- **max_drawdown** - Maximum peak-to-trough decline
+- **top_drawdowns** - List of largest drawdowns with dates
+- **annualized_return** - Mean return × 252
+- **annualized_volatility** - Std × sqrt(252)
+- **return_on_gmv** - Total PnL / average gross exposure
 
 ## Limitations
 
