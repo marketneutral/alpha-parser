@@ -40,23 +40,36 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Installation
 
-1. Clone the repository:
+**Option 1: Install from Git (for use in other projects)**
+
+```bash
+# Basic install
+pip install git+https://github.com/youruser/alpha-parser.git
+
+# With optional dependencies
+pip install "alpha-parser[all] @ git+https://github.com/youruser/alpha-parser.git"
+```
+
+**Option 2: Local development**
+
 ```bash
 git clone <repository-url>
 cd alpha-parser
+uv venv
+source .venv/bin/activate
+uv pip install -e ".[all]"
 ```
 
-2. Create a virtual environment and install dependencies:
-```bash
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -r requirements.txt
-```
+**Optional dependency groups:**
+- `dev` - pytest, pyarrow (for testing)
+- `data` - requests, python-dotenv, pyarrow (for FMP data fetcher)
+- `risk` - statsmodels (for risk model)
+- `all` - everything
 
 ### Running Tests
 
 ```bash
-PYTHONPATH=src pytest tests/ -v
+pytest tests/ -v
 ```
 
 ## Usage
