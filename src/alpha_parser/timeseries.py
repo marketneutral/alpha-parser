@@ -394,3 +394,125 @@ def ts_kurt(signal: Signal, period: int) -> TsKurt:
 def decay_linear(signal: Signal, period: int) -> DecayLinear:
     """Create a DecayLinear signal (linearly decaying weighted average)."""
     return DecayLinear(signal, period)
+
+
+# Event-based rolling operations (roll over N non-NaN values, not N rows)
+
+def _apply_event_rolling(values: pd.DataFrame, n_events: int, func) -> pd.DataFrame:
+    """Apply a function over the past N non-NaN values for each column."""
+    result = pd.DataFrame(index=values.index, columns=values.columns, dtype=float)
+
+    for col in values.columns:
+        series = values[col].values
+        col_result = np.full(len(series), np.nan)
+        valid_values = []
+
+        for i, val in enumerate(series):
+            if not np.isnan(val):
+                valid_values.append(val)
+
+            if len(valid_values) >= n_events:
+                col_result[i] = func(valid_values[-n_events:])
+
+        result[col] = col_result
+
+    return result
+
+
+class TsMeanEvents(Signal):
+    """Rolling mean over past N non-NaN values (events).
+
+    Useful for sparse data like quarterly earnings where you want
+    the mean of the past N announcements, not the past N days.
+    """
+
+    def __init__(self, signal: Signal, n_events: int):
+        self.signal = signal
+        self.n_events = n_events
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return _apply_event_rolling(values, self.n_events, np.mean)
+
+    def _cache_key(self):
+        return ('TsMeanEvents', self.signal._cache_key(), self.n_events)
+
+
+class TsStdEvents(Signal):
+    """Rolling standard deviation over past N non-NaN values (events).
+
+    Useful for computing volatility of sparse data like earnings surprises
+    where you want the std of the past N announcements, not the past N days.
+    """
+
+    def __init__(self, signal: Signal, n_events: int):
+        self.signal = signal
+        self.n_events = n_events
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return _apply_event_rolling(
+            values, self.n_events,
+            lambda x: np.std(x, ddof=1) if len(x) > 1 else np.nan
+        )
+
+    def _cache_key(self):
+        return ('TsStdEvents', self.signal._cache_key(), self.n_events)
+
+
+class TsSumEvents(Signal):
+    """Rolling sum over past N non-NaN values (events)."""
+
+    def __init__(self, signal: Signal, n_events: int):
+        self.signal = signal
+        self.n_events = n_events
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return _apply_event_rolling(values, self.n_events, np.sum)
+
+    def _cache_key(self):
+        return ('TsSumEvents', self.signal._cache_key(), self.n_events)
+
+
+class TsCountEvents(Signal):
+    """Count of non-NaN values in a rolling window of rows.
+
+    Different from the other event operations - this counts how many
+    events occurred in the past N rows (days), not past N events.
+    Useful for measuring event density/frequency.
+    """
+
+    def __init__(self, signal: Signal, period: int):
+        self.signal = signal
+        self.period = period
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        # Count non-NaN values in rolling window
+        return values.notna().rolling(self.period).sum()
+
+    def _cache_key(self):
+        return ('TsCountEvents', self.signal._cache_key(), self.period)
+
+
+# Factory functions for event-based operations
+
+def ts_mean_events(signal: Signal, n_events: int) -> TsMeanEvents:
+    """Create a TsMeanEvents signal (mean over past N non-NaN values)."""
+    return TsMeanEvents(signal, n_events)
+
+
+def ts_std_events(signal: Signal, n_events: int) -> TsStdEvents:
+    """Create a TsStdEvents signal (std over past N non-NaN values)."""
+    return TsStdEvents(signal, n_events)
+
+
+def ts_sum_events(signal: Signal, n_events: int) -> TsSumEvents:
+    """Create a TsSumEvents signal (sum over past N non-NaN values)."""
+    return TsSumEvents(signal, n_events)
+
+
+def ts_count_events(signal: Signal, period: int) -> TsCountEvents:
+    """Create a TsCountEvents signal (count of non-NaN in rolling window)."""
+    return TsCountEvents(signal, period)

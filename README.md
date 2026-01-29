@@ -247,8 +247,8 @@ Post-Earnings Announcement Drift is a well-documented anomaly where stock prices
 **Basic PEAD Signal:**
 
 ```python
-# Earnings surprise: actual minus estimate, scaled by price
-surprise = "(field('earnings_actual') - field('earnings_estimate')) / close()"
+# Earnings surprise: actual minus estimate
+surprise = "field('earnings_actual') - field('earnings_estimate')"
 
 # Hold the surprise signal for 60 trading days (one quarter)
 # fill_forward propagates the signal from announcement day
@@ -258,27 +258,23 @@ held_surprise = f"fill_forward({surprise}, 60)"
 signal = alpha(f"rank({held_surprise}) - 0.5")
 ```
 
-**With Volatility Scaling:**
+**With Proper SUE (Standardized Unexpected Earnings):**
+
+The academic definition of SUE divides the earnings surprise by its historical standard deviation. Since earnings are quarterly (sparse data), we use `ts_std_events` which computes the rolling std over the past N *announcements*, not the past N days:
 
 ```python
-# Scale surprise by historical earnings volatility for comparability
-# This is closer to the academic "SUE" (Standardized Unexpected Earnings)
-sue = """
-    fill_forward(
-        (field('earnings_actual') - field('earnings_estimate'))
-        / ts_std(field('earnings_actual') - field('earnings_estimate'), 8),
-        60
-    )
-"""
-signal = alpha(f"rank({sue}) - 0.5")
+# SUE = surprise / std of past 8 earnings surprises
+surprise = "field('earnings_actual') - field('earnings_estimate')"
+sue = f"({surprise}) / ts_std_events({surprise}, 8)"
+
+# Hold for 60 days, rank cross-sectionally
+signal = alpha(f"rank(fill_forward({sue}, 60)) - 0.5")
 ```
 
 **Notes on PEAD Research:**
 - [Hirshleifer, Lim & Teoh (2009)](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1540-6261.2009.01501.x) found drift is *stronger* on high-news days when investors are distracted
 - [DellaVigna & Pollet (2009)](https://onlinelibrary.wiley.com/doi/10.1111/j.1540-6261.2009.01447.x) found Friday announcements show 69% larger drift
 - Recent research suggests PEAD has weakened significantly since 2006 in large-cap stocks
-
-The parser uses Python's `ast.parse()`, so comments and whitespace are handled naturally.
 
 ### Lazy Loading (Large Datasets)
 
@@ -387,6 +383,12 @@ alpha-parser/
 - `ts_skew(signal, period)` - Rolling skewness
 - `ts_kurt(signal, period)` - Rolling kurtosis
 - `decay_linear(signal, period)` - Linearly decaying weighted average (recent values weighted more)
+
+### Event-Based Time-Series (for sparse data like earnings)
+- `ts_mean_events(signal, n)` - Mean over past N non-NaN values (events)
+- `ts_std_events(signal, n)` - Std over past N non-NaN values (events)
+- `ts_sum_events(signal, n)` - Sum over past N non-NaN values (events)
+- `ts_count_events(signal, period)` - Count of non-NaN values in rolling window
 
 ### Cross-Sectional Operations
 - `rank(signal)` - Cross-sectional percentile rank (0-1, higher value → rank closer to 1)

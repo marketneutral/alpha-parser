@@ -13,6 +13,7 @@ from .primitives import returns, volatility, volume, adv
 from .timeseries import (
     ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
     ts_corr, ts_cov, ewma, ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
+    ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate
 from .conditional import where
@@ -56,6 +57,12 @@ class AlphaParser:
             'ts_skew': ts_skew,
             'ts_kurt': ts_kurt,
             'decay_linear': decay_linear,
+
+            # Event-based time-series ops (roll over N non-NaN values)
+            'ts_mean_events': ts_mean_events,
+            'ts_std_events': ts_std_events,
+            'ts_sum_events': ts_sum_events,
+            'ts_count_events': ts_count_events,
 
             # Cross-sectional ops
             'rank': rank,

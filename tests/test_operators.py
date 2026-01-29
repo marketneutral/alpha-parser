@@ -547,3 +547,155 @@ class TestComplexExpressions:
         valid = result.dropna()
         assert (valid >= -0.1).all().all()
         assert (valid <= 0.1).all().all()
+
+
+class TestEventBasedOperations:
+    """Test event-based rolling operations (roll over N non-NaN values)."""
+
+    @pytest.fixture
+    def sparse_data(self):
+        """Create sparse earnings-like data."""
+        dates = pd.date_range('2020-01-01', periods=100, freq='D')
+        tickers = ['A', 'B']
+
+        # Mostly NaN, with occasional values (simulating quarterly earnings)
+        earnings = pd.DataFrame(np.nan, index=dates, columns=tickers)
+
+        # A announces on days 10, 35, 60, 85 (roughly quarterly)
+        earnings.loc[dates[10], 'A'] = 1.0
+        earnings.loc[dates[35], 'A'] = 1.2
+        earnings.loc[dates[60], 'A'] = 0.8
+        earnings.loc[dates[85], 'A'] = 1.1
+
+        # B announces on days 15, 40, 65, 90
+        earnings.loc[dates[15], 'B'] = 2.0
+        earnings.loc[dates[40], 'B'] = 2.5
+        earnings.loc[dates[65], 'B'] = 1.8
+        earnings.loc[dates[90], 'B'] = 2.2
+
+        # Create price data
+        np.random.seed(42)
+        close = pd.DataFrame(
+            np.exp(np.random.randn(100, 2).cumsum(axis=0) * 0.02 + 4),
+            index=dates,
+            columns=tickers
+        )
+        volume = pd.DataFrame(
+            np.random.lognormal(10, 0.5, (100, 2)),
+            index=dates,
+            columns=tickers
+        )
+
+        return {'close': close, 'volume': volume, 'earnings': earnings}
+
+    def test_ts_mean_events_basic(self, sparse_data):
+        """Test mean over past N events."""
+        signal = alpha("ts_mean_events(field('earnings'), 2)")
+        result = signal.evaluate(sparse_data)
+
+        # For A: after day 35, mean of [1.0, 1.2] = 1.1
+        assert np.isclose(result.loc[sparse_data['close'].index[35], 'A'], 1.1)
+
+        # For A: after day 60, mean of [1.2, 0.8] = 1.0
+        assert np.isclose(result.loc[sparse_data['close'].index[60], 'A'], 1.0)
+
+        # Before 2 events, should be NaN
+        assert np.isnan(result.loc[sparse_data['close'].index[10], 'A'])
+
+    def test_ts_std_events_basic(self, sparse_data):
+        """Test std over past N events."""
+        signal = alpha("ts_std_events(field('earnings'), 2)")
+        result = signal.evaluate(sparse_data)
+
+        # For A: after day 35, std of [1.0, 1.2]
+        expected_std = np.std([1.0, 1.2], ddof=1)
+        assert np.isclose(result.loc[sparse_data['close'].index[35], 'A'], expected_std)
+
+        # Before 2 events, should be NaN
+        assert np.isnan(result.loc[sparse_data['close'].index[10], 'A'])
+
+    def test_ts_sum_events_basic(self, sparse_data):
+        """Test sum over past N events."""
+        signal = alpha("ts_sum_events(field('earnings'), 3)")
+        result = signal.evaluate(sparse_data)
+
+        # For A: after day 60, sum of [1.0, 1.2, 0.8] = 3.0
+        assert np.isclose(result.loc[sparse_data['close'].index[60], 'A'], 3.0)
+
+        # Before 3 events, should be NaN
+        assert np.isnan(result.loc[sparse_data['close'].index[35], 'A'])
+
+    def test_ts_count_events(self, sparse_data):
+        """Test counting events in rolling window."""
+        signal = alpha("ts_count_events(field('earnings'), 30)")
+        result = signal.evaluate(sparse_data)
+
+        # On day 45, window covers days 16-45
+        # A has event on day 35, B has events on days 15 (outside), 40
+        # So A should have 1, B should have 1
+        assert result.loc[sparse_data['close'].index[45], 'A'] == 1.0
+        assert result.loc[sparse_data['close'].index[45], 'B'] == 1.0
+
+    def test_sue_calculation(self, sparse_data):
+        """Test realistic SUE calculation using event-based std."""
+        # Create earnings surprise data
+        dates = sparse_data['close'].index
+        tickers = sparse_data['close'].columns
+
+        # Estimates (constant for simplicity)
+        estimates = pd.DataFrame(1.0, index=dates, columns=tickers)
+        sparse_data['estimates'] = estimates
+
+        # Actual earnings with surprises
+        actuals = sparse_data['earnings'].copy()
+        sparse_data['actuals'] = actuals
+
+        # SUE = (actual - estimate) / std of past surprises
+        # But we need at least 2 events for std
+        sue_expr = "(field('actuals') - field('estimates')) / ts_std_events(field('actuals') - field('estimates'), 2)"
+        signal = alpha(sue_expr)
+        result = signal.evaluate(sparse_data)
+
+        # Check shape
+        assert result.shape == sparse_data['close'].shape
+
+        # After 2nd announcement, should have valid SUE
+        # A's 2nd announcement is day 35
+        assert not np.isnan(result.loc[dates[35], 'A'])
+
+    def test_pead_with_sue(self, sparse_data):
+        """Test full PEAD signal construction with proper SUE."""
+        dates = sparse_data['close'].index
+        tickers = sparse_data['close'].columns
+
+        estimates = pd.DataFrame(1.0, index=dates, columns=tickers)
+        sparse_data['estimates'] = estimates
+        sparse_data['actuals'] = sparse_data['earnings'].copy()
+
+        # Full PEAD: rank(fill_forward(SUE, 60)) - 0.5
+        sue = "(field('actuals') - field('estimates')) / ts_std_events(field('actuals') - field('estimates'), 2)"
+        pead_expr = f"rank(fill_forward({sue}, 60)) - 0.5"
+        signal = alpha(pead_expr)
+        result = signal.evaluate(sparse_data)
+
+        assert result.shape == sparse_data['close'].shape
+        # After sufficient events, should have valid signal
+        # Check day 95 (after all 4 announcements per stock)
+        assert not np.isnan(result.loc[dates[95], 'A'])
+        assert not np.isnan(result.loc[dates[95], 'B'])
+
+    def test_event_operations_persist_between_events(self, sparse_data):
+        """Test that event-based operations return values between events."""
+        signal = alpha("ts_mean_events(field('earnings'), 2)")
+        result = signal.evaluate(sparse_data)
+
+        dates = sparse_data['close'].index
+
+        # After day 35 (2nd A announcement), check days 36-59
+        # The value should persist (same as day 35)
+        day_35_value = result.loc[dates[35], 'A']
+        for i in range(36, 60):
+            assert np.isclose(result.loc[dates[i], 'A'], day_35_value)
+
+        # After day 60 (3rd A announcement), value should update
+        assert not np.isclose(result.loc[dates[60], 'A'], day_35_value)
