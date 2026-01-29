@@ -27,6 +27,8 @@ class ZScore(Signal):
         values = self.signal.evaluate(data)
         mean = values.mean(axis=1)
         std = values.std(axis=1)
+        # Handle division by zero - replace 0 std with NaN
+        std = std.replace(0, float('nan'))
         return values.sub(mean, axis=0).div(std, axis=0)
 
     def _cache_key(self):
@@ -112,3 +114,44 @@ class Winsorize(Signal):
 def winsorize(signal: Signal, limit: float) -> Winsorize:
     """Create a Winsorize signal. Limit is the percentile to cap at (e.g., 0.05 caps at 5th/95th)."""
     return Winsorize(signal, limit)
+
+
+class Scale(Signal):
+    """Scale signal so that absolute values sum to 1 cross-sectionally."""
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        abs_sum = values.abs().sum(axis=1)
+        abs_sum = abs_sum.replace(0, float('nan'))
+        return values.div(abs_sum, axis=0)
+
+    def _cache_key(self):
+        return ('Scale', self.signal._cache_key())
+
+
+def scale(signal: Signal) -> Scale:
+    """Create a Scale signal. Scales so abs values sum to 1."""
+    return Scale(signal)
+
+
+class Truncate(Signal):
+    """Truncate signal to max absolute weight cross-sectionally."""
+
+    def __init__(self, signal: Signal, max_weight: float):
+        self.signal = signal
+        self.max_weight = max_weight
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values.clip(lower=-self.max_weight, upper=self.max_weight)
+
+    def _cache_key(self):
+        return ('Truncate', self.signal._cache_key(), self.max_weight)
+
+
+def truncate(signal: Signal, max_weight: float) -> Truncate:
+    """Create a Truncate signal. Clips values to [-max_weight, max_weight]."""
+    return Truncate(signal, max_weight)

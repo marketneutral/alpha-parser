@@ -9,11 +9,15 @@ import pandas as pd
 from .signal import Signal
 from .operators import Constant, is_valid
 from .data import close, open, high, low, field
-from .primitives import returns, volatility, volume
-from .timeseries import ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward
-from .crosssection import rank, zscore, demean, quantile, winsorize
+from .primitives import returns, volatility, volume, adv
+from .timeseries import (
+    ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
+    ts_corr, ts_cov, ewma, ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
+)
+from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate
 from .conditional import where
 from .groups import group_rank, group_demean, group_neutralize, group_count_valid
+from .operators import log, abs_, sign, sqrt, power, max_, min_
 
 
 class AlphaParser:
@@ -32,6 +36,7 @@ class AlphaParser:
             'returns': returns,
             'volatility': volatility,
             'volume': volume,
+            'adv': adv,
 
             # Time-series ops
             'ts_mean': ts_mean,
@@ -43,6 +48,14 @@ class AlphaParser:
             'delta': delta,
             'ts_rank': ts_rank,
             'fill_forward': fill_forward,
+            'ts_corr': ts_corr,
+            'ts_cov': ts_cov,
+            'ewma': ewma,
+            'ts_argmax': ts_argmax,
+            'ts_argmin': ts_argmin,
+            'ts_skew': ts_skew,
+            'ts_kurt': ts_kurt,
+            'decay_linear': decay_linear,
 
             # Cross-sectional ops
             'rank': rank,
@@ -50,6 +63,8 @@ class AlphaParser:
             'demean': demean,
             'quantile': quantile,
             'winsorize': winsorize,
+            'scale': scale,
+            'truncate': truncate,
 
             # Conditional
             'where': where,
@@ -62,6 +77,15 @@ class AlphaParser:
 
             # Validity ops
             'is_valid': is_valid,
+
+            # Math ops
+            'log': log,
+            'abs': abs_,
+            'sign': sign,
+            'sqrt': sqrt,
+            'power': power,
+            'max': max_,
+            'min': min_,
         }
 
         self.binops = {

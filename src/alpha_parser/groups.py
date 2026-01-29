@@ -7,6 +7,27 @@ from .signal import Signal
 from .data import resolve_data
 
 
+def _get_group_data(data, groups: str) -> pd.DataFrame:
+    """Get group DataFrame, supporting both data['sector'] and data['groups']['sector'] formats."""
+    data = resolve_data(data)
+
+    # Try direct access first: data['sector']
+    if groups in data:
+        return data[groups]
+
+    # Try nested format: data['groups']['sector']
+    if 'groups' in data:
+        groups_container = data['groups']
+        # Support both pd.DataFrame and custom GroupsContainer-like objects
+        if groups in groups_container:
+            return groups_container[groups]
+
+    raise ValueError(
+        f"Group '{groups}' not found. "
+        f"Expected data['{groups}'] or data['groups']['{groups}']"
+    )
+
+
 class GroupRank(Signal):
     """Rank within groups (e.g., industry-neutral rank)."""
 
@@ -15,13 +36,8 @@ class GroupRank(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        data = resolve_data(data)
         values = self.signal.evaluate(data)
-
-        if 'groups' not in data or self.groups not in data['groups'].columns:
-            raise ValueError(f"Group column '{self.groups}' not found in data['groups']")
-
-        group_df = data['groups'][self.groups]
+        group_df = _get_group_data(data, self.groups)
 
         result = pd.DataFrame(
             np.nan,
@@ -55,13 +71,8 @@ class GroupDemean(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        data = resolve_data(data)
         values = self.signal.evaluate(data)
-
-        if 'groups' not in data or self.groups not in data['groups'].columns:
-            raise ValueError(f"Group column '{self.groups}' not found in data['groups']")
-
-        group_df = data['groups'][self.groups]
+        group_df = _get_group_data(data, self.groups)
 
         result = pd.DataFrame(
             np.nan,
@@ -95,13 +106,8 @@ class GroupNeutralize(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        data = resolve_data(data)
         values = self.signal.evaluate(data)
-
-        if 'groups' not in data or self.groups not in data['groups'].columns:
-            raise ValueError(f"Group column '{self.groups}' not found in data['groups']")
-
-        group_df = data['groups'][self.groups]
+        group_df = _get_group_data(data, self.groups)
         result = values.copy()
 
         for date in values.index:
@@ -145,13 +151,8 @@ class GroupCountValid(Signal):
         self.window = window
 
     def _compute(self, data):
-        data = resolve_data(data)
         values = self.signal.evaluate(data)
-
-        if 'groups' not in data or self.groups not in data['groups'].columns:
-            raise ValueError(f"Group column '{self.groups}' not found in data['groups']")
-
-        group_df = data['groups'][self.groups]
+        group_df = _get_group_data(data, self.groups)
 
         result = pd.DataFrame(
             np.nan,

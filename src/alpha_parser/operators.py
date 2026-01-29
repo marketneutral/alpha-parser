@@ -171,3 +171,146 @@ class IsValid(Signal):
 def is_valid(signal: Signal) -> IsValid:
     """Create an IsValid signal."""
     return IsValid(signal)
+
+
+# Math Operations
+
+class Log(Signal):
+    """Natural logarithm of a signal."""
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        import numpy as np
+        values = self.signal.evaluate(data)
+        return np.log(values)
+
+    def _cache_key(self):
+        return ('Log', self.signal._cache_key())
+
+
+class Abs(Signal):
+    """Absolute value of a signal."""
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values.abs()
+
+    def _cache_key(self):
+        return ('Abs', self.signal._cache_key())
+
+
+class Sign(Signal):
+    """Sign of a signal (-1, 0, or 1)."""
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        import numpy as np
+        values = self.signal.evaluate(data)
+        return np.sign(values)
+
+    def _cache_key(self):
+        return ('Sign', self.signal._cache_key())
+
+
+class Sqrt(Signal):
+    """Square root of a signal."""
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        import numpy as np
+        values = self.signal.evaluate(data)
+        return np.sqrt(values)
+
+    def _cache_key(self):
+        return ('Sqrt', self.signal._cache_key())
+
+
+class Power(Signal):
+    """Raise signal to a power."""
+
+    def __init__(self, signal: Signal, exponent):
+        self.signal = signal
+        self.exponent = exponent
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values ** self.exponent
+
+    def _cache_key(self):
+        return ('Power', self.signal._cache_key(), self.exponent)
+
+
+class Max(BinaryOp):
+    """Element-wise maximum of two signals."""
+
+    def _compute(self, data):
+        import numpy as np
+        import pandas as pd
+        left = self.left.evaluate(data)
+        right = self.right.evaluate(data)
+        return pd.DataFrame(
+            np.maximum(left, right),
+            index=left.index,
+            columns=left.columns
+        )
+
+
+class Min(BinaryOp):
+    """Element-wise minimum of two signals."""
+
+    def _compute(self, data):
+        import numpy as np
+        import pandas as pd
+        left = self.left.evaluate(data)
+        right = self.right.evaluate(data)
+        return pd.DataFrame(
+            np.minimum(left, right),
+            index=left.index,
+            columns=left.columns
+        )
+
+
+# Factory functions for math operations
+
+def log(signal: Signal) -> Log:
+    """Create a Log signal (natural logarithm)."""
+    return Log(signal)
+
+
+def abs_(signal: Signal) -> Abs:
+    """Create an Abs signal (absolute value)."""
+    return Abs(signal)
+
+
+def sign(signal: Signal) -> Sign:
+    """Create a Sign signal."""
+    return Sign(signal)
+
+
+def sqrt(signal: Signal) -> Sqrt:
+    """Create a Sqrt signal."""
+    return Sqrt(signal)
+
+
+def power(signal: Signal, exponent) -> Power:
+    """Create a Power signal."""
+    return Power(signal, exponent)
+
+
+def max_(left: Signal, right: Signal) -> Max:
+    """Create a Max signal (element-wise maximum)."""
+    return Max(_ensure_signal(left), _ensure_signal(right))
+
+
+def min_(left: Signal, right: Signal) -> Min:
+    """Create a Min signal (element-wise minimum)."""
+    return Min(_ensure_signal(left), _ensure_signal(right))

@@ -34,6 +34,8 @@ from .operators import (
     Greater, Less, GreaterEqual, LessEqual, Equal, NotEqual,
     And, Or, Not,
     IsValid, is_valid,
+    Log, Abs, Sign, Sqrt, Power, Max, Min,
+    log, abs_, sign, sqrt, power, max_, min_,
     _ensure_signal,
 )
 
@@ -41,16 +43,21 @@ from .operators import (
 from .data import Field, close, open, high, low, field, LazyData
 
 # Primitives
-from .primitives import Returns, Volatility, Volume, returns, volatility, volume
+from .primitives import Returns, Volatility, Volume, Adv, returns, volatility, volume, adv
 
 # Time-series operations
 from .timeseries import (
     TsMean, TsStd, TsSum, TsMax, TsMin, Delay, Delta, TsRank, FillForward,
+    TsCorr, TsCov, Ewma, TsArgmax, TsArgmin, TsSkew, TsKurt, DecayLinear,
     ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
+    ts_corr, ts_cov, ewma, ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
 )
 
 # Cross-sectional operations
-from .crosssection import Rank, ZScore, Demean, Quantile, Winsorize, rank, zscore, demean, quantile, winsorize
+from .crosssection import (
+    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate,
+    rank, zscore, demean, quantile, winsorize, scale, truncate,
+)
 
 # Conditional operations
 from .conditional import Where, where
@@ -96,6 +103,20 @@ __all__ = [
     'Not',
     'IsValid',
     'is_valid',
+    'Log',
+    'Abs',
+    'Sign',
+    'Sqrt',
+    'Power',
+    'Max',
+    'Min',
+    'log',
+    'abs_',
+    'sign',
+    'sqrt',
+    'power',
+    'max_',
+    'min_',
     '_ensure_signal',
 
     # Data access
@@ -111,9 +132,11 @@ __all__ = [
     'Returns',
     'Volatility',
     'Volume',
+    'Adv',
     'returns',
     'volatility',
     'volume',
+    'adv',
 
     # Time-series
     'TsMean',
@@ -125,6 +148,14 @@ __all__ = [
     'Delta',
     'TsRank',
     'FillForward',
+    'TsCorr',
+    'TsCov',
+    'Ewma',
+    'TsArgmax',
+    'TsArgmin',
+    'TsSkew',
+    'TsKurt',
+    'DecayLinear',
     'ts_mean',
     'ts_std',
     'ts_sum',
@@ -134,6 +165,14 @@ __all__ = [
     'delta',
     'ts_rank',
     'fill_forward',
+    'ts_corr',
+    'ts_cov',
+    'ewma',
+    'ts_argmax',
+    'ts_argmin',
+    'ts_skew',
+    'ts_kurt',
+    'decay_linear',
 
     # Cross-sectional
     'Rank',
@@ -141,11 +180,15 @@ __all__ = [
     'Demean',
     'Quantile',
     'Winsorize',
+    'Scale',
+    'Truncate',
     'rank',
     'zscore',
     'demean',
     'quantile',
     'winsorize',
+    'scale',
+    'truncate',
 
     # Conditional
     'Where',

@@ -63,3 +63,25 @@ def volatility(period: int) -> Volatility:
 def volume(period: int) -> Volume:
     """Create a Volume signal."""
     return Volume(period)
+
+
+class Adv(Signal):
+    """Average dollar volume (price * volume) over a period."""
+
+    def __init__(self, period: int, price_field: str = 'close'):
+        self.period = period
+        self.price_field = price_field
+
+    def _compute(self, data):
+        prices = data[self.price_field]
+        vol = data['volume']
+        dollar_volume = prices * vol
+        return dollar_volume.rolling(self.period).mean()
+
+    def _cache_key(self):
+        return ('Adv', self.period, self.price_field)
+
+
+def adv(period: int) -> Adv:
+    """Create an Adv signal (average dollar volume)."""
+    return Adv(period)
