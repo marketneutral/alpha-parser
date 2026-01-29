@@ -68,9 +68,9 @@ class TestAlphasWithRealData:
         weights = signal.to_weights(fmp_data)
 
         assert weights.shape[0] > 100
-        # Weights should be roughly balanced (long/short)
+        # Weights should be normalized (sum to ~1)
         last_weights = weights.iloc[-1].dropna()
-        assert abs(last_weights.sum()) < 0.1  # Near zero sum
+        assert abs(last_weights.sum() - 1.0) < 0.01  # Normalized to 1
 
 
 class TestBacktestWithRealData:
@@ -86,8 +86,8 @@ class TestBacktestWithRealData:
 
         # Should complete without error and have results
         assert result.total_return is not None
-        assert result.sharpe_ratio is not None
-        assert len(result.daily_returns) > 100
+        assert result.sharpe is not None
+        assert len(result.returns) > 100
 
         # Print for manual inspection
         print("\n" + result.summary())
@@ -128,7 +128,8 @@ class TestQuantileAnalysisWithRealData:
         result = qa.run(fmp_data)
 
         # Should have 5 quantiles
-        assert len(result.quantile_returns) == 5
+        assert result.n_quantiles == 5
+        assert result.quantile_returns.shape[1] == 5  # 5 columns for 5 quantiles
 
         # Print for manual inspection
         print("\n" + result.summary())
@@ -141,12 +142,13 @@ class TestQuantileAnalysisWithRealData:
         qa = QuantileAnalysis(signal, n_quantiles=5)
         ic_stats = qa.ic_summary(fmp_data)
 
-        # Should have IC statistics
-        assert 'mean_ic' in ic_stats
-        assert 'ic_ir' in ic_stats
-        assert -1 <= ic_stats['mean_ic'] <= 1
+        # Should have IC statistics (returns a pandas Series)
+        assert 'Mean Rank IC' in ic_stats.index
+        assert 'IC IR (Rank)' in ic_stats.index
+        mean_ic = ic_stats['Mean Rank IC']
+        assert -1 <= mean_ic <= 1
 
-        print(f"\nIC Stats: {ic_stats}")
+        print(f"\nIC Stats:\n{ic_stats}")
 
 
 class TestComplexAlphasWithRealData:
@@ -156,7 +158,7 @@ class TestComplexAlphasWithRealData:
         """Test 52-week high proximity signal."""
         from alpha_parser import alpha
 
-        signal = alpha("rank(close / ts_max(close, 252))")
+        signal = alpha("rank(close() / ts_max(close(), 252))")
         weights = signal.to_weights(fmp_data)
 
         # Need at least 252 days of data for this signal
