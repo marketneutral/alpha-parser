@@ -1,0 +1,45 @@
+name: Create Main Branch
+
+# This workflow creates the main branch for the repository.
+# Run this once to establish the main branch as the primary development branch.
+# After running, you can set 'main' as the default branch in repository settings.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Branch to create main from (leave empty for current branch)'
+        required: false
+        default: ''
+
+jobs:
+  create-main:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.base_branch || github.ref }}
+          fetch-depth: 0
+      
+      - name: Create and push main branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if main branch exists on remote
+          if git ls-remote --heads origin main | grep main; then
+            echo "✓ Main branch already exists on remote"
+            exit 0
+          fi
+          
+          # Create main branch from current commit
+          echo "Creating main branch from $(git rev-parse --abbrev-ref HEAD) at commit $(git rev-parse --short HEAD)"
+          git checkout -b main
+          git push origin main
+          echo "✓ Main branch created and pushed successfully"
+          echo ""
+          echo "Next steps:"
+          echo "1. Go to Settings > Branches"
+          echo "2. Set 'main' as the default branch"
