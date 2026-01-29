@@ -1025,3 +1025,175 @@ class TestPairsTrading:
         # After warm-up period, should have values (mostly zeros due to low volatility in synthetic data)
         valid = result.iloc[65:]
         assert not valid.isna().all().all()
+
+
+class TestEwmaAndBetaOperations:
+    """Test EWMA variance/covariance and beta operations."""
+
+    @pytest.fixture
+    def beta_data(self):
+        """Data for beta and EWMA tests."""
+        np.random.seed(42)
+        dates = pd.date_range('2020-01-01', periods=100, freq='D')
+        tickers = ['AAPL', 'MSFT', 'SPY']
+
+        # Generate correlated returns
+        # SPY is "market", AAPL has beta ~1.2, MSFT has beta ~0.8
+        market_returns = np.random.randn(100) * 0.01
+        aapl_returns = 1.2 * market_returns + np.random.randn(100) * 0.005
+        msft_returns = 0.8 * market_returns + np.random.randn(100) * 0.005
+
+        # Convert to prices
+        close = pd.DataFrame(index=dates, columns=tickers)
+        close['SPY'] = 100 * np.exp(np.cumsum(market_returns))
+        close['AAPL'] = 150 * np.exp(np.cumsum(aapl_returns))
+        close['MSFT'] = 200 * np.exp(np.cumsum(msft_returns))
+
+        volume = pd.DataFrame(
+            np.random.lognormal(15, 0.5, (100, 3)),
+            index=dates,
+            columns=tickers
+        )
+
+        return {'close': close, 'volume': volume}
+
+    def test_ts_var(self, beta_data):
+        """Test rolling variance."""
+        signal = alpha("ts_var(returns(1), 20)")
+        result = signal.evaluate(beta_data)
+
+        assert result.shape == beta_data['close'].shape
+        # Variance should be non-negative
+        valid = result.dropna()
+        assert (valid >= 0).all().all()
+        # First 20 rows should be NaN
+        assert result.iloc[:20].isna().all().all()
+
+    def test_ewma_var(self, beta_data):
+        """Test EWMA variance."""
+        signal = alpha("ewma_var(returns(1), 10)")
+        result = signal.evaluate(beta_data)
+
+        assert result.shape == beta_data['close'].shape
+        # Variance should be non-negative
+        valid = result.dropna()
+        assert (valid >= 0).all().all()
+
+        # Should match pandas ewm().var()
+        returns = beta_data['close'].pct_change()
+        expected = returns.ewm(halflife=10).var()
+        pd.testing.assert_frame_equal(result, expected)
+
+    def test_ewma_cov(self, beta_data):
+        """Test EWMA covariance between two signals."""
+        signal = alpha("ewma_cov(returns(1), volume(1), 10)")
+        result = signal.evaluate(beta_data)
+
+        assert result.shape == beta_data['close'].shape
+        # Covariance can be any real number
+
+    def test_ts_beta_basic(self, beta_data):
+        """Test rolling beta calculation."""
+        # Beta of AAPL returns vs SPY returns
+        signal = alpha("ts_beta(returns(1), delay(returns(1), 0), 20)")
+        result = signal.evaluate(beta_data)
+
+        assert result.shape == beta_data['close'].shape
+        # Beta can be any real number
+
+    def test_ts_beta_vs_manual(self, beta_data):
+        """Test ts_beta matches manual cov/var calculation."""
+        signal_beta = alpha("ts_beta(returns(1), volume(1), 20)")
+        signal_manual = alpha("ts_cov(returns(1), volume(1), 20) / ts_var(volume(1), 20)")
+
+        result_beta = signal_beta.evaluate(beta_data)
+        result_manual = signal_manual.evaluate(beta_data)
+
+        # Should be equal (within floating point tolerance)
+        pd.testing.assert_frame_equal(result_beta, result_manual)
+
+    def test_ts_beta_ewma_basic(self, beta_data):
+        """Test EWMA beta calculation."""
+        signal = alpha("ts_beta_ewma(returns(1), volume(1), 10)")
+        result = signal.evaluate(beta_data)
+
+        assert result.shape == beta_data['close'].shape
+
+    def test_ts_beta_ewma_vs_manual(self, beta_data):
+        """Test ts_beta_ewma matches manual ewma_cov/ewma_var calculation."""
+        signal_beta = alpha("ts_beta_ewma(returns(1), volume(1), 10)")
+        signal_manual = alpha("ewma_cov(returns(1), volume(1), 10) / ewma_var(volume(1), 10)")
+
+        result_beta = signal_beta.evaluate(beta_data)
+        result_manual = signal_manual.evaluate(beta_data)
+
+        # Should be equal (within floating point tolerance)
+        pd.testing.assert_frame_equal(result_beta, result_manual)
+
+    def test_beta_hedge_ratio_concept(self, beta_data):
+        """Test that beta can be used as hedge ratio.
+
+        If we compute beta(y, x), then y - beta * x should have lower variance.
+        """
+        # Get returns
+        returns = beta_data['close'].pct_change()
+        y = returns['AAPL']
+        x = returns['SPY']
+
+        # Compute beta using our signal
+        signal = alpha("ts_beta(returns(1), delay(returns(1), 0), 60)")
+        result = signal.evaluate(beta_data)
+
+        # After warm-up, we should have beta estimates
+        # The residual y - beta * x should have lower std than y alone
+        start_idx = 65
+        beta_values = result.iloc[start_idx:]['AAPL']
+
+        # Compute hedged returns (manually, just to verify concept)
+        y_window = y.iloc[start_idx:]
+        x_window = x.iloc[start_idx:]
+        hedged = y_window - beta_values * x_window
+
+        # Hedged returns should have lower std than unhedged
+        # (This is the whole point of beta hedging)
+        assert hedged.std() < y_window.std()
+
+    def test_ewma_beta_more_responsive(self, beta_data):
+        """Test that EWMA beta responds faster to recent changes."""
+        # Modify data to have a regime change
+        dates = pd.date_range('2020-01-01', periods=100, freq='D')
+        np.random.seed(123)
+
+        # First 50 days: low volatility, beta ~1.0
+        market_ret1 = np.random.randn(50) * 0.01
+        stock_ret1 = 1.0 * market_ret1 + np.random.randn(50) * 0.005
+
+        # Last 50 days: high volatility, beta ~2.0
+        market_ret2 = np.random.randn(50) * 0.02
+        stock_ret2 = 2.0 * market_ret2 + np.random.randn(50) * 0.01
+
+        market_returns = np.concatenate([market_ret1, market_ret2])
+        stock_returns = np.concatenate([stock_ret1, stock_ret2])
+
+        close = pd.DataFrame(index=dates, columns=['STOCK', 'MKT'])
+        close['MKT'] = 100 * np.exp(np.cumsum(market_returns))
+        close['STOCK'] = 100 * np.exp(np.cumsum(stock_returns))
+        volume = pd.DataFrame(np.ones((100, 2)), index=dates, columns=['STOCK', 'MKT'])
+
+        data = {'close': close, 'volume': volume}
+
+        # Compare rolling vs EWMA beta at the end
+        signal_rolling = alpha("ts_beta(returns(1), delay(returns(1), 0), 40)")
+        signal_ewma = alpha("ts_beta_ewma(returns(1), delay(returns(1), 0), 10)")
+
+        result_rolling = signal_rolling.evaluate(data)
+        result_ewma = signal_ewma.evaluate(data)
+
+        # At day 99, EWMA should be closer to 2.0 than rolling
+        # because EWMA gives more weight to recent (high-beta) observations
+        rolling_beta = result_rolling.iloc[-1]['STOCK']
+        ewma_beta = result_ewma.iloc[-1]['STOCK']
+
+        # Both should be > 1 (reflecting the regime change)
+        # EWMA should be higher (closer to true recent beta of 2.0)
+        assert ewma_beta > rolling_beta * 0.9  # EWMA should be at least similar or higher

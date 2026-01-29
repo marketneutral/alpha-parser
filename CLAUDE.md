@@ -52,7 +52,7 @@ PYTHONPATH=src pytest tests/ -v
 `log(x)`, `abs(x)`, `sign(x)`, `sqrt(x)`, `power(x, n)`, `max(x, y)`, `min(x, y)`
 
 ### Time-Series
-`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
+`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ewma_var`, `ewma_cov`, `ts_beta`, `ts_beta_ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
 
 ### Event-Based (for sparse data)
 `ts_mean_events`, `ts_std_events`, `ts_sum_events`, `ts_count_events`
@@ -114,7 +114,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_examples.py` - Core functionality tests
 - `test_events.py` - Sparse/event data tests (PEAD-style alphas)
 - `test_lazy.py` - LazyData on-demand loading tests
-- `test_operators.py` - Comprehensive tests for all operators (87 tests)
+- `test_operators.py` - Comprehensive tests for all operators (96 tests)
 - `test_evaluation.py` - Backtest and quantile analysis tests (30 tests)
 - `test_integration.py` - Integration tests with real FMP data (requires data fetch)
 

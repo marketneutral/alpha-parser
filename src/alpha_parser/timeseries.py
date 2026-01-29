@@ -195,6 +195,21 @@ class TsCov(Signal):
         return ('TsCov', self.signal1._cache_key(), self.signal2._cache_key(), self.period)
 
 
+class TsVar(Signal):
+    """Rolling variance of a signal."""
+
+    def __init__(self, signal: Signal, period: int):
+        self.signal = signal
+        self.period = period
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values.rolling(self.period).var()
+
+    def _cache_key(self):
+        return ('TsVar', self.signal._cache_key(), self.period)
+
+
 class Ewma(Signal):
     """Exponentially weighted moving average."""
 
@@ -208,6 +223,84 @@ class Ewma(Signal):
 
     def _cache_key(self):
         return ('Ewma', self.signal._cache_key(), self.halflife)
+
+
+class EwmaVar(Signal):
+    """Exponentially weighted moving variance."""
+
+    def __init__(self, signal: Signal, halflife: int):
+        self.signal = signal
+        self.halflife = halflife
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values.ewm(halflife=self.halflife).var()
+
+    def _cache_key(self):
+        return ('EwmaVar', self.signal._cache_key(), self.halflife)
+
+
+class EwmaCov(Signal):
+    """Exponentially weighted moving covariance between two signals."""
+
+    def __init__(self, signal1: Signal, signal2: Signal, halflife: int):
+        self.signal1 = signal1
+        self.signal2 = signal2
+        self.halflife = halflife
+
+    def _compute(self, data):
+        values1 = self.signal1.evaluate(data)
+        values2 = self.signal2.evaluate(data)
+        return values1.ewm(halflife=self.halflife).cov(values2)
+
+    def _cache_key(self):
+        return ('EwmaCov', self.signal1._cache_key(), self.signal2._cache_key(), self.halflife)
+
+
+class TsBeta(Signal):
+    """Rolling beta (regression coefficient) of signal1 on signal2.
+
+    Computes: cov(y, x) / var(x) where y=signal1, x=signal2.
+    Useful for hedge ratios, market beta, factor exposures.
+    """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int):
+        self.signal1 = signal1
+        self.signal2 = signal2
+        self.period = period
+
+    def _compute(self, data):
+        y = self.signal1.evaluate(data)
+        x = self.signal2.evaluate(data)
+        cov = y.rolling(self.period).cov(x)
+        var = x.rolling(self.period).var()
+        return cov / var
+
+    def _cache_key(self):
+        return ('TsBeta', self.signal1._cache_key(), self.signal2._cache_key(), self.period)
+
+
+class TsBetaEwma(Signal):
+    """EWMA-weighted beta (regression coefficient) of signal1 on signal2.
+
+    Computes: ewma_cov(y, x) / ewma_var(x) where y=signal1, x=signal2.
+    More robust than equal-weighted rolling beta, gives more weight to recent observations.
+    """
+
+    def __init__(self, signal1: Signal, signal2: Signal, halflife: int):
+        self.signal1 = signal1
+        self.signal2 = signal2
+        self.halflife = halflife
+
+    def _compute(self, data):
+        y = self.signal1.evaluate(data)
+        x = self.signal2.evaluate(data)
+        cov = y.ewm(halflife=self.halflife).cov(x)
+        var = x.ewm(halflife=self.halflife).var()
+        return cov / var
+
+    def _cache_key(self):
+        return ('TsBetaEwma', self.signal1._cache_key(), self.signal2._cache_key(), self.halflife)
 
 
 class TsArgmax(Signal):
@@ -366,9 +459,34 @@ def ts_cov(signal1: Signal, signal2: Signal, period: int) -> TsCov:
     return TsCov(signal1, signal2, period)
 
 
+def ts_var(signal: Signal, period: int) -> TsVar:
+    """Create a TsVar signal (rolling variance)."""
+    return TsVar(signal, period)
+
+
 def ewma(signal: Signal, halflife: int) -> Ewma:
     """Create an Ewma signal (exponentially weighted moving average)."""
     return Ewma(signal, halflife)
+
+
+def ewma_var(signal: Signal, halflife: int) -> EwmaVar:
+    """Create an EwmaVar signal (exponentially weighted moving variance)."""
+    return EwmaVar(signal, halflife)
+
+
+def ewma_cov(signal1: Signal, signal2: Signal, halflife: int) -> EwmaCov:
+    """Create an EwmaCov signal (exponentially weighted moving covariance)."""
+    return EwmaCov(signal1, signal2, halflife)
+
+
+def ts_beta(signal1: Signal, signal2: Signal, period: int) -> TsBeta:
+    """Create a TsBeta signal (rolling beta: cov(y, x) / var(x))."""
+    return TsBeta(signal1, signal2, period)
+
+
+def ts_beta_ewma(signal1: Signal, signal2: Signal, halflife: int) -> TsBetaEwma:
+    """Create a TsBetaEwma signal (EWMA-weighted beta: ewma_cov / ewma_var)."""
+    return TsBetaEwma(signal1, signal2, halflife)
 
 
 def ts_argmax(signal: Signal, period: int) -> TsArgmax:
