@@ -130,3 +130,57 @@ def group_demean(signal: Signal, groups: str) -> GroupDemean:
 def group_neutralize(signal: Signal, groups: str) -> GroupNeutralize:
     """Create a GroupNeutralize signal."""
     return GroupNeutralize(signal, groups)
+
+
+class GroupCountValid(Signal):
+    """Count non-NaN values within each group over a rolling window, broadcast to all members."""
+
+    def __init__(self, signal: Signal, groups: str, window: int):
+        self.signal = signal
+        self.groups = groups
+        self.window = window
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+
+        if 'groups' not in data or self.groups not in data['groups'].columns:
+            raise ValueError(f"Group column '{self.groups}' not found in data['groups']")
+
+        group_df = data['groups'][self.groups]
+
+        result = pd.DataFrame(
+            np.nan,
+            index=values.index,
+            columns=values.columns
+        )
+
+        # For each date, count valid values in each group over the rolling window
+        for i, date in enumerate(values.index):
+            # Get the window of data
+            start_idx = max(0, i - self.window + 1)
+            window_values = values.iloc[start_idx:i + 1]
+
+            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
+
+            for group_name in date_groups.unique():
+                if pd.isna(group_name):
+                    continue
+                mask = date_groups == group_name
+                group_tickers = mask[mask].index
+
+                # Count non-NaN values for this group's tickers in the window
+                group_window_values = window_values[group_tickers]
+                count = group_window_values.notna().sum().sum()
+
+                # Broadcast count to all members of the group
+                result.loc[date, mask] = count
+
+        return result
+
+    def _cache_key(self):
+        return ('GroupCountValid', self.signal._cache_key(), self.groups, self.window)
+
+
+def group_count_valid(signal: Signal, groups: str, window: int) -> GroupCountValid:
+    """Create a GroupCountValid signal."""
+    return GroupCountValid(signal, groups, window)

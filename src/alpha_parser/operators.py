@@ -152,3 +152,22 @@ class Not(Signal):
 
     def _cache_key(self):
         return ('Not', self.signal._cache_key())
+
+
+class IsValid(Signal):
+    """Returns 1 where signal is not NaN, 0 otherwise."""
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values.notna().astype(float)
+
+    def _cache_key(self):
+        return ('IsValid', self.signal._cache_key())
+
+
+def is_valid(signal: Signal) -> IsValid:
+    """Create an IsValid signal."""
+    return IsValid(signal)

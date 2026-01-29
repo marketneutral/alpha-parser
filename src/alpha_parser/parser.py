@@ -7,13 +7,13 @@ from typing import Any, Dict
 import pandas as pd
 
 from .signal import Signal
-from .operators import Constant
+from .operators import Constant, is_valid
 from .data import close, open, high, low, field
 from .primitives import returns, volatility, volume
-from .timeseries import ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank
+from .timeseries import ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward
 from .crosssection import rank, zscore, demean
 from .conditional import where
-from .groups import group_rank, group_demean, group_neutralize
+from .groups import group_rank, group_demean, group_neutralize, group_count_valid
 
 
 class AlphaParser:
@@ -42,6 +42,7 @@ class AlphaParser:
             'delay': delay,
             'delta': delta,
             'ts_rank': ts_rank,
+            'fill_forward': fill_forward,
 
             # Cross-sectional ops
             'rank': rank,
@@ -55,6 +56,10 @@ class AlphaParser:
             'group_rank': group_rank,
             'group_demean': group_demean,
             'group_neutralize': group_neutralize,
+            'group_count_valid': group_count_valid,
+
+            # Validity ops
+            'is_valid': is_valid,
         }
 
         self.binops = {

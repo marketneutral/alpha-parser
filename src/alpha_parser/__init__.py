@@ -33,6 +33,7 @@ from .operators import (
     Add, Sub, Mul, Div, Neg,
     Greater, Less, GreaterEqual, LessEqual, Equal, NotEqual,
     And, Or, Not,
+    IsValid, is_valid,
     _ensure_signal,
 )
 
@@ -44,8 +45,8 @@ from .primitives import Returns, Volatility, Volume, returns, volatility, volume
 
 # Time-series operations
 from .timeseries import (
-    TsMean, TsStd, TsSum, TsMax, TsMin, Delay, Delta, TsRank,
-    ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank,
+    TsMean, TsStd, TsSum, TsMax, TsMin, Delay, Delta, TsRank, FillForward,
+    ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
 )
 
 # Cross-sectional operations
@@ -56,8 +57,8 @@ from .conditional import Where, where
 
 # Group operations
 from .groups import (
-    GroupRank, GroupDemean, GroupNeutralize,
-    group_rank, group_demean, group_neutralize,
+    GroupRank, GroupDemean, GroupNeutralize, GroupCountValid,
+    group_rank, group_demean, group_neutralize, group_count_valid,
 )
 
 # Parser
@@ -90,6 +91,8 @@ __all__ = [
     'And',
     'Or',
     'Not',
+    'IsValid',
+    'is_valid',
     '_ensure_signal',
 
     # Data access
@@ -117,6 +120,7 @@ __all__ = [
     'Delay',
     'Delta',
     'TsRank',
+    'FillForward',
     'ts_mean',
     'ts_std',
     'ts_sum',
@@ -125,6 +129,7 @@ __all__ = [
     'delay',
     'delta',
     'ts_rank',
+    'fill_forward',
 
     # Cross-sectional
     'Rank',
@@ -142,9 +147,11 @@ __all__ = [
     'GroupRank',
     'GroupDemean',
     'GroupNeutralize',
+    'GroupCountValid',
     'group_rank',
     'group_demean',
     'group_neutralize',
+    'group_count_valid',
 
     # Parser
     'AlphaParser',

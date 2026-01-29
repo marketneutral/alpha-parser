@@ -166,3 +166,23 @@ def delta(signal: Signal, period: int) -> Delta:
 def ts_rank(signal: Signal, period: int) -> TsRank:
     """Create a TsRank signal."""
     return TsRank(signal, period)
+
+
+class FillForward(Signal):
+    """Forward fill missing values for up to N periods."""
+
+    def __init__(self, signal: Signal, limit: int):
+        self.signal = signal
+        self.limit = limit
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values.ffill(limit=self.limit)
+
+    def _cache_key(self):
+        return ('FillForward', self.signal._cache_key(), self.limit)
+
+
+def fill_forward(signal: Signal, limit: int) -> FillForward:
+    """Create a FillForward signal."""
+    return FillForward(signal, limit)
