@@ -1,0 +1,79 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: |
+          source .venv/bin/activate
+          pytest -m "not integration" -v
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    # Only run if FMP_API_KEY secret is available
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -e ".[dev,data]"
+
+      - name: Cache FMP data
+        uses: actions/cache@v4
+        id: cache-fmp
+        with:
+          path: data/fmp
+          key: fmp-data-v1-${{ hashFiles('data/fetch_fmp.py') }}
+
+      - name: Fetch FMP data
+        if: steps.cache-fmp.outputs.cache-hit != 'true'
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: |
+          source .venv/bin/activate
+          echo "FMP_API_KEY=$FMP_API_KEY" > data/.env
+          python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN NVDA META TSLA JPM V MA --start 2022-01-01 --skip-fundamentals
+
+      - name: Run integration tests
+        run: |
+          source .venv/bin/activate
+          pytest -m integration -v
