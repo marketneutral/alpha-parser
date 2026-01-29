@@ -50,3 +50,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "integration: tests requiring real FMP data (run with: pytest -m integration)",
+]
