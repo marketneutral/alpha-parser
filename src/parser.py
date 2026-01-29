@@ -24,7 +24,10 @@ class ComputeContext:
         parts = []
         for key in sorted(data.keys()):
             df = data[key]
-            parts.append(f"{key}:{df.shape}:{df.index[0]}:{df.index[-1]}")
+            if isinstance(df, pd.DataFrame):
+                parts.append(f"{key}:{df.shape}:{df.index[0]}:{df.index[-1]}")
+            else:
+                parts.append(f"{key}:{id(df)}")
         return hashlib.md5("".join(parts).encode()).hexdigest()
 
     def clear(self):
@@ -852,6 +855,16 @@ class AlphaParser:
             op = self.unaryops[type(node.op)]
             return op(operand)
 
+        elif isinstance(node, ast.Compare):
+            # Handle comparison operators (e.g., a < b, a > b)
+            left = self._visit(node.left)
+            # Only support single comparisons for now
+            if len(node.ops) != 1:
+                raise ValueError("Chained comparisons not supported")
+            op = self.binops[type(node.ops[0])]
+            right = self._visit(node.comparators[0])
+            return op(left, right)
+
         elif isinstance(node, ast.Call):
             func_name = node.func.id
             if func_name not in self.functions:
@@ -938,11 +951,23 @@ if __name__ == "__main__":
     for ticker in tickers:
         groups_df[ticker] = sector_data[ticker]
 
+    # Simple container for group data that mimics DataFrame column access
+    class GroupsContainer:
+        def __init__(self, **kwargs):
+            self._groups = kwargs
+            self.columns = list(kwargs.keys())
+
+        def __getitem__(self, key):
+            return self._groups[key]
+
+        def __contains__(self, key):
+            return key in self._groups
+
     data = {
         'close': prices,
         'volume': volumes,
         'market_cap': market_caps,
-        'groups': pd.DataFrame({'sector': groups_df})
+        'groups': GroupsContainer(sector=groups_df)
     }
 
     print("=" * 80)
