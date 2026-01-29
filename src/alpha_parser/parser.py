@@ -11,7 +11,7 @@ from .operators import Constant, is_valid
 from .data import close, open, high, low, field
 from .primitives import returns, volatility, volume
 from .timeseries import ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward
-from .crosssection import rank, zscore, demean
+from .crosssection import rank, zscore, demean, quantile
 from .conditional import where
 from .groups import group_rank, group_demean, group_neutralize, group_count_valid
 
@@ -48,6 +48,7 @@ class AlphaParser:
             'rank': rank,
             'zscore': zscore,
             'demean': demean,
+            'quantile': quantile,
 
             # Conditional
             'where': where,

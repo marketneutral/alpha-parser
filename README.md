@@ -141,7 +141,8 @@ alpha-parser/
 - `fill_forward(signal, limit)` - Forward fill NaN for up to N periods
 
 ### Cross-Sectional Operations
-- `rank(signal)` - Cross-sectional percentile rank
+- `rank(signal)` - Cross-sectional percentile rank (0-1)
+- `quantile(signal, buckets)` - Assign to quantile buckets (1=lowest, n=highest)
 - `zscore(signal)` - Cross-sectional z-score
 - `demean(signal)` - Subtract cross-sectional mean
 

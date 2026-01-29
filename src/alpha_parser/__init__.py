@@ -50,7 +50,7 @@ from .timeseries import (
 )
 
 # Cross-sectional operations
-from .crosssection import Rank, ZScore, Demean, rank, zscore, demean
+from .crosssection import Rank, ZScore, Demean, Quantile, rank, zscore, demean, quantile
 
 # Conditional operations
 from .conditional import Where, where
@@ -135,9 +135,11 @@ __all__ = [
     'Rank',
     'ZScore',
     'Demean',
+    'Quantile',
     'rank',
     'zscore',
     'demean',
+    'quantile',
 
     # Conditional
     'Where',
