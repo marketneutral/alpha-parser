@@ -27,16 +27,16 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -r requirements.txt
 ```
 
-### Running
+### Running Tests
 
 ```bash
-python src/parser.py
+PYTHONPATH=src pytest tests/ -v
 ```
 
 ## Usage
 
 ```python
-from src.parser import alpha, compute_weights, compute_context
+from alpha_parser import alpha, compute_weights, compute_context
 
 # Parse a signal expression
 signal = alpha("rank(-returns(20) / volatility(60))")
@@ -53,6 +53,31 @@ with compute_context():
     signal2 = alpha("rank(returns(252))")
     result1 = signal1.evaluate(data)
     result2 = signal2.evaluate(data)
+```
+
+## Project Structure
+
+```
+alpha-parser/
+├── src/
+│   └── alpha_parser/
+│       ├── __init__.py       # Public API exports
+│       ├── context.py        # Compute context and caching
+│       ├── signal.py         # Base Signal class
+│       ├── operators.py      # Arithmetic, comparison, logical ops
+│       ├── data.py           # Data field access
+│       ├── primitives.py     # Returns, volatility, volume
+│       ├── timeseries.py     # Time-series operations
+│       ├── crosssection.py   # Cross-sectional operations
+│       ├── groups.py         # Group operations
+│       ├── conditional.py    # Conditional (where) operations
+│       └── parser.py         # Expression parser
+├── tests/
+│   ├── conftest.py           # Test fixtures
+│   └── test_examples.py      # Example-based tests
+├── requirements.txt
+├── LICENSE
+└── README.md
 ```
 
 ## Available Functions
@@ -88,3 +113,7 @@ with compute_context():
 - `group_rank(signal, 'group_name')` - Rank within groups
 - `group_demean(signal, 'group_name')` - Demean within groups
 - `group_neutralize(signal, 'group_name')` - Neutralize to groups
+
+## License
+
+Apache 2.0 - see [LICENSE](LICENSE) for details.
