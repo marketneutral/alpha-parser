@@ -69,7 +69,16 @@ uv pip install -e ".[all]"
 ### Running Tests
 
 ```bash
+# Run unit tests (fast, no external data needed)
 pytest tests/ -v
+
+# Run integration tests with real FMP data
+# First fetch data, then run with -m integration
+python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN NVDA META TSLA JPM V MA --start 2022-01-01
+pytest -m integration -v
+
+# Run all tests (unit + integration)
+pytest tests/ -v  # integration tests auto-skip if data not present
 ```
 
 ## Usage
