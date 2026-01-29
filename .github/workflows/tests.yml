@@ -62,7 +62,7 @@ jobs:
         id: cache-fmp
         with:
           path: data/fmp
-          key: fmp-data-v1-${{ hashFiles('data/fetch_fmp.py') }}
+          key: fmp-data-v2-pairs-${{ hashFiles('data/fetch_fmp.py') }}
 
       - name: Fetch FMP data
         if: steps.cache-fmp.outputs.cache-hit != 'true'
@@ -71,7 +71,7 @@ jobs:
         run: |
           source .venv/bin/activate
           echo "FMP_API_KEY=$FMP_API_KEY" > data/.env
-          python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN NVDA META TSLA JPM V MA --start 2022-01-01 --skip-fundamentals
+          python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN JPM BAC KO PEP XOM CVX HD LOW V MA --start 2022-01-01 --skip-fundamentals
 
       - name: Run integration tests
         run: |

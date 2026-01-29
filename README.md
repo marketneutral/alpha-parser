@@ -73,8 +73,8 @@ uv pip install -e ".[all]"
 pytest tests/ -v
 
 # Run integration tests with real FMP data
-# First fetch data, then run with -m integration
-python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN NVDA META TSLA JPM V MA --start 2022-01-01
+# First fetch data (includes pairs: KO/PEP, JPM/BAC, XOM/CVX, HD/LOW, V/MA)
+python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN JPM BAC KO PEP XOM CVX HD LOW V MA --start 2022-01-01
 pytest -m integration -v
 
 # Run all tests (unit + integration)
