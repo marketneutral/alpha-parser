@@ -16,22 +16,22 @@ PYTHONPATH=src pytest tests/ -v
 
 ## Architecture
 
-- `src/alpha_parser/` - Main package
+- `src/alpha_parser/` - Signal DSL package
   - `signal.py` - Base `Signal` class with `evaluate()` and `to_weights()` methods
   - `parser.py` - `AlphaParser` converts string expressions to Signal trees
   - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`), comparison, validity (`is_valid`), and math ops (`log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min`)
   - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`)
   - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`)
   - `groups.py` - Group-neutral operations (`group_rank`, `group_demean`, `group_count_valid`)
-  - `evaluation/` - Backtesting and evaluation module
-    - `backtest.py` - `Backtest` class with `BacktestResult`
-    - `metrics.py` - Performance metrics (`sharpe_ratio`, `max_drawdown`, `top_drawdowns`, etc.)
-    - `quantile.py` - `QuantileAnalysis` with `QuantileResult`
   - `primitives.py` - Basic signals (`returns`, `volatility`, `volume`, `adv`)
   - `data.py` - Data field access (`close`, `open`, `high`, `low`, `field`) and `LazyData`
   - `conditional.py` - Conditional logic (`where`)
   - `context.py` - `compute_context()` provides shared caching across signals
   - `risk.py` - Multi-factor risk model (`FactorRiskModel`, `FactorDefinition`)
+- `src/evaluation/` - Backtesting and evaluation module
+  - `backtest.py` - `Backtest` class with `BacktestResult`
+  - `metrics.py` - Performance metrics (`sharpe_ratio`, `max_drawdown`, `top_drawdowns`, etc.)
+  - `quantile.py` - `QuantileAnalysis` with `QuantileResult`
 
 ## Key Patterns
 

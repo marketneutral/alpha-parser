@@ -6,8 +6,8 @@ from typing import Dict, Optional, Union
 import numpy as np
 import pandas as pd
 
-from ..signal import Signal
-from ..context import compute_context
+from alpha_parser.signal import Signal
+from alpha_parser.context import compute_context
 from .metrics import (
     sharpe_ratio,
     max_drawdown,

@@ -348,24 +348,24 @@ data/
 ```
 alpha-parser/
 ├── src/
-│   └── alpha_parser/
-│       ├── __init__.py       # Public API exports
-│       ├── context.py        # Compute context and caching
-│       ├── signal.py         # Base Signal class
-│       ├── operators.py      # Arithmetic, comparison, logical, validity, math ops
-│       ├── data.py           # Data field access
-│       ├── primitives.py     # Returns, volatility, volume, adv
-│       ├── timeseries.py     # Time-series operations
-│       ├── crosssection.py   # Cross-sectional operations
-│       ├── groups.py         # Group operations
-│       ├── conditional.py    # Conditional (where) operations
-│       ├── parser.py         # Expression parser
-│       ├── risk.py           # Multi-factor risk model
-│       └── evaluation/       # Backtesting & evaluation
-│           ├── __init__.py
-│           ├── backtest.py   # Backtest engine
-│           ├── metrics.py    # Performance metrics
-│           └── quantile.py   # Quantile analysis
+│   ├── alpha_parser/         # Signal DSL package
+│   │   ├── __init__.py       # Public API exports
+│   │   ├── context.py        # Compute context and caching
+│   │   ├── signal.py         # Base Signal class
+│   │   ├── operators.py      # Arithmetic, comparison, logical, validity, math ops
+│   │   ├── data.py           # Data field access
+│   │   ├── primitives.py     # Returns, volatility, volume, adv
+│   │   ├── timeseries.py     # Time-series operations
+│   │   ├── crosssection.py   # Cross-sectional operations
+│   │   ├── groups.py         # Group operations
+│   │   ├── conditional.py    # Conditional (where) operations
+│   │   ├── parser.py         # Expression parser
+│   │   └── risk.py           # Multi-factor risk model
+│   └── evaluation/           # Backtesting & evaluation
+│       ├── __init__.py
+│       ├── backtest.py       # Backtest engine
+│       ├── metrics.py        # Performance metrics
+│       └── quantile.py       # Quantile analysis
 ├── tests/
 │   ├── conftest.py           # Test fixtures
 │   ├── test_examples.py      # Example-based tests

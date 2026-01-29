@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_parser import alpha
-from alpha_parser.evaluation import (
+from evaluation import (
     Backtest,
     BacktestResult,
     QuantileAnalysis,

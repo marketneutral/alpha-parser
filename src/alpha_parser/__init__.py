@@ -76,8 +76,8 @@ from .parser import AlphaParser, alpha, compute_weights
 # Risk model
 from .risk import FactorRiskModel, FactorDefinition, RiskModelResults, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
 
-# Evaluation
-from .evaluation import (
+# Evaluation (sibling package)
+from evaluation import (
     Backtest, BacktestResult,
     QuantileAnalysis, QuantileResult,
     sharpe_ratio, max_drawdown, top_drawdowns, return_on_gmv,
