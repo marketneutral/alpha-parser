@@ -276,6 +276,39 @@ signal = alpha(f"rank(fill_forward({sue}, 60)) - 0.5")
 - [DellaVigna & Pollet (2009)](https://onlinelibrary.wiley.com/doi/10.1111/j.1540-6261.2009.01447.x) found Friday announcements show 69% larger drift
 - Recent research suggests PEAD has weakened significantly since 2006 in large-cap stocks
 
+### Technical Indicator Examples
+
+Alpha Parser makes it easy to express classic technical indicators as single-line expressions.
+
+**Bollinger Band Mean-Reversion:**
+
+Bollinger Bands measure how far price is from its moving average in terms of standard deviations. The %B indicator (0-1 scale) shows where price is within the bands. This signal goes long when price is near the lower band (oversold) and short when near the upper band (overbought):
+
+```python
+# Bollinger %B mean-reversion signal
+# When %B is low (near 0), price is near lower band → go long
+# When %B is high (near 1), price is near upper band → go short
+signal = alpha("""
+    rank(-(close() - ts_mean(close(), 20)) / (2 * ts_std(close(), 20))) - 0.5
+""")
+```
+
+**RSI Mean-Reversion:**
+
+The Relative Strength Index (RSI) measures the ratio of recent gains to total price movement. This signal goes long when RSI is low (oversold) and short when RSI is high (overbought):
+
+```python
+# RSI mean-reversion signal
+# Low RSI (oversold) → go long, High RSI (overbought) → go short
+signal = alpha("""
+    rank(-(100 * ts_mean(max(delta(close(), 1), 0), 14)
+        / (ts_mean(max(delta(close(), 1), 0), 14)
+           + ts_mean(max(-delta(close(), 1), 0), 14)))) - 0.5
+""")
+```
+
+Note: These signals use `rank()` to convert raw indicator values into cross-sectional percentile ranks, making them comparable across stocks with different price levels and volatilities. The `- 0.5` centers the signal around zero for long/short portfolios.
+
 ### Lazy Loading (Large Datasets)
 
 For large datasets, use `LazyData` to load fields on demand. Only fields actually used by the signal will be loaded:

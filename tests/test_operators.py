@@ -699,3 +699,193 @@ class TestEventBasedOperations:
 
         # After day 60 (3rd A announcement), value should update
         assert not np.isclose(result.loc[dates[60], 'A'], day_35_value)
+
+
+class TestTechnicalIndicators:
+    """Test technical indicator signals: Bollinger Bands, RSI."""
+
+    @pytest.fixture
+    def indicator_data(self):
+        """Data for technical indicator tests."""
+        dates = pd.date_range('2020-01-01', periods=50, freq='D')
+        tickers = ['A', 'B', 'C', 'D']
+
+        np.random.seed(42)
+        # Create trending price data with some mean reversion
+        close = pd.DataFrame(
+            np.exp(np.random.randn(50, 4).cumsum(axis=0) * 0.02 + 4),
+            index=dates,
+            columns=tickers
+        )
+
+        volume = pd.DataFrame(
+            np.random.lognormal(10, 0.5, (50, 4)),
+            index=dates,
+            columns=tickers
+        )
+
+        return {'close': close, 'volume': volume}
+
+    def test_bollinger_pct_b_basic(self, indicator_data):
+        """Test Bollinger %B calculation."""
+        # Raw %B = (close - lower_band) / (upper_band - lower_band)
+        # Simplified: (close - (ma - 2*std)) / (4*std) = (close - ma + 2*std) / (4*std)
+        signal = alpha("(close() - ts_mean(close(), 20)) / (2 * ts_std(close(), 20))")
+        result = signal.evaluate(indicator_data)
+
+        assert result.shape == indicator_data['close'].shape
+        # First 19 rows should be NaN (need 20 periods for rolling)
+        assert result.iloc[:19].isna().all().all()
+        # After warm-up, should have values
+        assert result.iloc[19:].notna().all().all()
+
+    def test_bollinger_mean_reversion_signal(self, indicator_data):
+        """Test full Bollinger mean-reversion signal."""
+        signal = alpha("rank(-(close() - ts_mean(close(), 20)) / (2 * ts_std(close(), 20))) - 0.5")
+        result = signal.evaluate(indicator_data)
+
+        assert result.shape == indicator_data['close'].shape
+
+        # Valid values should be centered around 0
+        valid = result.dropna()
+
+        # Ranks minus 0.5 should be in [-0.5, 0.5]
+        assert (valid >= -0.5).all().all()
+        assert (valid <= 0.5).all().all()
+
+        # Signal should have both positive and negative values (long/short)
+        assert (valid > 0).any().any()
+        assert (valid < 0).any().any()
+
+    def test_bollinger_components(self, indicator_data):
+        """Test individual Bollinger Band components."""
+        close = indicator_data['close']
+
+        # Middle band = 20-day SMA
+        ma_signal = alpha("ts_mean(close(), 20)")
+        ma_result = ma_signal.evaluate(indicator_data)
+        expected_ma = close.rolling(20).mean()
+        pd.testing.assert_frame_equal(ma_result, expected_ma)
+
+        # Standard deviation
+        std_signal = alpha("ts_std(close(), 20)")
+        std_result = std_signal.evaluate(indicator_data)
+        expected_std = close.rolling(20).std()
+        pd.testing.assert_frame_equal(std_result, expected_std)
+
+    def test_rsi_basic(self, indicator_data):
+        """Test basic RSI calculation."""
+        # RSI = 100 * avg_gain / (avg_gain + avg_loss)
+        signal = alpha(
+            "100 * ts_mean(max(delta(close(), 1), 0), 14) "
+            "/ (ts_mean(max(delta(close(), 1), 0), 14) + ts_mean(max(-delta(close(), 1), 0), 14))"
+        )
+        result = signal.evaluate(indicator_data)
+
+        assert result.shape == indicator_data['close'].shape
+
+        # RSI should be between 0 and 100 (or NaN)
+        valid = result.dropna()
+        assert (valid >= 0).all().all()
+        assert (valid <= 100).all().all()
+
+    def test_rsi_mean_reversion_signal(self, indicator_data):
+        """Test full RSI mean-reversion signal."""
+        signal = alpha(
+            "rank(-(100 * ts_mean(max(delta(close(), 1), 0), 14) "
+            "/ (ts_mean(max(delta(close(), 1), 0), 14) + ts_mean(max(-delta(close(), 1), 0), 14)))) - 0.5"
+        )
+        result = signal.evaluate(indicator_data)
+
+        assert result.shape == indicator_data['close'].shape
+
+        # Valid values should be centered around 0
+        valid = result.dropna()
+
+        # Ranks minus 0.5 should be in [-0.5, 0.5]
+        assert (valid >= -0.5).all().all()
+        assert (valid <= 0.5).all().all()
+
+        # Signal should have both positive and negative values (long/short)
+        assert (valid > 0).any().any()
+        assert (valid < 0).any().any()
+
+    def test_rsi_gains_losses_separation(self, indicator_data):
+        """Test that RSI correctly separates gains and losses."""
+        # Gains: positive deltas only
+        gains_signal = alpha("max(delta(close(), 1), 0)")
+        gains = gains_signal.evaluate(indicator_data)
+
+        # Losses: negative deltas made positive
+        losses_signal = alpha("max(-delta(close(), 1), 0)")
+        losses = losses_signal.evaluate(indicator_data)
+
+        # Raw delta
+        delta_signal = alpha("delta(close(), 1)")
+        delta = delta_signal.evaluate(indicator_data)
+
+        # Gains + Losses should equal abs(delta)
+        valid_idx = gains.notna() & losses.notna() & delta.notna()
+        for col in gains.columns:
+            for idx in gains.index:
+                if valid_idx.loc[idx, col]:
+                    assert np.isclose(
+                        gains.loc[idx, col] + losses.loc[idx, col],
+                        abs(delta.loc[idx, col]),
+                        atol=1e-10
+                    )
+
+    def test_rsi_extreme_values(self):
+        """Test RSI with extreme price movements."""
+        dates = pd.date_range('2020-01-01', periods=30, freq='D')
+
+        # Create data with all up moves for stock A, all down moves for stock B
+        close_a = [100.0 + i for i in range(30)]  # Steadily rising
+        close_b = [100.0 - i * 0.5 for i in range(30)]  # Steadily falling
+
+        close = pd.DataFrame(
+            {'A': close_a, 'B': close_b},
+            index=dates
+        )
+        volume = pd.DataFrame(
+            {'A': [1000.0] * 30, 'B': [1000.0] * 30},
+            index=dates
+        )
+        data = {'close': close, 'volume': volume}
+
+        signal = alpha(
+            "100 * ts_mean(max(delta(close(), 1), 0), 14) "
+            "/ (ts_mean(max(delta(close(), 1), 0), 14) + ts_mean(max(-delta(close(), 1), 0), 14))"
+        )
+        result = signal.evaluate(data)
+
+        # Stock A (all gains) should have RSI = 100
+        # Stock B (all losses) should have RSI = 0
+        assert np.isclose(result.iloc[-1]['A'], 100.0)
+        assert np.isclose(result.iloc[-1]['B'], 0.0)
+
+    def test_bollinger_ewma_variant(self, indicator_data):
+        """Test Bollinger Bands with EWMA instead of SMA."""
+        signal = alpha("rank(-(close() - ewma(close(), 10)) / ts_std(close(), 20)) - 0.5")
+        result = signal.evaluate(indicator_data)
+
+        assert result.shape == indicator_data['close'].shape
+
+        valid = result.dropna()
+        assert (valid >= -0.5).all().all()
+        assert (valid <= 0.5).all().all()
+
+    def test_rsi_ewma_variant(self, indicator_data):
+        """Test RSI using EWMA instead of SMA (Wilder's smoothing style)."""
+        # Traditional RSI often uses exponential smoothing
+        signal = alpha(
+            "100 * ewma(max(delta(close(), 1), 0), 14) "
+            "/ (ewma(max(delta(close(), 1), 0), 14) + ewma(max(-delta(close(), 1), 0), 14))"
+        )
+        result = signal.evaluate(indicator_data)
+
+        assert result.shape == indicator_data['close'].shape
+
+        valid = result.dropna()
+        assert (valid >= 0).all().all()
+        assert (valid <= 100).all().all()
