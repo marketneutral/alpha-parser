@@ -406,8 +406,7 @@ alpha-parser/
 
 ### Group Operations
 - `group_rank(signal, 'group_name')` - Rank within groups
-- `group_demean(signal, 'group_name')` - Demean within groups
-- `group_neutralize(signal, 'group_name')` - Neutralize to groups
+- `group_demean(signal, 'group_name')` - Demean within groups (subtract group mean)
 - `group_count_valid(signal, 'group_name', window)` - Count non-NaN within group over window
 
 ### Validity Operations

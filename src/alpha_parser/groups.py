@@ -98,35 +98,6 @@ class GroupDemean(Signal):
         return ('GroupDemean', self.signal._cache_key(), self.groups)
 
 
-class GroupNeutralize(Signal):
-    """Make signal neutral to groups (zero weight per group)."""
-
-    def __init__(self, signal: Signal, groups: str):
-        self.signal = signal
-        self.groups = groups
-
-    def _compute(self, data):
-        values = self.signal.evaluate(data)
-        group_df = _get_group_data(data, self.groups)
-        result = values.copy()
-
-        for date in values.index:
-            date_values = values.loc[date]
-            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
-
-            for group_name in date_groups.unique():
-                if pd.isna(group_name):
-                    continue
-                mask = date_groups == group_name
-                group_values = date_values[mask]
-                result.loc[date, mask] = group_values - group_values.mean()
-
-        return result
-
-    def _cache_key(self):
-        return ('GroupNeutralize', self.signal._cache_key(), self.groups)
-
-
 def group_rank(signal: Signal, groups: str) -> GroupRank:
     """Create a GroupRank signal."""
     return GroupRank(signal, groups)
@@ -135,11 +106,6 @@ def group_rank(signal: Signal, groups: str) -> GroupRank:
 def group_demean(signal: Signal, groups: str) -> GroupDemean:
     """Create a GroupDemean signal."""
     return GroupDemean(signal, groups)
-
-
-def group_neutralize(signal: Signal, groups: str) -> GroupNeutralize:
-    """Create a GroupNeutralize signal."""
-    return GroupNeutralize(signal, groups)
 
 
 class GroupCountValid(Signal):

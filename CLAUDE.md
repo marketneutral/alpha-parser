@@ -57,7 +57,7 @@ PYTHONPATH=src pytest tests/ -v
 `rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`
 
 ### Group
-`group_rank`, `group_demean`, `group_neutralize`, `group_count_valid`
+`group_rank`, `group_demean`, `group_count_valid`
 
 ### Conditional/Validity
 `where`, `is_valid`
