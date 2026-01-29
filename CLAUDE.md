@@ -19,10 +19,10 @@ PYTHONPATH=src pytest tests/ -v
 - `src/alpha_parser/` - Main package
   - `signal.py` - Base `Signal` class with `evaluate()` and `to_weights()` methods
   - `parser.py` - `AlphaParser` converts string expressions to Signal trees
-  - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`) and comparison ops
-  - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, etc.)
+  - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`), comparison, and validity ops (`is_valid`)
+  - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, etc.)
   - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`)
-  - `groups.py` - Group-neutral operations (`group_rank`, `group_demean`)
+  - `groups.py` - Group-neutral operations (`group_rank`, `group_demean`, `group_count_valid`)
   - `context.py` - `compute_context()` provides shared caching across signals
 
 ## Key Patterns
@@ -31,7 +31,11 @@ PYTHONPATH=src pytest tests/ -v
 - Use `alpha("expression")` to parse strings into Signal objects
 - Wrap multiple evaluations in `with compute_context():` for cache sharing
 - Data is passed as `Dict[str, pd.DataFrame]` with keys like `'close'`, `'volume'`
+- Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
 
 ## Testing
 
 Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture provides synthetic price/volume data with 8 tickers over 4 years.
+
+- `test_examples.py` - Core functionality tests
+- `test_events.py` - Sparse/event data tests (PEAD-style alphas)

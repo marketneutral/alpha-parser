@@ -55,6 +55,22 @@ with compute_context():
     result2 = signal2.evaluate(data)
 ```
 
+### PEAD Example (Sparse Event Data)
+
+```python
+# SUE (Standardized Unexpected Earnings) - price-scaled
+sue = "(field('earnings_reported') - field('earnings_estimate')) / close()"
+
+# Hold signal for 5 days after earnings announcement
+held_sue = f"fill_forward({sue}, 5)"
+
+# Weight by how many stocks in my industry reported this week
+weight = "group_count_valid(field('earnings_reported'), 'sector', 5)"
+
+# Final PEAD alpha
+signal = alpha(f"rank({held_sue}) * {weight}")
+```
+
 ## Project Structure
 
 ```
@@ -64,7 +80,7 @@ alpha-parser/
 │       ├── __init__.py       # Public API exports
 │       ├── context.py        # Compute context and caching
 │       ├── signal.py         # Base Signal class
-│       ├── operators.py      # Arithmetic, comparison, logical ops
+│       ├── operators.py      # Arithmetic, comparison, logical, validity ops
 │       ├── data.py           # Data field access
 │       ├── primitives.py     # Returns, volatility, volume
 │       ├── timeseries.py     # Time-series operations
@@ -74,7 +90,8 @@ alpha-parser/
 │       └── parser.py         # Expression parser
 ├── tests/
 │   ├── conftest.py           # Test fixtures
-│   └── test_examples.py      # Example-based tests
+│   ├── test_examples.py      # Example-based tests
+│   └── test_events.py        # Event/sparse data tests
 ├── requirements.txt
 ├── LICENSE
 └── README.md
@@ -100,6 +117,7 @@ alpha-parser/
 - `delay(signal, period)` - Lag/shift signal
 - `delta(signal, period)` - Difference from N periods ago
 - `ts_rank(signal, period)` - Percentile rank within rolling window
+- `fill_forward(signal, limit)` - Forward fill NaN for up to N periods
 
 ### Cross-Sectional Operations
 - `rank(signal)` - Cross-sectional percentile rank
@@ -113,6 +131,10 @@ alpha-parser/
 - `group_rank(signal, 'group_name')` - Rank within groups
 - `group_demean(signal, 'group_name')` - Demean within groups
 - `group_neutralize(signal, 'group_name')` - Neutralize to groups
+- `group_count_valid(signal, 'group_name', window)` - Count non-NaN within group over window
+
+### Validity Operations
+- `is_valid(signal)` - Returns 1 where not NaN, 0 otherwise
 
 ## License
 
