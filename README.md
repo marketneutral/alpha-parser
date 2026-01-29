@@ -432,13 +432,18 @@ alpha-parser/
 - `ts_sum(signal, period)` - Rolling sum
 - `ts_max(signal, period)` - Rolling maximum
 - `ts_min(signal, period)` - Rolling minimum
+- `ts_var(signal, period)` - Rolling variance
 - `delay(signal, period)` - Lag/shift signal
 - `delta(signal, period)` - Difference from N periods ago
 - `ts_rank(signal, period)` - Percentile rank within rolling window (optimized with scipy)
 - `fill_forward(signal, limit)` - Forward fill NaN for up to N periods
 - `ts_corr(signal1, signal2, period)` - Rolling correlation
 - `ts_cov(signal1, signal2, period)` - Rolling covariance
+- `ts_beta(signal1, signal2, period)` - Rolling beta (cov/var), useful for hedge ratios
 - `ewma(signal, halflife)` - Exponentially weighted moving average
+- `ewma_var(signal, halflife)` - EWMA variance
+- `ewma_cov(signal1, signal2, halflife)` - EWMA covariance
+- `ts_beta_ewma(signal1, signal2, halflife)` - EWMA beta (more responsive to regime changes)
 - `ts_argmax(signal, period)` - Periods since rolling maximum
 - `ts_argmin(signal, period)` - Periods since rolling minimum
 - `ts_skew(signal, period)` - Rolling skewness
@@ -468,6 +473,7 @@ alpha-parser/
 ### Group Operations
 - `group_rank(signal, 'group_name')` - Rank within groups
 - `group_demean(signal, 'group_name')` - Demean within groups (subtract group mean)
+- `group_std(signal, 'group_name', window)` - Rolling std within groups (for normalizing pair spreads)
 - `group_count_valid(signal, 'group_name', window)` - Count non-NaN within group over window
 
 ### Validity Operations
