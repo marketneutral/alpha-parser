@@ -73,8 +73,12 @@ from .groups import (
 # Parser
 from .parser import AlphaParser, alpha, compute_weights
 
-# Risk model
-from .risk import FactorRiskModel, FactorDefinition, RiskModelResults, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
+# Risk model (optional - requires statsmodels)
+try:
+    from .risk import FactorRiskModel, FactorDefinition, RiskModelResults, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
+    _HAS_RISK = True
+except ImportError:
+    _HAS_RISK = False
 
 # Evaluation (sibling package)
 from evaluation import (
@@ -225,12 +229,8 @@ __all__ = [
     'alpha',
     'compute_weights',
 
-    # Risk model
-    'FactorRiskModel',
-    'FactorDefinition',
-    'RiskModelResults',
-    'DEFAULT_STYLE_FACTORS',
-    'PRICE_ONLY_FACTORS',
+    # Risk model (optional)
+    *(['FactorRiskModel', 'FactorDefinition', 'RiskModelResults', 'DEFAULT_STYLE_FACTORS', 'PRICE_ONLY_FACTORS'] if _HAS_RISK else []),
 
     # Evaluation
     'Backtest',
