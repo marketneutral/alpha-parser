@@ -145,6 +145,7 @@ alpha-parser/
 - `quantile(signal, buckets)` - Assign to quantile buckets (1-n, higher value → higher bucket)
 - `zscore(signal)` - Cross-sectional z-score
 - `demean(signal)` - Subtract cross-sectional mean
+- `winsorize(signal, limit)` - Cap extreme values at percentiles (e.g., 0.05 caps at 5th/95th)
 
 > **Note:** Both `rank` and `quantile` are ascending: higher signal values produce higher ranks/buckets.
 

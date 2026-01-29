@@ -87,3 +87,28 @@ class Quantile(Signal):
 def quantile(signal: Signal, buckets: int) -> Quantile:
     """Create a Quantile signal. Buckets are numbered 1 to n (1=lowest, n=highest)."""
     return Quantile(signal, buckets)
+
+
+class Winsorize(Signal):
+    """Cap extreme values at specified percentiles cross-sectionally."""
+
+    def __init__(self, signal: Signal, limit: float):
+        self.signal = signal
+        self.limit = limit  # e.g., 0.05 caps at 5th and 95th percentiles
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        # Compute percentiles for each row (cross-section)
+        lower = values.quantile(self.limit, axis=1)
+        upper = values.quantile(1 - self.limit, axis=1)
+        # Clip values to the percentile bounds
+        result = values.clip(lower=lower, upper=upper, axis=0)
+        return result
+
+    def _cache_key(self):
+        return ('Winsorize', self.signal._cache_key(), self.limit)
+
+
+def winsorize(signal: Signal, limit: float) -> Winsorize:
+    """Create a Winsorize signal. Limit is the percentile to cap at (e.g., 0.05 caps at 5th/95th)."""
+    return Winsorize(signal, limit)

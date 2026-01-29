@@ -21,7 +21,7 @@ PYTHONPATH=src pytest tests/ -v
   - `parser.py` - `AlphaParser` converts string expressions to Signal trees
   - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`), comparison, and validity ops (`is_valid`)
   - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, etc.)
-  - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`)
+  - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`, `winsorize`)
   - `groups.py` - Group-neutral operations (`group_rank`, `group_demean`, `group_count_valid`)
   - `context.py` - `compute_context()` provides shared caching across signals
 
