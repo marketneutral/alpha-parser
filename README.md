@@ -55,6 +55,116 @@ with compute_context():
     result2 = signal2.evaluate(data)
 ```
 
+## Data Format
+
+Data is passed as a `Dict[str, pd.DataFrame]` where each DataFrame has:
+- **Index**: `DatetimeIndex` (trading dates)
+- **Columns**: Ticker symbols (e.g., `'AAPL'`, `'MSFT'`)
+- **Values**: Float values (use `NaN` for missing data)
+
+### Required Fields
+
+The following keys are expected for price data:
+
+```python
+data = {
+    'close': pd.DataFrame(...),   # Closing prices
+    'open': pd.DataFrame(...),    # Opening prices (optional)
+    'high': pd.DataFrame(...),    # Daily highs (optional)
+    'low': pd.DataFrame(...),     # Daily lows (optional)
+    'volume': pd.DataFrame(...),  # Trading volume (optional)
+}
+```
+
+### Custom Fields
+
+Add any additional data using `field('name')`:
+
+```python
+data['earnings_estimate'] = earnings_estimate_df
+data['earnings_reported'] = earnings_reported_df
+data['analyst_rating'] = analyst_rating_df
+
+# Access in expressions
+signal = alpha("field('analyst_rating') * returns(20)")
+```
+
+### Group Data
+
+For group operations (`group_rank`, `group_demean`, etc.), provide group membership:
+
+```python
+data['sector'] = sector_df  # Values like 'Tech', 'Finance', 'Healthcare'
+
+# Use in expressions
+signal = alpha("group_rank(returns(20), 'sector')")
+```
+
+Group DataFrames should have the same index/columns as price data, with string values indicating group membership.
+
+### Sparse/Event Data
+
+For event-driven signals (earnings, announcements), use `NaN` for dates without events:
+
+```python
+# Earnings data: NaN on non-reporting days, actual value on reporting days
+#              AAPL   MSFT   GOOG
+# 2024-01-15   NaN    NaN    NaN
+# 2024-01-16   1.25   NaN    NaN    <- AAPL reported
+# 2024-01-17   NaN    NaN    NaN
+# 2024-01-18   NaN    2.10   NaN    <- MSFT reported
+
+data['earnings_reported'] = earnings_df
+
+# Forward fill to hold signal after event
+signal = alpha("fill_forward(field('earnings_reported'), 5)")
+
+# Check if data point exists
+signal = alpha("is_valid(field('earnings_reported'))")
+```
+
+### Example: Building a Complete Dataset
+
+```python
+import pandas as pd
+import numpy as np
+
+# Create date index and tickers
+dates = pd.date_range('2020-01-01', '2024-01-01', freq='B')
+tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'META', 'NVDA', 'TSLA', 'JPM']
+
+# Price data (required)
+data = {
+    'close': pd.DataFrame(
+        np.random.randn(len(dates), len(tickers)).cumsum(axis=0) + 100,
+        index=dates, columns=tickers
+    ),
+    'volume': pd.DataFrame(
+        np.random.randint(1000000, 10000000, (len(dates), len(tickers))),
+        index=dates, columns=tickers
+    ),
+}
+
+# Sector membership (for group operations)
+sectors = ['Tech', 'Tech', 'Tech', 'Tech', 'Tech', 'Tech', 'Tech', 'Finance']
+data['sector'] = pd.DataFrame(
+    [sectors] * len(dates),
+    index=dates, columns=tickers
+)
+
+# Sparse event data (earnings)
+earnings = pd.DataFrame(np.nan, index=dates, columns=tickers)
+# Simulate quarterly earnings
+for ticker in tickers:
+    report_dates = np.random.choice(len(dates), size=16, replace=False)
+    earnings.iloc[report_dates, tickers.index(ticker)] = np.random.randn(16)
+data['earnings_reported'] = earnings
+
+# Now use it
+signal = alpha("rank(-returns(20) / volatility(60))")
+result = signal.evaluate(data)
+```
+
 ### PEAD Example (Sparse Event Data)
 
 You can build complex alphas either by composing Python strings or as a single expression with comments.
