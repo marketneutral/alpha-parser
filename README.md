@@ -294,18 +294,26 @@ alpha-parser/
 │       ├── __init__.py       # Public API exports
 │       ├── context.py        # Compute context and caching
 │       ├── signal.py         # Base Signal class
-│       ├── operators.py      # Arithmetic, comparison, logical, validity ops
+│       ├── operators.py      # Arithmetic, comparison, logical, validity, math ops
 │       ├── data.py           # Data field access
-│       ├── primitives.py     # Returns, volatility, volume
+│       ├── primitives.py     # Returns, volatility, volume, adv
 │       ├── timeseries.py     # Time-series operations
 │       ├── crosssection.py   # Cross-sectional operations
 │       ├── groups.py         # Group operations
 │       ├── conditional.py    # Conditional (where) operations
-│       └── parser.py         # Expression parser
+│       ├── parser.py         # Expression parser
+│       └── risk.py           # Multi-factor risk model
 ├── tests/
 │   ├── conftest.py           # Test fixtures
 │   ├── test_examples.py      # Example-based tests
-│   └── test_events.py        # Event/sparse data tests
+│   ├── test_events.py        # Event/sparse data tests
+│   ├── test_lazy.py          # LazyData tests
+│   └── test_operators.py     # Comprehensive operator tests
+├── data/
+│   ├── fetch_fmp.py          # FMP data fetcher
+│   └── .env.example          # API key template
+├── examples/
+│   └── risk_model_example.py # Risk model usage example
 ├── requirements.txt
 ├── LICENSE
 └── README.md
@@ -319,8 +327,18 @@ alpha-parser/
 
 ### Primitives
 - `returns(period)` - Price returns over period
-- `volatility(period)` - Rolling volatility
+- `volatility(period)` - Rolling volatility (annualized)
 - `volume(period)` - Rolling average volume
+- `adv(period)` - Average dollar volume (price × volume)
+
+### Math Operations
+- `log(signal)` - Natural logarithm
+- `abs(signal)` - Absolute value
+- `sign(signal)` - Sign (-1, 0, or 1)
+- `sqrt(signal)` - Square root
+- `power(signal, exponent)` - Raise to power
+- `max(signal1, signal2)` - Element-wise maximum
+- `min(signal1, signal2)` - Element-wise minimum
 
 ### Time-Series Operations
 - `ts_mean(signal, period)` - Rolling mean
@@ -330,15 +348,25 @@ alpha-parser/
 - `ts_min(signal, period)` - Rolling minimum
 - `delay(signal, period)` - Lag/shift signal
 - `delta(signal, period)` - Difference from N periods ago
-- `ts_rank(signal, period)` - Percentile rank within rolling window
+- `ts_rank(signal, period)` - Percentile rank within rolling window (optimized with scipy)
 - `fill_forward(signal, limit)` - Forward fill NaN for up to N periods
+- `ts_corr(signal1, signal2, period)` - Rolling correlation
+- `ts_cov(signal1, signal2, period)` - Rolling covariance
+- `ewma(signal, halflife)` - Exponentially weighted moving average
+- `ts_argmax(signal, period)` - Periods since rolling maximum
+- `ts_argmin(signal, period)` - Periods since rolling minimum
+- `ts_skew(signal, period)` - Rolling skewness
+- `ts_kurt(signal, period)` - Rolling kurtosis
+- `decay_linear(signal, period)` - Linearly decaying weighted average (recent values weighted more)
 
 ### Cross-Sectional Operations
 - `rank(signal)` - Cross-sectional percentile rank (0-1, higher value → rank closer to 1)
 - `quantile(signal, buckets)` - Assign to quantile buckets (1-n, higher value → higher bucket)
-- `zscore(signal)` - Cross-sectional z-score
+- `zscore(signal)` - Cross-sectional z-score (handles zero std gracefully)
 - `demean(signal)` - Subtract cross-sectional mean
 - `winsorize(signal, limit)` - Cap extreme values at percentiles (e.g., 0.05 caps at 5th/95th)
+- `scale(signal)` - Scale so absolute values sum to 1
+- `truncate(signal, max_weight)` - Clip values to [-max_weight, max_weight]
 
 > **Note:** Both `rank` and `quantile` are ascending: higher signal values produce higher ranks/buckets.
 
@@ -353,6 +381,64 @@ alpha-parser/
 
 ### Validity Operations
 - `is_valid(signal)` - Returns 1 where not NaN, 0 otherwise
+
+## Risk Model
+
+The package includes a multi-factor risk model for portfolio risk estimation:
+
+```python
+from alpha_parser import FactorRiskModel, DEFAULT_STYLE_FACTORS
+
+# Create risk model with default style factors
+risk_model = FactorRiskModel(factors=DEFAULT_STYLE_FACTORS)
+
+# Fit the model to historical data
+results = risk_model.fit(data)
+
+# Access results
+print(results.factor_returns)      # Daily factor returns
+print(results.factor_covariance)   # Factor covariance matrix
+print(results.specific_risk)       # Stock-specific risk estimates
+print(results.r_squared)           # Model fit quality per day
+```
+
+### Default Style Factors
+
+The model includes these style factors (similar to industry-standard multi-factor models):
+
+- **Size** - Market capitalization (log)
+- **Value** - Book-to-price ratio
+- **Momentum** - 12-month returns (excluding recent month)
+- **Volatility** - 60-day rolling volatility
+- **Liquidity** - Average dollar volume (log)
+- **Short-term Reversal** - 5-day returns (negative)
+
+### Price-Only Factors
+
+For datasets without fundamental data, use `PRICE_ONLY_FACTORS`:
+
+```python
+from alpha_parser import FactorRiskModel, PRICE_ONLY_FACTORS
+
+risk_model = FactorRiskModel(factors=PRICE_ONLY_FACTORS)
+```
+
+This includes: Size, Momentum, Volatility, Liquidity, and Short-term Reversal.
+
+### Custom Factors
+
+Define custom factors using signal expressions:
+
+```python
+from alpha_parser import FactorRiskModel, FactorDefinition
+
+custom_factors = [
+    FactorDefinition('earnings_yield', "field('earnings') / close()"),
+    FactorDefinition('analyst_sentiment', "ts_mean(field('rating'), 20)"),
+]
+
+risk_model = FactorRiskModel(factors=custom_factors)
+```
 
 ## Limitations
 
