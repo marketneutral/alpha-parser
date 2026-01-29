@@ -2,6 +2,32 @@
 
 A DSL (Domain Specific Language) for defining quantitative trading signals and alpha factors.
 
+## Why This Package?
+
+Quantitative trading signals often involve complex combinations of operations:
+- **Time-series**: rolling means, standard deviations, correlations, momentum
+- **Cross-sectional**: ranking stocks, z-scoring, sector neutralization
+- **Event-driven**: handling sparse data like earnings announcements
+
+Writing these from scratch is tedious and error-prone. Alpha Parser lets you express complex signals in a single readable expression:
+
+```python
+# Instead of 50+ lines of pandas code:
+signal = alpha("rank(ts_corr(returns(1), volume(1), 20))")
+
+# Sector-neutral momentum with volatility scaling
+signal = alpha("group_demean(returns(60) / volatility(60), 'sector')")
+
+# Combine multiple factors
+signal = alpha("0.5 * rank(returns(252)) + 0.5 * rank(-volatility(20))")
+```
+
+**Key benefits:**
+- **Readable**: Signal logic is self-documenting
+- **Composable**: Build complex signals from simple primitives
+- **Efficient**: Built-in caching avoids redundant computation
+- **Flexible**: Works with any DataFrame-based data pipeline
+
 ## Setup
 
 ### Prerequisites
@@ -214,40 +240,43 @@ signal = alpha("rank(-returns(20) / volatility(60))")
 result = signal.evaluate(data)
 ```
 
-### PEAD Example (Sparse Event Data)
+### PEAD Example (Post-Earnings Announcement Drift)
 
-You can build complex alphas either by composing Python strings or as a single expression with comments.
+Post-Earnings Announcement Drift is a well-documented anomaly where stock prices continue to drift in the direction of earnings surprises for weeks after the announcement ([Ball & Brown, 1968](https://www.jstor.org/stable/2490232)).
 
-**Option 1: Compose with Python f-strings**
-
-```python
-# SUE (Standardized Unexpected Earnings) - price-scaled
-sue = "(field('earnings_reported') - field('earnings_estimate')) / close()"
-
-# Hold signal for 5 days after earnings announcement
-held_sue = f"fill_forward({sue}, 5)"
-
-# Weight by how many stocks in my industry reported this week
-weight = "group_count_valid(field('earnings_reported'), 'sector', 5)"
-
-# Final PEAD alpha
-signal = alpha(f"rank({held_sue}) * {weight}")
-```
-
-**Option 2: Single multi-line string with comments**
+**Basic PEAD Signal:**
 
 ```python
-signal = alpha("""
-    # PEAD: Post-Earnings Announcement Drift
-    rank(
-        fill_forward(
-            # SUE = (actual - estimate) / price
-            (field('earnings_reported') - field('earnings_estimate')) / close(),
-            5  # hold for 5 days
-        )
-    ) * group_count_valid(field('earnings_reported'), 'sector', 5)  # weight by industry activity
-""")
+# Earnings surprise: actual minus estimate, scaled by price
+surprise = "(field('earnings_actual') - field('earnings_estimate')) / close()"
+
+# Hold the surprise signal for 60 trading days (one quarter)
+# fill_forward propagates the signal from announcement day
+held_surprise = f"fill_forward({surprise}, 60)"
+
+# Rank cross-sectionally: go long positive surprises, short negative
+signal = alpha(f"rank({held_surprise}) - 0.5")
 ```
+
+**With Volatility Scaling:**
+
+```python
+# Scale surprise by historical earnings volatility for comparability
+# This is closer to the academic "SUE" (Standardized Unexpected Earnings)
+sue = """
+    fill_forward(
+        (field('earnings_actual') - field('earnings_estimate'))
+        / ts_std(field('earnings_actual') - field('earnings_estimate'), 8),
+        60
+    )
+"""
+signal = alpha(f"rank({sue}) - 0.5")
+```
+
+**Notes on PEAD Research:**
+- [Hirshleifer, Lim & Teoh (2009)](https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1540-6261.2009.01501.x) found drift is *stronger* on high-news days when investors are distracted
+- [DellaVigna & Pollet (2009)](https://onlinelibrary.wiley.com/doi/10.1111/j.1540-6261.2009.01447.x) found Friday announcements show 69% larger drift
+- Recent research suggests PEAD has weakened significantly since 2006 in large-cap stocks
 
 The parser uses Python's `ast.parse()`, so comments and whitespace are handled naturally.
 
