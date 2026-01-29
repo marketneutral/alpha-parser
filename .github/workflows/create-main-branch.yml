@@ -1,0 +1,30 @@
+name: Create Main Branch
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-main:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Create and push main branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if main branch exists on remote
+          if git ls-remote --heads origin main | grep main; then
+            echo "Main branch already exists on remote"
+            exit 0
+          fi
+          
+          # Create main branch from current commit
+          git checkout -b main
+          git push origin main
+          echo "Main branch created and pushed successfully"
