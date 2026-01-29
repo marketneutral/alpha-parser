@@ -57,6 +57,10 @@ with compute_context():
 
 ### PEAD Example (Sparse Event Data)
 
+You can build complex alphas either by composing Python strings or as a single expression with comments.
+
+**Option 1: Compose with Python f-strings**
+
 ```python
 # SUE (Standardized Unexpected Earnings) - price-scaled
 sue = "(field('earnings_reported') - field('earnings_estimate')) / close()"
@@ -70,6 +74,23 @@ weight = "group_count_valid(field('earnings_reported'), 'sector', 5)"
 # Final PEAD alpha
 signal = alpha(f"rank({held_sue}) * {weight}")
 ```
+
+**Option 2: Single multi-line string with comments**
+
+```python
+signal = alpha("""
+    # PEAD: Post-Earnings Announcement Drift
+    rank(
+        fill_forward(
+            # SUE = (actual - estimate) / price
+            (field('earnings_reported') - field('earnings_estimate')) / close(),
+            5  # hold for 5 days
+        )
+    ) * group_count_valid(field('earnings_reported'), 'sector', 5)  # weight by industry activity
+""")
+```
+
+The parser uses Python's `ast.parse()`, so comments and whitespace are handled naturally.
 
 ## Project Structure
 
