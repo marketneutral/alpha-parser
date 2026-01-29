@@ -38,7 +38,7 @@ from .operators import (
 )
 
 # Data access
-from .data import Field, close, open, high, low, field
+from .data import Field, close, open, high, low, field, LazyData
 
 # Primitives
 from .primitives import Returns, Volatility, Volume, returns, volatility, volume
@@ -97,6 +97,7 @@ __all__ = [
 
     # Data access
     'Field',
+    'LazyData',
     'close',
     'open',
     'high',

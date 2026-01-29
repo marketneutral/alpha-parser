@@ -31,6 +31,7 @@ PYTHONPATH=src pytest tests/ -v
 - Use `alpha("expression")` to parse strings into Signal objects
 - Wrap multiple evaluations in `with compute_context():` for cache sharing
 - Data is passed as `Dict[str, pd.DataFrame]` with keys like `'close'`, `'volume'`
+- Use `LazyData` wrapper for large datasets - fields are loaded on demand
 - Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
 
 ## Testing

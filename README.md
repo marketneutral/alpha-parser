@@ -202,6 +202,40 @@ signal = alpha("""
 
 The parser uses Python's `ast.parse()`, so comments and whitespace are handled naturally.
 
+### Lazy Loading (Large Datasets)
+
+For large datasets, use `LazyData` to load fields on demand. Only fields actually used by the signal will be loaded:
+
+```python
+from alpha_parser import alpha, LazyData
+import pandas as pd
+
+# Define loaders - these are only called when the field is accessed
+data = LazyData({
+    'close': lambda: pd.read_parquet('data/close.parquet'),
+    'volume': lambda: pd.read_parquet('data/volume.parquet'),
+    'earnings': lambda: pd.read_parquet('data/earnings.parquet'),
+})
+
+# This signal only uses 'close', so 'volume' and 'earnings' are never loaded
+signal = alpha("rank(returns(20))")
+result = signal.evaluate(data)
+```
+
+**Benefits:**
+- Only load what you need - unused fields stay on disk
+- Automatic caching - each field loaded at most once per evaluation
+- Drop-in replacement - works with all existing signals
+
+**Recommended data layout:**
+```
+data/
+├── close.parquet      # One file per field
+├── volume.parquet
+├── earnings.parquet
+└── sector.parquet
+```
+
 ## Project Structure
 
 ```

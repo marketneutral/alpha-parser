@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from .signal import Signal
+from .data import resolve_data
 
 
 class GroupRank(Signal):
@@ -14,6 +15,7 @@ class GroupRank(Signal):
         self.groups = groups
 
     def _compute(self, data):
+        data = resolve_data(data)
         values = self.signal.evaluate(data)
 
         if 'groups' not in data or self.groups not in data['groups'].columns:
@@ -53,6 +55,7 @@ class GroupDemean(Signal):
         self.groups = groups
 
     def _compute(self, data):
+        data = resolve_data(data)
         values = self.signal.evaluate(data)
 
         if 'groups' not in data or self.groups not in data['groups'].columns:
@@ -92,6 +95,7 @@ class GroupNeutralize(Signal):
         self.groups = groups
 
     def _compute(self, data):
+        data = resolve_data(data)
         values = self.signal.evaluate(data)
 
         if 'groups' not in data or self.groups not in data['groups'].columns:
@@ -141,6 +145,7 @@ class GroupCountValid(Signal):
         self.window = window
 
     def _compute(self, data):
+        data = resolve_data(data)
         values = self.signal.evaluate(data)
 
         if 'groups' not in data or self.groups not in data['groups'].columns:
