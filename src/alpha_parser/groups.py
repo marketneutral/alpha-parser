@@ -156,3 +156,72 @@ class GroupCountValid(Signal):
 def group_count_valid(signal: Signal, groups: str, window: int) -> GroupCountValid:
     """Create a GroupCountValid signal."""
     return GroupCountValid(signal, groups, window)
+
+
+class GroupStd(Signal):
+    """Rolling standard deviation within groups.
+
+    Computes the std of each group member's values over a rolling window,
+    then broadcasts the group std to all members. Useful for normalizing
+    pair spreads.
+    """
+
+    def __init__(self, signal: Signal, groups: str, window: int):
+        self.signal = signal
+        self.groups = groups
+        self.window = window
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        group_df = _get_group_data(data, self.groups)
+
+        result = pd.DataFrame(
+            np.nan,
+            index=values.index,
+            columns=values.columns
+        )
+
+        # For each date, compute rolling std within each group
+        for i, date in enumerate(values.index):
+            if i < self.window - 1:
+                continue
+
+            # Get the window of data
+            start_idx = i - self.window + 1
+            window_values = values.iloc[start_idx:i + 1]
+
+            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
+
+            for group_name in date_groups.unique():
+                if pd.isna(group_name):
+                    continue
+                mask = date_groups == group_name
+                group_tickers = mask[mask].index
+
+                # Get all values for this group in the window and compute std
+                group_window_values = window_values[group_tickers].values.flatten()
+                group_window_values = group_window_values[~np.isnan(group_window_values)]
+
+                if len(group_window_values) >= 2:
+                    std = np.std(group_window_values, ddof=1)
+                    result.loc[date, mask] = std
+
+        return result
+
+    def _cache_key(self):
+        return ('GroupStd', self.signal._cache_key(), self.groups, self.window)
+
+
+def group_std(signal: Signal, groups: str, window: int) -> GroupStd:
+    """Create a GroupStd signal.
+
+    Computes rolling standard deviation within each group. Useful for
+    normalizing pair spreads to get z-scores.
+
+    Example:
+        # Z-score of pair spread
+        spread = group_demean(returns(5), 'pair')
+        spread_vol = group_std(returns(5), 'pair', 60)
+        zscore = spread / spread_vol
+    """
+    return GroupStd(signal, groups, window)

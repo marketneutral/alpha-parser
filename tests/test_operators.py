@@ -889,3 +889,139 @@ class TestTechnicalIndicators:
         valid = result.dropna()
         assert (valid >= 0).all().all()
         assert (valid <= 100).all().all()
+
+
+class TestPairsTrading:
+    """Test pairs trading signals using group operations."""
+
+    @pytest.fixture
+    def pairs_data(self):
+        """Data with pair groupings for pairs trading tests."""
+        dates = pd.date_range('2020-01-01', periods=100, freq='D')
+        tickers = ['AAPL', 'MSFT', 'XOM', 'CVX', 'JPM', 'GS']
+
+        np.random.seed(42)
+
+        # Create correlated price movements within pairs
+        # Pair 1: AAPL/MSFT (tech)
+        tech_factor = np.random.randn(100).cumsum() * 0.02
+        aapl = 100 * np.exp(tech_factor + np.random.randn(100) * 0.01)
+        msft = 200 * np.exp(tech_factor + np.random.randn(100) * 0.01)
+
+        # Pair 2: XOM/CVX (energy)
+        energy_factor = np.random.randn(100).cumsum() * 0.02
+        xom = 60 * np.exp(energy_factor + np.random.randn(100) * 0.01)
+        cvx = 120 * np.exp(energy_factor + np.random.randn(100) * 0.01)
+
+        # Pair 3: JPM/GS (finance)
+        finance_factor = np.random.randn(100).cumsum() * 0.02
+        jpm = 130 * np.exp(finance_factor + np.random.randn(100) * 0.01)
+        gs = 250 * np.exp(finance_factor + np.random.randn(100) * 0.01)
+
+        close = pd.DataFrame({
+            'AAPL': aapl, 'MSFT': msft,
+            'XOM': xom, 'CVX': cvx,
+            'JPM': jpm, 'GS': gs,
+        }, index=dates)
+
+        volume = pd.DataFrame(
+            np.random.lognormal(15, 0.5, (100, 6)),
+            index=dates,
+            columns=tickers
+        )
+
+        # Pair groupings
+        pair = pd.DataFrame({
+            'AAPL': 'pair_tech', 'MSFT': 'pair_tech',
+            'XOM': 'pair_energy', 'CVX': 'pair_energy',
+            'JPM': 'pair_finance', 'GS': 'pair_finance',
+        }, index=dates)
+
+        return {'close': close, 'volume': volume, 'pair': pair}
+
+    def test_group_demean_basic(self, pairs_data):
+        """Test that group_demean produces zero-sum within each pair."""
+        signal = alpha("group_demean(returns(5), 'pair')")
+        result = signal.evaluate(pairs_data)
+
+        # Within each pair, the demeaned values should sum to ~0
+        for date in result.index[10:]:  # Skip warm-up
+            # Tech pair
+            tech_sum = result.loc[date, ['AAPL', 'MSFT']].sum()
+            assert abs(tech_sum) < 1e-10, f"Tech pair not zero-sum: {tech_sum}"
+
+            # Energy pair
+            energy_sum = result.loc[date, ['XOM', 'CVX']].sum()
+            assert abs(energy_sum) < 1e-10, f"Energy pair not zero-sum: {energy_sum}"
+
+            # Finance pair
+            finance_sum = result.loc[date, ['JPM', 'GS']].sum()
+            assert abs(finance_sum) < 1e-10, f"Finance pair not zero-sum: {finance_sum}"
+
+    def test_group_std_basic(self, pairs_data):
+        """Test that group_std computes rolling std within pairs."""
+        signal = alpha("group_std(returns(1), 'pair', 20)")
+        result = signal.evaluate(pairs_data)
+
+        # Should have values after warm-up
+        assert result.iloc[25:].notna().all().all()
+
+        # Within each pair, all members should have the same std value
+        for date in result.index[25:]:
+            # Tech pair should have same std
+            assert np.isclose(
+                result.loc[date, 'AAPL'],
+                result.loc[date, 'MSFT']
+            )
+
+            # Energy pair should have same std
+            assert np.isclose(
+                result.loc[date, 'XOM'],
+                result.loc[date, 'CVX']
+            )
+
+    def test_pairs_zscore_signal(self, pairs_data):
+        """Test z-score normalized pair spread signal."""
+        # Z-score of pair spread: spread / spread_volatility
+        signal = alpha("group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 60)")
+        result = signal.evaluate(pairs_data)
+
+        # Should have values after warm-up (60 days)
+        valid = result.iloc[65:].dropna()
+        assert len(valid) > 0
+
+        # Z-scores should be reasonable (mostly within -3 to 3)
+        assert (valid.abs() < 5).all().all()
+
+    def test_pairs_mean_reversion_signal(self, pairs_data):
+        """Test full pairs mean reversion signal."""
+        # Go long the laggard, short the leader within each pair
+        signal = alpha("group_demean(-returns(5), 'pair')")
+        result = signal.evaluate(pairs_data)
+
+        # Should produce opposite signs within each pair
+        for date in result.index[10:]:
+            # If AAPL is positive, MSFT should be negative (and vice versa)
+            aapl_val = result.loc[date, 'AAPL']
+            msft_val = result.loc[date, 'MSFT']
+            if not (np.isnan(aapl_val) or np.isnan(msft_val)):
+                # Signs should be opposite (or both ~0)
+                assert aapl_val * msft_val <= 1e-10
+
+    def test_pairs_conditional_trading(self, pairs_data):
+        """Test conditional pairs trading - where() with scalar works."""
+        # Test that where() can handle scalar constants (0)
+        signal = alpha(
+            "where("
+            "abs(group_demean(returns(10), 'pair')) > group_std(returns(10), 'pair', 60), "
+            "group_demean(-returns(5), 'pair'), "
+            "0)"
+        )
+        result = signal.evaluate(pairs_data)
+
+        # Should complete without error and have valid structure
+        assert result.shape == pairs_data['close'].shape
+
+        # After warm-up period, should have values (mostly zeros due to low volatility in synthetic data)
+        valid = result.iloc[65:]
+        assert not valid.isna().all().all()
