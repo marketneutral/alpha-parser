@@ -271,6 +271,33 @@ alpha-parser/
 ### Validity Operations
 - `is_valid(signal)` - Returns 1 where not NaN, 0 otherwise
 
+## Limitations
+
+### Point-in-Time (PIT) Data
+
+This package assumes data is **final and non-restated**. It does not support bi-temporal (point-in-time) data where historical values can be revised.
+
+**The problem:**
+
+```
+Jan 8:  Company reports earnings = $1.00
+Jan 31: Earnings restated to $3.00
+
+When computing ts_mean(earnings, 20):
+- On Jan 15: lookback to Jan 8 should see $1.00 (what was known then)
+- On Feb 5:  lookback to Jan 8 should see $3.00 (the restated value)
+```
+
+A single DataFrame cell `(Jan 8, AAPL)` can only hold one value, but the "correct" value depends on when you're evaluating. This requires bi-temporal storage and computation, which is not currently supported.
+
+**Workarounds:**
+
+1. **Use only non-restated data** - Price data is rarely restated; fundamentals are more problematic
+2. **Accept the bias** - For research/prototyping, using final values may be acceptable
+3. **Pre-compute PIT externally** - Build separate DataFrames for each evaluation period in your data pipeline
+
+**Future consideration:** Bi-temporal support would require storing snapshots of historical data at each knowledge date and row-by-row evaluation. This is a significant architectural change.
+
 ## License
 
 Apache 2.0 - see [LICENSE](LICENSE) for details.
