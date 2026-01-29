@@ -25,3 +25,10 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment files
+.env
+
+# Data files (keep .env.example)
+data/fmp/
+*.parquet

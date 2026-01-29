@@ -55,6 +55,55 @@ with compute_context():
     result2 = signal2.evaluate(data)
 ```
 
+## Fetching Real Data (FMP)
+
+A script is provided to fetch data from [Financial Modeling Prep](https://financialmodelingprep.com/):
+
+```bash
+# 1. Get an API key from https://financialmodelingprep.com/developer/docs/
+
+# 2. Create .env file with your key
+cp data/.env.example data/.env
+# Edit data/.env and add your API key
+
+# 3. Fetch S&P 500 data (last 5 years)
+python data/fetch_fmp.py
+
+# Or fetch specific tickers
+python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN
+
+# Or specify date range
+python data/fetch_fmp.py --start 2020-01-01 --end 2024-01-01
+```
+
+This creates parquet files in `data/fmp/`:
+```
+data/fmp/
+├── open.parquet
+├── high.parquet
+├── low.parquet
+├── close.parquet
+├── volume.parquet
+├── sector.parquet
+├── industry.parquet
+└── profiles.parquet
+```
+
+Use with LazyData:
+```python
+from alpha_parser import alpha, LazyData
+import pandas as pd
+
+data = LazyData({
+    'close': lambda: pd.read_parquet('data/fmp/close.parquet'),
+    'volume': lambda: pd.read_parquet('data/fmp/volume.parquet'),
+    'sector': lambda: pd.read_parquet('data/fmp/sector.parquet'),
+})
+
+signal = alpha("group_rank(rank(-returns(20)), 'sector')")
+result = signal.evaluate(data)
+```
+
 ## Data Format
 
 Data is passed as a `Dict[str, pd.DataFrame]` where each DataFrame has:
