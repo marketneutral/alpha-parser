@@ -4,3 +4,4 @@ pyarrow
 pytest
 python-dotenv
 requests
+statsmodels

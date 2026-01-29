@@ -64,6 +64,9 @@ from .groups import (
 # Parser
 from .parser import AlphaParser, alpha, compute_weights
 
+# Risk model
+from .risk import FactorRiskModel, FactorDefinition, RiskModelResults, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
+
 
 __all__ = [
     # Context
@@ -162,4 +165,11 @@ __all__ = [
     'AlphaParser',
     'alpha',
     'compute_weights',
+
+    # Risk model
+    'FactorRiskModel',
+    'FactorDefinition',
+    'RiskModelResults',
+    'DEFAULT_STYLE_FACTORS',
+    'PRICE_ONLY_FACTORS',
 ]
