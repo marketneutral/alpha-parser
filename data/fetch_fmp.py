@@ -38,6 +38,38 @@ load_dotenv(Path(__file__).parent.parent / '.env')
 
 BASE_URL = "https://financialmodelingprep.com/api/v3"
 
+# Field descriptions for self-documenting data
+FIELD_DESCRIPTIONS = {
+    # Price data (OHLCV)
+    'open': 'Daily opening price, split-adjusted',
+    'high': 'Daily high price, split-adjusted',
+    'low': 'Daily low price, split-adjusted',
+    'close': 'Daily closing price, split-adjusted',
+    'volume': 'Daily trading volume in shares',
+
+    # Company classification
+    'sector': 'GICS sector classification (e.g., "Technology", "Healthcare")',
+    'industry': 'GICS industry classification (more granular than sector)',
+
+    # Market data
+    'market_cap': 'Market capitalization in USD (shares outstanding × price)',
+
+    # Fundamental metrics (quarterly, forward-filled to daily)
+    'bookValuePerShare': 'Book value per share from most recent quarterly report',
+    'book_to_price': 'Book-to-price ratio = book value per share / close price (value factor)',
+    'debtToEquity': 'Total debt / total equity from most recent quarterly report',
+    'enterpriseValue': 'Market cap + debt - cash, measures total firm value',
+    'peRatio': 'Price-to-earnings ratio = price / trailing 12-month EPS',
+    'pbRatio': 'Price-to-book ratio = price / book value per share',
+    'revenuePerShare': 'Trailing 12-month revenue per share',
+    'netIncomePerShare': 'Trailing 12-month net income per share (similar to EPS)',
+    'earningsYield': 'Earnings yield = EPS / price (inverse of P/E)',
+    'dividendYield': 'Annual dividend per share / price',
+
+    # Metadata
+    'profiles': 'Company metadata: name, sector, industry, exchange',
+}
+
 
 def get_api_key() -> str:
     """Get FMP API key from environment."""
@@ -339,6 +371,65 @@ def save_parquet(data: dict[str, pd.DataFrame], output_dir: Path):
         df.to_parquet(path)
         print(f"  Saved {path} ({df.shape[0]} rows x {df.shape[1]} cols)")
 
+    # Save field descriptions as JSON for loading later
+    import json
+    descriptions_path = output_dir / 'field_descriptions.json'
+    # Only include descriptions for fields we actually saved
+    saved_descriptions = {k: v for k, v in FIELD_DESCRIPTIONS.items() if k in data}
+    with open(descriptions_path, 'w') as f:
+        json.dump(saved_descriptions, f, indent=2)
+    print(f"  Saved {descriptions_path}")
+
+
+def load_fmp_data(data_dir: Path | str = None) -> 'LazyData':
+    """Load FMP data as self-describing LazyData.
+
+    Args:
+        data_dir: Path to FMP data directory. Defaults to ./data/fmp
+
+    Returns:
+        LazyData with all available fields and descriptions.
+
+    Example:
+        from data.fetch_fmp import load_fmp_data
+
+        data = load_fmp_data()
+        print(data.describe())  # See all available fields
+
+        signal = alpha("rank(returns(20) / volatility(60))")
+        result = signal.evaluate(data)
+    """
+    import json
+    from alpha_parser import LazyData
+
+    if data_dir is None:
+        data_dir = Path(__file__).parent / 'fmp'
+    else:
+        data_dir = Path(data_dir)
+
+    if not data_dir.exists():
+        raise FileNotFoundError(
+            f"Data directory not found: {data_dir}\n"
+            f"Run 'python data/fetch_fmp.py' to download data first."
+        )
+
+    # Load descriptions
+    desc_path = data_dir / 'field_descriptions.json'
+    if desc_path.exists():
+        with open(desc_path) as f:
+            descriptions = json.load(f)
+    else:
+        descriptions = FIELD_DESCRIPTIONS
+
+    # Build lazy loaders for all parquet files
+    data = {}
+    for parquet_file in data_dir.glob('*.parquet'):
+        field_name = parquet_file.stem
+        # Create closure with explicit path binding
+        data[field_name] = (lambda p=parquet_file: pd.read_parquet(p))
+
+    return LazyData(data=data, descriptions=descriptions)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch FMP data for alpha-parser")
@@ -436,27 +527,34 @@ def main():
         print(f"  - {name}")
 
     print(f"""
-Example usage with risk model:
+Example usage:
 
-from alpha_parser import alpha, LazyData
-from alpha_parser.risk import FactorRiskModel
+import json
 import pandas as pd
+from alpha_parser import alpha, LazyData
 
-data = LazyData({{
-    'close': lambda: pd.read_parquet('{args.output}/close.parquet'),
-    'volume': lambda: pd.read_parquet('{args.output}/volume.parquet'),
-    'market_cap': lambda: pd.read_parquet('{args.output}/market_cap.parquet'),
-    'book_to_price': lambda: pd.read_parquet('{args.output}/book_to_price.parquet'),
-    'sector': lambda: pd.read_parquet('{args.output}/sector.parquet'),
-}})
+# Load field descriptions
+with open('{args.output}/field_descriptions.json') as f:
+    descriptions = json.load(f)
 
-# Create risk model
-risk_model = FactorRiskModel()
-risk_model.fit(data)
+# Create self-describing LazyData
+data = LazyData(
+    data={{
+        'close': lambda: pd.read_parquet('{args.output}/close.parquet'),
+        'volume': lambda: pd.read_parquet('{args.output}/volume.parquet'),
+        'market_cap': lambda: pd.read_parquet('{args.output}/market_cap.parquet'),
+        'book_to_price': lambda: pd.read_parquet('{args.output}/book_to_price.parquet'),
+        'sector': lambda: pd.read_parquet('{args.output}/sector.parquet'),
+    }},
+    descriptions=descriptions,
+)
 
-# Get factor exposures and covariance
-exposures = risk_model.get_exposures(data)
-factor_cov = risk_model.factor_covariance
+# Inspect available data
+print(data.describe())
+
+# Build and evaluate signals
+signal = alpha("rank(returns(20))")
+result = signal.evaluate(data)
 """)
 
 

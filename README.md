@@ -365,6 +365,43 @@ data/
 └── sector.parquet
 ```
 
+### Self-Describing Data
+
+Add field descriptions to make data self-documenting. This is especially useful for AI agents exploring available data:
+
+```python
+data = LazyData(
+    data={
+        'close': lambda: pd.read_parquet('data/close.parquet'),
+        'volume': lambda: pd.read_parquet('data/volume.parquet'),
+        'sector': lambda: pd.read_parquet('data/sector.parquet'),
+        'earnings_surprise': lambda: pd.read_parquet('data/earnings.parquet'),
+    },
+    descriptions={
+        'close': 'Daily closing price, adjusted for splits and dividends',
+        'volume': 'Daily trading volume in shares',
+        'sector': 'GICS sector classification (string)',
+        'earnings_surprise': 'Earnings surprise = (actual - estimate) / |estimate|',
+    }
+)
+
+# Inspect available fields
+print(data.describe())
+# Output:
+# Available fields:
+#   close:             Daily closing price, adjusted for splits and dividends
+#   earnings_surprise: Earnings surprise = (actual - estimate) / |estimate|
+#   sector:            GICS sector classification (string)
+#   volume:            Daily trading volume in shares
+
+# Get description for specific field
+print(data.describe('earnings_surprise'))
+# Output: earnings_surprise: Earnings surprise = (actual - estimate) / |estimate|
+
+# Access descriptions programmatically
+data.descriptions  # Returns the descriptions dict
+```
+
 ## Project Structure
 
 ```

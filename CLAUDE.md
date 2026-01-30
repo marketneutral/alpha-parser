@@ -40,6 +40,7 @@ PYTHONPATH=src pytest tests/ -v
 - Wrap multiple evaluations in `with compute_context():` for cache sharing
 - Data is passed as `Dict[str, pd.DataFrame]` with keys like `'close'`, `'volume'`
 - Use `LazyData` wrapper for large datasets - fields are loaded on demand
+- Use `LazyData(data, descriptions={...})` for self-documenting data - call `data.describe()` to inspect
 - Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 
