@@ -147,3 +147,144 @@ class TestLazyDataIntegration:
 
         # Close should only be loaded once
         assert call_count['count'] == 1
+
+
+class TestSelfDescribingData:
+    """Test self-describing data with field descriptions."""
+
+    def test_descriptions_property(self, sample_data):
+        """LazyData exposes descriptions via property."""
+        descriptions = {
+            'close': 'Daily closing price',
+            'volume': 'Daily trading volume',
+        }
+        lazy = LazyData(sample_data, descriptions=descriptions)
+
+        assert lazy.descriptions == descriptions
+
+    def test_descriptions_default_empty(self, sample_data):
+        """Descriptions default to empty dict if not provided."""
+        lazy = LazyData(sample_data)
+
+        assert lazy.descriptions == {}
+
+    def test_describe_all_fields(self, sample_data):
+        """describe() returns formatted string of all fields."""
+        descriptions = {
+            'close': 'Daily closing price, adjusted for splits',
+            'volume': 'Daily trading volume in shares',
+        }
+        lazy = LazyData(
+            {'close': sample_data['close'], 'volume': sample_data['volume']},
+            descriptions=descriptions,
+        )
+
+        output = lazy.describe()
+
+        assert 'Available fields:' in output
+        assert 'close' in output
+        assert 'Daily closing price' in output
+        assert 'volume' in output
+        assert 'Daily trading volume' in output
+
+    def test_describe_single_field(self, sample_data):
+        """describe(field) returns description for single field."""
+        descriptions = {'close': 'Daily closing price'}
+        lazy = LazyData({'close': sample_data['close']}, descriptions=descriptions)
+
+        output = lazy.describe('close')
+
+        assert 'close' in output
+        assert 'Daily closing price' in output
+
+    def test_describe_missing_description(self, sample_data):
+        """Fields without descriptions show default message."""
+        lazy = LazyData({'close': sample_data['close']}, descriptions={})
+
+        output = lazy.describe()
+
+        assert 'No description available' in output
+
+    def test_describe_missing_field(self, sample_data):
+        """describe(field) handles missing field gracefully."""
+        lazy = LazyData({'close': sample_data['close']})
+
+        output = lazy.describe('nonexistent')
+
+        assert 'not found' in output
+        assert 'close' in output  # Shows available fields
+
+    def test_describe_shows_dtype_when_loaded(self, sample_data):
+        """describe() shows dtype info for loaded fields."""
+        lazy = LazyData(
+            {'close': sample_data['close']},
+            descriptions={'close': 'Closing price'},
+        )
+
+        # Load the field
+        _ = lazy['close']
+
+        output = lazy.describe()
+
+        assert 'dtype' in output
+
+    def test_repr(self, sample_data):
+        """LazyData has informative repr."""
+        descriptions = {'close': 'Closing price'}
+        lazy = LazyData(
+            {'close': sample_data['close'], 'volume': sample_data['volume']},
+            descriptions=descriptions,
+        )
+
+        repr_str = repr(lazy)
+
+        assert 'LazyData' in repr_str
+        assert '2 fields' in repr_str
+        assert '1 with descriptions' in repr_str
+
+    def test_describe_with_callable_not_loaded(self, sample_data):
+        """describe() works even when data is lazy-loaded callables."""
+        call_count = {'count': 0}
+
+        def load_close():
+            call_count['count'] += 1
+            return sample_data['close']
+
+        lazy = LazyData(
+            {'close': load_close},
+            descriptions={'close': 'Closing price (lazy loaded)'},
+        )
+
+        # describe() should NOT trigger loading
+        output = lazy.describe()
+
+        assert call_count['count'] == 0
+        assert 'close' in output
+        assert 'Closing price' in output
+        # No dtype since not loaded yet
+        assert 'dtype' not in output
+
+    def test_full_workflow_with_descriptions(self, sample_data):
+        """End-to-end test: create data, describe, evaluate signal."""
+        lazy = LazyData(
+            data={
+                'close': sample_data['close'],
+                'volume': sample_data['volume'],
+            },
+            descriptions={
+                'close': 'Daily closing price, adjusted for splits and dividends',
+                'volume': 'Daily trading volume in shares',
+            },
+        )
+
+        # Agent can inspect available data
+        desc = lazy.describe()
+        assert 'close' in desc
+        assert 'volume' in desc
+
+        # Agent builds and evaluates signal
+        signal = alpha("rank(returns(20))")
+        result = signal.evaluate(lazy)
+
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape == sample_data['close'].shape
