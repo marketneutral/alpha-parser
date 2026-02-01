@@ -64,6 +64,9 @@ PYTHONPATH=src pytest tests/ -v
 ### Group
 `group_rank`, `group_demean`, `group_std`, `group_count_valid`
 
+### Calendar
+`day_of_week`, `day_of_month`, `month_of_year`
+
 ### Conditional/Validity
 `where`, `is_valid`
 

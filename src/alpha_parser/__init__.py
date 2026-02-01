@@ -40,7 +40,11 @@ from .operators import (
 )
 
 # Data access
-from .data import Field, close, open, high, low, field, LazyData
+from .data import (
+    Field, close, open, high, low, field, LazyData,
+    DayOfWeek, DayOfMonth, MonthOfYear,
+    day_of_week, day_of_month, month_of_year,
+)
 
 # Primitives
 from .primitives import Returns, Volatility, Volume, Adv, returns, volatility, volume, adv
@@ -143,6 +147,14 @@ __all__ = [
     'high',
     'low',
     'field',
+
+    # Calendar
+    'DayOfWeek',
+    'DayOfMonth',
+    'MonthOfYear',
+    'day_of_week',
+    'day_of_month',
+    'month_of_year',
 
     # Primitives
     'Returns',

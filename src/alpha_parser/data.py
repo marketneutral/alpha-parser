@@ -185,3 +185,97 @@ def low() -> Field:
 def field(name: str) -> Field:
     """Access any field by name."""
     return Field(name)
+
+
+# =============================================================================
+# Calendar signals - derived from the DatetimeIndex
+# =============================================================================
+
+class DayOfWeek(Signal):
+    """Day of week (0=Monday, 1=Tuesday, ..., 6=Sunday).
+
+    Useful for weekday effects (e.g., Monday effect).
+    Returns same value for all tickers on each date.
+    """
+
+    def _compute(self, data):
+        data = resolve_data(data)
+        # Get reference DataFrame for shape
+        ref_key = next(iter(data.keys()))
+        ref_df = data[ref_key]
+
+        # Extract day of week from index
+        dow = ref_df.index.dayofweek
+
+        # Broadcast to all columns
+        return pd.DataFrame(
+            [dow] * len(ref_df.columns),
+            index=ref_df.columns,
+            columns=ref_df.index,
+        ).T.astype(float)
+
+    def _cache_key(self):
+        return ('DayOfWeek',)
+
+
+class DayOfMonth(Signal):
+    """Day of month (1-31).
+
+    Useful for month-end effects, turn-of-month patterns.
+    Returns same value for all tickers on each date.
+    """
+
+    def _compute(self, data):
+        data = resolve_data(data)
+        ref_key = next(iter(data.keys()))
+        ref_df = data[ref_key]
+
+        dom = ref_df.index.day
+
+        return pd.DataFrame(
+            [dom] * len(ref_df.columns),
+            index=ref_df.columns,
+            columns=ref_df.index,
+        ).T.astype(float)
+
+    def _cache_key(self):
+        return ('DayOfMonth',)
+
+
+class MonthOfYear(Signal):
+    """Month of year (1=January, ..., 12=December).
+
+    Useful for seasonal effects (e.g., January effect, sell in May).
+    Returns same value for all tickers on each date.
+    """
+
+    def _compute(self, data):
+        data = resolve_data(data)
+        ref_key = next(iter(data.keys()))
+        ref_df = data[ref_key]
+
+        moy = ref_df.index.month
+
+        return pd.DataFrame(
+            [moy] * len(ref_df.columns),
+            index=ref_df.columns,
+            columns=ref_df.index,
+        ).T.astype(float)
+
+    def _cache_key(self):
+        return ('MonthOfYear',)
+
+
+def day_of_week() -> DayOfWeek:
+    """Day of week (0=Monday, 6=Sunday). Useful for weekday effects."""
+    return DayOfWeek()
+
+
+def day_of_month() -> DayOfMonth:
+    """Day of month (1-31). Useful for month-end effects."""
+    return DayOfMonth()
+
+
+def month_of_year() -> MonthOfYear:
+    """Month of year (1-12). Useful for seasonal effects."""
+    return MonthOfYear()
