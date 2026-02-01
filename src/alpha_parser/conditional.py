@@ -19,10 +19,21 @@ class Where(Signal):
         cond = self.condition.evaluate(data).astype(bool)
         true_vals = self.if_true.evaluate(data)
         false_vals = self.if_false.evaluate(data)
+
+        # Get reference index/columns from condition (always a DataFrame)
+        index = cond.index
+        columns = cond.columns
+
+        # Handle scalar values (from Constant signals)
+        if not isinstance(true_vals, pd.DataFrame):
+            true_vals = pd.DataFrame(true_vals, index=index, columns=columns)
+        if not isinstance(false_vals, pd.DataFrame):
+            false_vals = pd.DataFrame(false_vals, index=index, columns=columns)
+
         return pd.DataFrame(
             np.where(cond, true_vals, false_vals),
-            index=true_vals.index,
-            columns=true_vals.columns
+            index=index,
+            columns=columns
         )
 
     def _cache_key(self):

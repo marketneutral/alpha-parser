@@ -504,6 +504,11 @@ alpha-parser/
 
 > **Note:** Both `rank` and `quantile` are ascending: higher signal values produce higher ranks/buckets.
 
+### Calendar Operations
+- `day_of_week()` - Day of week (0=Monday, 6=Sunday). Useful for weekday effects
+- `day_of_month()` - Day of month (1-31). Useful for month-end effects
+- `month_of_year()` - Month of year (1-12). Useful for seasonal effects (January effect, etc.)
+
 ### Conditional
 - `where(condition, if_true, if_false)` - Ternary operator
 

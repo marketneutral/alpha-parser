@@ -1197,3 +1197,118 @@ class TestEwmaAndBetaOperations:
         # Both should be > 1 (reflecting the regime change)
         # EWMA should be higher (closer to true recent beta of 2.0)
         assert ewma_beta > rolling_beta * 0.9  # EWMA should be at least similar or higher
+
+
+class TestCalendarOperations:
+    """Test calendar-based operations: day_of_week, day_of_month, month_of_year."""
+
+    @pytest.fixture
+    def calendar_data(self):
+        """Data spanning multiple months for calendar tests."""
+        # Create data spanning Jan-Mar 2020 (includes weekdays, month transitions)
+        dates = pd.date_range('2020-01-01', '2020-03-31', freq='B')  # Business days
+        tickers = ['AAPL', 'MSFT', 'GOOG']
+
+        close = pd.DataFrame(
+            100 + np.random.randn(len(dates), 3).cumsum(axis=0),
+            index=dates,
+            columns=tickers
+        )
+
+        volume = pd.DataFrame(
+            np.random.lognormal(15, 0.3, (len(dates), 3)),
+            index=dates,
+            columns=tickers
+        )
+
+        return {'close': close, 'volume': volume}
+
+    def test_day_of_week_range(self, calendar_data):
+        """day_of_week returns values 0-4 for business days."""
+        signal = alpha("day_of_week()")
+        result = signal.evaluate(calendar_data)
+
+        assert result.shape == calendar_data['close'].shape
+        # Business days are Monday(0) through Friday(4)
+        assert result.min().min() >= 0
+        assert result.max().max() <= 4
+
+    def test_day_of_week_same_across_tickers(self, calendar_data):
+        """day_of_week returns same value for all tickers on each date."""
+        signal = alpha("day_of_week()")
+        result = signal.evaluate(calendar_data)
+
+        # Each row should have identical values across all columns
+        for _, row in result.iterrows():
+            assert row.nunique() == 1
+
+    def test_day_of_month_range(self, calendar_data):
+        """day_of_month returns values 1-31."""
+        signal = alpha("day_of_month()")
+        result = signal.evaluate(calendar_data)
+
+        assert result.shape == calendar_data['close'].shape
+        assert result.min().min() >= 1
+        assert result.max().max() <= 31
+
+    def test_month_of_year_range(self, calendar_data):
+        """month_of_year returns values 1-12."""
+        signal = alpha("month_of_year()")
+        result = signal.evaluate(calendar_data)
+
+        assert result.shape == calendar_data['close'].shape
+        # Our data spans Jan-Mar
+        assert result.min().min() >= 1
+        assert result.max().max() <= 3
+
+    def test_month_of_year_values(self, calendar_data):
+        """month_of_year returns correct month values."""
+        signal = alpha("month_of_year()")
+        result = signal.evaluate(calendar_data)
+
+        # Check a known January date
+        jan_dates = result.index[result.index.month == 1]
+        if len(jan_dates) > 0:
+            assert result.loc[jan_dates[0]].iloc[0] == 1
+
+        # Check a known March date
+        mar_dates = result.index[result.index.month == 3]
+        if len(mar_dates) > 0:
+            assert result.loc[mar_dates[0]].iloc[0] == 3
+
+    def test_calendar_in_conditional(self, calendar_data):
+        """Calendar signals work in conditional expressions."""
+        # Only trade on Mondays (day_of_week == 0)
+        signal = alpha("where(day_of_week() == 0, returns(1), 0)")
+        result = signal.evaluate(calendar_data)
+
+        assert result.shape == calendar_data['close'].shape
+
+        # Non-Monday rows should be 0
+        mondays = result.index[result.index.dayofweek == 0]
+        non_mondays = result.index[result.index.dayofweek != 0]
+
+        # Non-Monday values should all be 0 (after warmup for returns)
+        non_monday_values = result.loc[non_mondays].iloc[2:]  # Skip first few for returns warmup
+        assert (non_monday_values == 0).all().all()
+
+    def test_month_end_signal(self, calendar_data):
+        """Calendar signals can be used to create month-end indicators."""
+        # High signal when day_of_month > 25 (near month end)
+        signal = alpha("where(day_of_month() > 25, 1, 0)")
+        result = signal.evaluate(calendar_data)
+
+        # Check that late-month days get 1, others get 0
+        for date in result.index:
+            expected = 1.0 if date.day > 25 else 0.0
+            assert result.loc[date].iloc[0] == expected
+
+    def test_january_effect_signal(self, calendar_data):
+        """Calendar signals can detect January (for January effect)."""
+        # Indicator for January
+        signal = alpha("where(month_of_year() == 1, 1, 0)")
+        result = signal.evaluate(calendar_data)
+
+        for date in result.index:
+            expected = 1.0 if date.month == 1 else 0.0
+            assert result.loc[date].iloc[0] == expected

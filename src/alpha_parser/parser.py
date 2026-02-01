@@ -8,7 +8,7 @@ import pandas as pd
 
 from .signal import Signal
 from .operators import Constant, is_valid
-from .data import close, open, high, low, field
+from .data import close, open, high, low, field, day_of_week, day_of_month, month_of_year
 from .primitives import returns, volatility, volume, adv
 from .timeseries import (
     ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
@@ -33,6 +33,11 @@ class AlphaParser:
             'high': high,
             'low': low,
             'field': field,
+
+            # Calendar
+            'day_of_week': day_of_week,
+            'day_of_month': day_of_month,
+            'month_of_year': month_of_year,
 
             # Primitives
             'returns': returns,
