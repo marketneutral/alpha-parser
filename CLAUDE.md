@@ -70,6 +70,20 @@ PYTHONPATH=src pytest tests/ -v
 ### Conditional/Validity
 `where`, `is_valid`
 
+### Variable Bindings
+Use `let ... in` syntax to define variables and avoid repeating complex expressions:
+
+```python
+# Single binding
+alpha("let s = returns(20) in rank(delta(s, 10)) * s")
+
+# Multiple comma-separated bindings
+alpha("let mom = returns(20), vol = volatility(60) in rank(mom / vol) * sign(mom)")
+
+# Dependent bindings (later can reference earlier)
+alpha("let mom = returns(20), sharpe = mom / volatility(60) in rank(sharpe) * sign(mom)")
+```
+
 ## Risk Model
 
 ```python
