@@ -1312,3 +1312,169 @@ class TestCalendarOperations:
         for date in result.index:
             expected = 1.0 if date.month == 1 else 0.0
             assert result.loc[date].iloc[0] == expected
+
+
+class TestLetBindings:
+    """Test let...in variable binding syntax."""
+
+    @pytest.fixture
+    def simple_data(self):
+        """Simple test data for let binding tests."""
+        dates = pd.date_range('2020-01-01', periods=30, freq='D')
+        tickers = ['A', 'B', 'C']
+
+        close = pd.DataFrame(
+            100 + np.random.randn(30, 3).cumsum(axis=0),
+            index=dates,
+            columns=tickers
+        )
+
+        volume = pd.DataFrame(
+            np.random.lognormal(10, 0.5, (30, 3)),
+            index=dates,
+            columns=tickers
+        )
+
+        return {'close': close, 'volume': volume}
+
+    def test_single_binding(self, simple_data):
+        """Test single variable binding."""
+        # Without let: rank(delta(returns(5), 10)) * returns(5)
+        signal_without = alpha("rank(delta(returns(5), 10)) * returns(5)")
+
+        # With let: same logic but signal defined once
+        signal_with = alpha("let s = returns(5) in rank(delta(s, 10)) * s")
+
+        result_without = signal_without.evaluate(simple_data)
+        result_with = signal_with.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result_with, result_without)
+
+    def test_multiple_bindings(self, simple_data):
+        """Test comma-separated multiple bindings."""
+        # Two variables
+        signal = alpha("let mom = returns(20), vol = volatility(20) in rank(mom / vol) * sign(mom)")
+        result = signal.evaluate(simple_data)
+
+        # Compare with equivalent expression
+        signal_equiv = alpha("rank(returns(20) / volatility(20)) * sign(returns(20))")
+        result_equiv = signal_equiv.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result, result_equiv)
+
+    def test_dependent_bindings(self, simple_data):
+        """Test that later bindings can reference earlier ones."""
+        # sharpe depends on mom and vol
+        signal = alpha(
+            "let mom = returns(20), vol = volatility(20), sharpe = mom / vol "
+            "in rank(sharpe) * sign(mom)"
+        )
+        result = signal.evaluate(simple_data)
+
+        # Compare with equivalent expression
+        signal_equiv = alpha("rank(returns(20) / volatility(20)) * sign(returns(20))")
+        result_equiv = signal_equiv.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result, result_equiv)
+
+    def test_variable_in_function_arg(self, simple_data):
+        """Test variable used as function argument."""
+        signal = alpha("let r = returns(5) in ts_mean(r, 10)")
+        result = signal.evaluate(simple_data)
+
+        signal_equiv = alpha("ts_mean(returns(5), 10)")
+        result_equiv = signal_equiv.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result, result_equiv)
+
+    def test_variable_multiple_uses(self, simple_data):
+        """Test variable used multiple times in expression."""
+        # Use 's' three times
+        signal = alpha("let s = returns(10) in s + delay(s, 5) - ts_mean(s, 5)")
+        result = signal.evaluate(simple_data)
+
+        signal_equiv = alpha("returns(10) + delay(returns(10), 5) - ts_mean(returns(10), 5)")
+        result_equiv = signal_equiv.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result, result_equiv)
+
+    def test_nested_parentheses_in_binding(self, simple_data):
+        """Test complex expression with nested parentheses in binding."""
+        signal = alpha(
+            "let sig = rank((close() - ts_mean(close(), 10)) / ts_std(close(), 10)) "
+            "in sig - delay(sig, 5)"
+        )
+        result = signal.evaluate(simple_data)
+
+        signal_equiv = alpha(
+            "rank((close() - ts_mean(close(), 10)) / ts_std(close(), 10)) - "
+            "delay(rank((close() - ts_mean(close(), 10)) / ts_std(close(), 10)), 5)"
+        )
+        result_equiv = signal_equiv.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result, result_equiv)
+
+    def test_trend_weight_pattern(self, simple_data):
+        """Test the trend_weight pattern that motivated this feature."""
+        # rank(delta(signal, period)) * signal
+        signal = alpha("let s = returns(5) / volatility(10) in rank(delta(s, 10)) * s")
+        result = signal.evaluate(simple_data)
+
+        signal_equiv = alpha(
+            "rank(delta(returns(5) / volatility(10), 10)) * (returns(5) / volatility(10))"
+        )
+        result_equiv = signal_equiv.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result, result_equiv)
+
+    def test_error_unknown_variable(self, simple_data):
+        """Test error on unknown variable reference."""
+        with pytest.raises(ValueError, match="Unknown variable"):
+            signal = alpha("let x = returns(5) in y + x")
+            signal.evaluate(simple_data)
+
+    def test_error_missing_in_keyword(self):
+        """Test error when 'in' keyword is missing."""
+        with pytest.raises(ValueError, match="missing 'in' keyword"):
+            alpha("let x = returns(5) x + 1")
+
+    def test_error_invalid_variable_name(self):
+        """Test error on invalid variable name."""
+        with pytest.raises(ValueError, match="Invalid variable name"):
+            alpha("let 123 = returns(5) in 123")
+
+    def test_error_shadowing_function(self):
+        """Test error when variable shadows function name."""
+        with pytest.raises(ValueError, match="Cannot shadow function name"):
+            alpha("let rank = returns(5) in rank")
+
+    def test_caching_with_let(self, simple_data):
+        """Test that let bindings work with compute_context caching."""
+        with compute_context():
+            signal = alpha("let s = returns(20) in rank(s) + zscore(s) + demean(s)")
+            result = signal.evaluate(simple_data)
+
+        # Should complete without error and have valid shape
+        assert result.shape == simple_data['close'].shape
+
+    def test_complex_pairs_trading(self, simple_data):
+        """Test complex expression that benefits from let bindings."""
+        # Create pair data
+        simple_data['pair'] = pd.DataFrame(
+            {'A': 'pair1', 'B': 'pair1', 'C': 'pair2'},
+            index=simple_data['close'].index
+        )
+
+        signal = alpha(
+            "let spread = group_demean(returns(5), 'pair'), "
+            "spread_vol = group_std(returns(5), 'pair', 20) "
+            "in spread / spread_vol"
+        )
+        result = signal.evaluate(simple_data)
+
+        signal_equiv = alpha(
+            "group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 20)"
+        )
+        result_equiv = signal_equiv.evaluate(simple_data)
+
+        pd.testing.assert_frame_equal(result, result_equiv)

@@ -522,6 +522,35 @@ alpha-parser/
 ### Validity Operations
 - `is_valid(signal)` - Returns 1 where not NaN, 0 otherwise
 
+### Variable Bindings (`let ... in`)
+
+Use `let` to define variables and avoid repeating complex expressions:
+
+```python
+# Single variable binding
+signal = alpha("let s = returns(20) in rank(delta(s, 10)) * s")
+
+# Multiple comma-separated bindings
+signal = alpha("let mom = returns(20), vol = volatility(60) in rank(mom / vol) * sign(mom)")
+
+# Dependent bindings (later variables can reference earlier ones)
+signal = alpha("let mom = returns(20), sharpe = mom / volatility(60) in rank(sharpe) * sign(mom)")
+```
+
+**Benefits:**
+- **DRY**: Define complex sub-signals once, use multiple times
+- **Readability**: Name intermediate calculations for clarity
+- **Efficiency**: With `compute_context()`, each bound signal is computed once and cached
+
+**Use case - Trend-weighted momentum:**
+```python
+# Without let: repeat the signal expression 3 times
+signal = alpha("rank(delta(returns(5) / volatility(10), 20)) * (returns(5) / volatility(10))")
+
+# With let: define once, use twice
+signal = alpha("let s = returns(5) / volatility(10) in rank(delta(s, 20)) * s")
+```
+
 ## Risk Model
 
 The package includes a multi-factor risk model for portfolio risk estimation:
