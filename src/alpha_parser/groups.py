@@ -225,3 +225,57 @@ def group_std(signal: Signal, groups: str, window: int) -> GroupStd:
         zscore = spread / spread_vol
     """
     return GroupStd(signal, groups, window)
+
+
+class GroupSum(Signal):
+    """Sum of values within each group, broadcast to all members.
+
+    Useful for computing group-level aggregates like total sector volume
+    or total pair exposure.
+    """
+
+    def __init__(self, signal: Signal, groups: str):
+        self.signal = signal
+        self.groups = groups
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        group_df = _get_group_data(data, self.groups)
+
+        result = pd.DataFrame(
+            np.nan,
+            index=values.index,
+            columns=values.columns
+        )
+
+        for date in values.index:
+            date_values = values.loc[date]
+            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
+
+            for group_name in date_groups.unique():
+                if pd.isna(group_name):
+                    continue
+                mask = date_groups == group_name
+                group_values = date_values[mask]
+                group_sum = group_values.sum()
+                result.loc[date, mask] = group_sum
+
+        return result
+
+    def _cache_key(self):
+        return ('GroupSum', self.signal._cache_key(), self.groups)
+
+
+def group_sum(signal: Signal, groups: str) -> GroupSum:
+    """Create a GroupSum signal.
+
+    Sums values within each group and broadcasts to all members.
+
+    Example:
+        # Total sector volume
+        sector_volume = group_sum(volume(1), 'sector')
+
+        # Stock's share of sector volume
+        volume_share = volume(1) / group_sum(volume(1), 'sector')
+    """
+    return GroupSum(signal, groups)

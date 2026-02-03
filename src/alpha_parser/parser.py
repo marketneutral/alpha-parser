@@ -18,7 +18,7 @@ from .timeseries import (
 )
 from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate
 from .conditional import where
-from .groups import group_rank, group_demean, group_count_valid, group_std
+from .groups import group_rank, group_demean, group_count_valid, group_std, group_sum
 from .operators import log, abs_, sign, sqrt, power, max_, min_
 
 
@@ -92,6 +92,7 @@ class AlphaParser:
             'group_demean': group_demean,
             'group_count_valid': group_count_valid,
             'group_std': group_std,
+            'group_sum': group_sum,
 
             # Validity ops
             'is_valid': is_valid,
