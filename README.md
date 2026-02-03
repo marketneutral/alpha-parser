@@ -516,6 +516,7 @@ alpha-parser/
 - `group_rank(signal, 'group_name')` - Rank within groups
 - `group_demean(signal, 'group_name')` - Demean within groups (subtract group mean)
 - `group_std(signal, 'group_name', window)` - Rolling std within groups (for normalizing pair spreads)
+- `group_sum(signal, 'group_name')` - Sum within groups, broadcast to all members
 - `group_count_valid(signal, 'group_name', window)` - Count non-NaN within group over window
 
 ### Validity Operations

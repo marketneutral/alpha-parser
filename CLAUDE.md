@@ -62,7 +62,7 @@ PYTHONPATH=src pytest tests/ -v
 `rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`
 
 ### Group
-`group_rank`, `group_demean`, `group_std`, `group_count_valid`
+`group_rank`, `group_demean`, `group_std`, `group_sum`, `group_count_valid`
 
 ### Calendar
 `day_of_week`, `day_of_month`, `month_of_year`
