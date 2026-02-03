@@ -13,7 +13,8 @@ This cookbook is organized by strategy type:
     5. Factor-Neutral Signals
     6. Event-Driven Signals (PEAD)
     7. Risk Management Patterns
-    8. Common Gotchas & Best Practices
+    8. Advanced Signal Composition (let...in)
+    9. Common Gotchas & Best Practices
 
 Run this file directly to see all examples in action:
     PYTHONPATH=src python examples/cookbook.py
@@ -837,7 +838,212 @@ def risk_management_examples():
 
 
 # =============================================================================
-# SECTION 8: COMMON GOTCHAS & BEST PRACTICES
+# SECTION 8: ADVANCED SIGNAL COMPOSITION (let...in)
+# =============================================================================
+
+def advanced_composition_examples():
+    """
+    ADVANCED SIGNAL COMPOSITION with let...in
+
+    The let...in syntax allows you to define variables within an expression,
+    avoiding repetition and making complex signals more readable.
+
+    Syntax:
+        let var1 = expr1, var2 = expr2 in body
+
+    Key benefits:
+    1. DRY: Define complex sub-signals once, use multiple times
+    2. Readability: Name intermediate calculations
+    3. Efficiency: With compute_context(), each variable is computed once
+    """
+    print("\n" + "="*70)
+    print("SECTION 8: ADVANCED SIGNAL COMPOSITION (let...in)")
+    print("="*70)
+
+    data = create_sample_data(n_days=200, n_tickers=15)
+
+    # Add sector groups for some examples
+    sectors = ['tech', 'tech', 'tech', 'energy', 'energy', 'energy',
+               'finance', 'finance', 'finance', 'health', 'health', 'health',
+               'staples', 'staples', 'staples']
+    sector_df = pd.DataFrame(
+        [sectors] * 200,
+        index=data['close'].index,
+        columns=data['close'].columns
+    )
+    data['sector'] = sector_df
+
+    # ---------------------------------------------------------------------
+    # Problem: Repeating complex signals
+    # ---------------------------------------------------------------------
+    print("\n8.1 THE PROBLEM: Signal Repetition")
+    print("    Consider trend-weighted momentum:")
+    print("    'rank(delta(signal, 20)) * signal'")
+    print("")
+    print("    Without let, you'd write the signal 3 times:")
+    print("    rank(delta(returns(5)/volatility(10), 20)) * (returns(5)/volatility(10))")
+    print("")
+    print("    This is error-prone and hard to read!")
+
+    # ---------------------------------------------------------------------
+    # Solution: let bindings
+    # ---------------------------------------------------------------------
+    signal = alpha(
+        "let s = returns(5) / volatility(10) "
+        "in rank(delta(s, 20)) * s"
+    )
+
+    print("\n8.2 THE SOLUTION: let...in bindings")
+    print("    Formula: let s = returns(5) / volatility(10)")
+    print("             in rank(delta(s, 20)) * s")
+    print("")
+    print("    Benefits:")
+    print("    - Define 's' once, use twice")
+    print("    - Clear that we're weighting a signal by its trend")
+    print("    - Computed once with compute_context()")
+
+    result = signal.evaluate(data)
+    print(f"    Sample output: {result.iloc[-1].values[:5].round(4)}")
+
+    # ---------------------------------------------------------------------
+    # Multiple bindings (comma-separated)
+    # ---------------------------------------------------------------------
+    signal = alpha(
+        "let mom = returns(60), "
+        "    vol = volatility(60), "
+        "    sharpe = mom / vol "
+        "in rank(sharpe) * sign(mom)"
+    )
+
+    print("\n8.3 Multiple Bindings (comma-separated)")
+    print("    Formula: let mom = returns(60),")
+    print("                 vol = volatility(60),")
+    print("                 sharpe = mom / vol")
+    print("             in rank(sharpe) * sign(mom)")
+    print("")
+    print("    Note: Later bindings can reference earlier ones!")
+    print("          'sharpe' uses both 'mom' and 'vol'")
+
+    result = signal.evaluate(data)
+    print(f"    Sample output: {result.iloc[-1].values[:5].round(4)}")
+
+    # ---------------------------------------------------------------------
+    # Complex strategy: Factor timing
+    # ---------------------------------------------------------------------
+    signal = alpha(
+        "let mom = returns(60), "
+        "    mom_trend = rank(delta(mom, 20)), "
+        "    vol = volatility(60), "
+        "    vol_regime = where(vol > ts_mean(vol, 60), 0.5, 1.0) "
+        "in mom_trend * sign(mom) * vol_regime"
+    )
+
+    print("\n8.4 Complex Strategy: Factor Timing")
+    print("    Formula: let mom = returns(60),")
+    print("                 mom_trend = rank(delta(mom, 20)),")
+    print("                 vol = volatility(60),")
+    print("                 vol_regime = where(vol > ts_mean(vol,60), 0.5, 1.0)")
+    print("             in mom_trend * sign(mom) * vol_regime")
+    print("")
+    print("    This signal:")
+    print("    1. Computes momentum")
+    print("    2. Ranks momentum acceleration (trend)")
+    print("    3. Scales down in high-vol regime")
+    print("    4. Combines them cleanly")
+
+    result = signal.evaluate(data)
+    print(f"    Sample output: {result.iloc[-1].values[:5].round(4)}")
+
+    # ---------------------------------------------------------------------
+    # Pairs trading with let
+    # ---------------------------------------------------------------------
+    signal = alpha(
+        "let spread = group_demean(returns(5), 'sector'), "
+        "    spread_vol = group_std(returns(5), 'sector', 60), "
+        "    z = spread / spread_vol "
+        "in where(abs(z) > 1.5, -spread, 0)"
+    )
+
+    print("\n8.5 Pairs Trading Z-Score with let")
+    print("    Formula: let spread = group_demean(returns(5), 'sector'),")
+    print("                 spread_vol = group_std(returns(5), 'sector', 60),")
+    print("                 z = spread / spread_vol")
+    print("             in where(abs(z) > 1.5, -spread, 0)")
+    print("")
+    print("    This is MUCH cleaner than nesting everything!")
+
+    result = signal.evaluate(data)
+    active = (result.iloc[-20:].abs() > 0).sum().sum()
+    print(f"    Active positions (last 20 days): {active}")
+
+    # ---------------------------------------------------------------------
+    # Combining alpha sources with let
+    # ---------------------------------------------------------------------
+    signal = alpha(
+        "let mom = rank(returns(60)) - 0.5, "
+        "    rev = rank(-returns(5)) - 0.5, "
+        "    vol_adj = 1 / sqrt(volatility(20)) "
+        "in (0.7 * mom + 0.3 * rev) * vol_adj"
+    )
+
+    print("\n8.6 Combining Alpha Sources")
+    print("    Formula: let mom = rank(returns(60)) - 0.5,")
+    print("                 rev = rank(-returns(5)) - 0.5,")
+    print("                 vol_adj = 1 / sqrt(volatility(20))")
+    print("             in (0.7 * mom + 0.3 * rev) * vol_adj")
+    print("")
+    print("    Combines momentum (70%) and reversal (30%), volatility-adjusted")
+
+    result = signal.evaluate(data)
+    print(f"    Sample output: {result.iloc[-1].values[:5].round(4)}")
+
+    # ---------------------------------------------------------------------
+    # Bollinger Bands made readable
+    # ---------------------------------------------------------------------
+    signal = alpha(
+        "let price = close(), "
+        "    ma = ts_mean(price, 20), "
+        "    std = ts_std(price, 20), "
+        "    upper = ma + 2*std, "
+        "    lower = ma - 2*std, "
+        "    pct_b = (price - lower) / (upper - lower) "
+        "in rank(-pct_b)"
+    )
+
+    print("\n8.7 Bollinger Bands Made Readable")
+    print("    Formula: let price = close(),")
+    print("                 ma = ts_mean(price, 20),")
+    print("                 std = ts_std(price, 20),")
+    print("                 upper = ma + 2*std,")
+    print("                 lower = ma - 2*std,")
+    print("                 pct_b = (price - lower) / (upper - lower)")
+    print("             in rank(-pct_b)")
+    print("")
+    print("    Each step is named and clear!")
+    print("    Compare to: rank(-(close() - (ts_mean(close(),20) - 2*ts_std(close(),20))) /")
+    print("                     (4*ts_std(close(),20)))")
+
+    result = signal.evaluate(data)
+    print(f"    Sample output (mean reversion signal): {result.iloc[-1].values[:5].round(4)}")
+
+    # ---------------------------------------------------------------------
+    # Quality + Value + Momentum composite
+    # ---------------------------------------------------------------------
+    print("\n8.8 Multi-Factor Composite")
+    print("    Example structure (requires fundamental data):")
+    print("")
+    print("    let quality = rank(field('roe')) - 0.5,")
+    print("        value = rank(-field('pe_ratio')) - 0.5,")
+    print("        mom = rank(returns(252)) - 0.5,")
+    print("        composite = 0.4*quality + 0.3*value + 0.3*mom")
+    print("    in group_demean(composite, 'sector')")
+    print("")
+    print("    Each factor is clearly defined, then combined,")
+    print("    then sector-neutralized.")
+
+
+# =============================================================================
+# SECTION 9: COMMON GOTCHAS & BEST PRACTICES
 # =============================================================================
 
 def gotchas_and_best_practices():
@@ -847,7 +1053,7 @@ def gotchas_and_best_practices():
     Things that catch people off guard when using alpha-parser.
     """
     print("\n" + "="*70)
-    print("SECTION 8: COMMON GOTCHAS & BEST PRACTICES")
+    print("SECTION 9: COMMON GOTCHAS & BEST PRACTICES")
     print("="*70)
 
     data = create_sample_data(n_days=100, n_tickers=5)
@@ -855,7 +1061,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # GOTCHA 1: rank() and quantile() are ASCENDING
     # =====================================================================
-    print("\n8.1 GOTCHA: rank() and quantile() are ASCENDING")
+    print("\n9.1 GOTCHA: rank() and quantile() are ASCENDING")
     print("    Higher value -> Higher rank")
     print("    ")
     print("    If you want to BUY high-momentum stocks:")
@@ -869,7 +1075,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # GOTCHA 2: Window warmup produces NaN
     # =====================================================================
-    print("\n8.2 GOTCHA: Window warmup produces NaN")
+    print("\n9.2 GOTCHA: Window warmup produces NaN")
     print("    ts_mean(x, 20) has NaN for first 19 rows")
     print("    returns(20) has NaN for first 20 rows")
     print("    ")
@@ -885,7 +1091,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # GOTCHA 3: Cross-sectional vs Time-series operations
     # =====================================================================
-    print("\n8.3 GOTCHA: Cross-sectional vs Time-series operations")
+    print("\n9.3 GOTCHA: Cross-sectional vs Time-series operations")
     print("    ")
     print("    CROSS-SECTIONAL (work across stocks within each day):")
     print("      rank(), zscore(), demean(), quantile(), scale()")
@@ -902,7 +1108,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # GOTCHA 4: ts_beta argument order matters
     # =====================================================================
-    print("\n8.4 GOTCHA: ts_beta() argument order matters")
+    print("\n9.4 GOTCHA: ts_beta() argument order matters")
     print("    ts_beta(Y, X, window) regresses Y on X")
     print("    Result = cov(Y, X) / var(X)")
     print("    ")
@@ -914,7 +1120,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # GOTCHA 5: EWMA halflife vs rolling period
     # =====================================================================
-    print("\n8.5 GOTCHA: EWMA halflife vs rolling period")
+    print("\n9.5 GOTCHA: EWMA halflife vs rolling period")
     print("    ewma(x, halflife=10) and ts_mean(x, period=20) are NOT equivalent")
     print("    ")
     print("    halflife=10 means: weight decays by 50% every 10 periods")
@@ -926,7 +1132,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # GOTCHA 6: Group data must be provided
     # =====================================================================
-    print("\n8.6 GOTCHA: Group operations need group data")
+    print("\n9.6 GOTCHA: Group operations need group data")
     print("    group_demean(returns(5), 'sector') requires:")
     print("      data['sector'] = DataFrame of sector assignments")
     print("    ")
@@ -938,7 +1144,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # BEST PRACTICE: Use compute_context() for caching
     # =====================================================================
-    print("\n8.7 BEST PRACTICE: Use compute_context() for caching")
+    print("\n9.7 BEST PRACTICE: Use compute_context() for caching")
     print("    Wrap multiple evaluations in compute_context():")
     print("    ")
     print("    with compute_context():")
@@ -959,7 +1165,7 @@ def gotchas_and_best_practices():
     # =====================================================================
     # BEST PRACTICE: Center signals before converting to weights
     # =====================================================================
-    print("\n8.8 BEST PRACTICE: Center signals before to_weights()")
+    print("\n9.8 BEST PRACTICE: Center signals before to_weights()")
     print("    rank() returns values in [0, 1]")
     print("    This means ALL positions are long!")
     print("    ")
@@ -992,6 +1198,7 @@ if __name__ == '__main__':
     factor_neutral_examples()
     event_driven_examples()
     risk_management_examples()
+    advanced_composition_examples()
     gotchas_and_best_practices()
 
     print("\n" + "="*70)
