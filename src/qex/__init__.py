@@ -1,5 +1,5 @@
 """
-Qex (Quant Expression) - A DSL for defining quantitative trading signals.
+qex - A DSL for defining quantitative trading signals.
 
 Example usage:
     from qex import qex, compute_weights, compute_context

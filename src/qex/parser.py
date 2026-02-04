@@ -1,4 +1,4 @@
-"""Qex (Quant Expression) parser."""
+"""qex parser."""
 
 import ast
 import operator

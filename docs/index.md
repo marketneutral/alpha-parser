@@ -41,7 +41,7 @@ Works with any DataFrame pipeline. Lazy loading for large datasets.
 
 ## What is qex?
 
-Qex (Quant Expression) is a DSL for defining quantitative trading signals. Instead of writing verbose pandas code, express signals as readable one-liners:
+qex is a DSL for defining quantitative trading signals. Instead of writing verbose pandas code, express signals as readable one-liners:
 
 ```python
 from qex import qex

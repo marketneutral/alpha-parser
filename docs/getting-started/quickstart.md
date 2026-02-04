@@ -4,7 +4,7 @@ Get up and running in 5 minutes.
 
 ## 1. Create Sample Data
 
-Qex expects data as a dict of DataFrames with DatetimeIndex and ticker columns:
+qex expects data as a dict of DataFrames with DatetimeIndex and ticker columns:
 
 ```python
 import pandas as pd
