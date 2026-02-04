@@ -66,6 +66,7 @@ plugins:
 
 nav:
   - Home: index.md
+  - Philosophy: philosophy.md
   - Getting Started:
     - Installation: getting-started/installation.md
     - Quick Start: getting-started/quickstart.md
