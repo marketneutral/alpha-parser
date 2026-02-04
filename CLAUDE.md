@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Alpha Parser is a DSL for defining quantitative trading signals. It parses string expressions like `rank(-returns(20) / volatility(60))` into executable signal trees.
+Qex (Quant Expression) is a DSL for defining quantitative trading signals. It parses string expressions like `rank(-returns(20) / volatility(60))` into executable signal trees.
 
 ## Quick Commands
 
@@ -16,9 +16,9 @@ PYTHONPATH=src pytest tests/ -v
 
 ## Architecture
 
-- `src/alpha_parser/` - Signal DSL package
+- `src/qex/` - Signal DSL package
   - `signal.py` - Base `Signal` class with `evaluate()` and `to_weights()` methods
-  - `parser.py` - `AlphaParser` converts string expressions to Signal trees
+  - `parser.py` - `QexParser` converts string expressions to Signal trees
   - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`), comparison, validity (`is_valid`), and math ops (`log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min`)
   - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`)
   - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`)
@@ -36,7 +36,7 @@ PYTHONPATH=src pytest tests/ -v
 ## Key Patterns
 
 - All signals inherit from `Signal` ABC and implement `_compute()` and `_cache_key()`
-- Use `alpha("expression")` to parse strings into Signal objects
+- Use `qex("expression")` to parse strings into Signal objects (or `alpha()` for backwards compatibility)
 - Wrap multiple evaluations in `with compute_context():` for cache sharing
 - Data is passed as `Dict[str, pd.DataFrame]` with keys like `'close'`, `'volume'`
 - Use `LazyData` wrapper for large datasets - fields are loaded on demand
@@ -75,19 +75,19 @@ Use `let ... in` syntax to define variables and avoid repeating complex expressi
 
 ```python
 # Single binding
-alpha("let s = returns(20) in rank(delta(s, 10)) * s")
+qex("let s = returns(20) in rank(delta(s, 10)) * s")
 
 # Multiple comma-separated bindings
-alpha("let mom = returns(20), vol = volatility(60) in rank(mom / vol) * sign(mom)")
+qex("let mom = returns(20), vol = volatility(60) in rank(mom / vol) * sign(mom)")
 
 # Dependent bindings (later can reference earlier)
-alpha("let mom = returns(20), sharpe = mom / volatility(60) in rank(sharpe) * sign(mom)")
+qex("let mom = returns(20), sharpe = mom / volatility(60) in rank(sharpe) * sign(mom)")
 ```
 
 ## Risk Model
 
 ```python
-from alpha_parser import FactorRiskModel, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
+from qex import FactorRiskModel, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
 
 # With fundamental data
 risk_model = FactorRiskModel(factors=DEFAULT_STYLE_FACTORS)
@@ -102,10 +102,10 @@ results = risk_model.fit(data)
 ## Evaluation & Backtesting
 
 ```python
-from alpha_parser import alpha, Backtest, QuantileAnalysis
+from qex import qex, Backtest, QuantileAnalysis
 
 # Backtest a signal
-signal = alpha("rank(returns(20)) - 0.5")
+signal = qex("rank(returns(20)) - 0.5")
 bt = Backtest(signal, transaction_cost=0.001)
 result = bt.run(data)
 print(result.summary())

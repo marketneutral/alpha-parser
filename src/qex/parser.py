@@ -1,4 +1,4 @@
-"""Alpha expression parser."""
+"""Qex (Quant Expression) parser."""
 
 import ast
 import operator
@@ -23,7 +23,7 @@ from .groups import group_rank, group_demean, group_count_valid, group_std, grou
 from .operators import log, abs_, sign, sqrt, power, max_, min_
 
 
-class AlphaParser:
+class QexParser:
     """Parse string expressions into Signal objects.
 
     Supports variable bindings with let...in syntax:
@@ -341,10 +341,24 @@ class AlphaParser:
             return self._visit(node)
 
 
-def alpha(expression: str) -> Signal:
-    """Parse and return signal from string expression."""
-    parser = AlphaParser()
+# Backwards compatibility alias
+AlphaParser = QexParser
+
+
+def qex(expression: str) -> Signal:
+    """Parse and return signal from string expression.
+
+    This is the primary entry point for qex expressions.
+
+    Example:
+        signal = qex("rank(-returns(20) / volatility(60))")
+    """
+    parser = QexParser()
     return parser.parse(expression)
+
+
+# Backwards compatibility alias
+alpha = qex
 
 
 def compute_weights(expression: str,
@@ -355,5 +369,5 @@ def compute_weights(expression: str,
 
     This is the main entry point for backtesting integration.
     """
-    signal = alpha(expression)
+    signal = qex(expression)
     return signal.to_weights(data, **kwargs)

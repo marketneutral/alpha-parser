@@ -1,8 +1,8 @@
 """
-Alpha Parser Cookbook
-=====================
+Qex Cookbook
+============
 
-A comprehensive guide to building quantitative trading signals with alpha-parser.
+A comprehensive guide to building quantitative trading signals with qex.
 Each section contains heavily commented examples that you can run directly.
 
 This cookbook is organized by strategy type:
@@ -25,7 +25,7 @@ Or import specific sections in your own code.
 import numpy as np
 import pandas as pd
 
-from alpha_parser import alpha, compute_context, compute_weights
+from qex import qex, alpha, compute_context, compute_weights
 
 
 # =============================================================================
@@ -599,7 +599,7 @@ def factor_neutral_examples():
     print("\n5.5 Multi-Factor Neutral Signal (Advanced)")
     print("    Approach: Use FactorRiskModel to compute factor exposures,")
     print("              then construct signal from residuals.")
-    print("    See: alpha_parser.FactorRiskModel for implementation.")
+    print("    See: qex.FactorRiskModel for implementation.")
 
 
 # =============================================================================
@@ -1050,7 +1050,7 @@ def gotchas_and_best_practices():
     """
     COMMON GOTCHAS & BEST PRACTICES
 
-    Things that catch people off guard when using alpha-parser.
+    Things that catch people off guard when using qex.
     """
     print("\n" + "="*70)
     print("SECTION 9: COMMON GOTCHAS & BEST PRACTICES")
@@ -1184,10 +1184,10 @@ if __name__ == '__main__':
     """Run all cookbook examples."""
 
     print("="*70)
-    print("ALPHA PARSER COOKBOOK")
+    print("QEX COOKBOOK")
     print("="*70)
     print("\nThis cookbook demonstrates common patterns for building")
-    print("quantitative trading signals with alpha-parser.")
+    print("quantitative trading signals with qex.")
     print("\nRunning all examples...\n")
 
     # Run each section

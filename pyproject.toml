@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "alpha-parser"
+name = "qex"
 version = "0.3.0"
-description = "A DSL for defining quantitative trading signals and alpha factors"
+description = "Qex (Quant Expression) - A DSL for defining quantitative trading signals"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
-keywords = ["quant", "trading", "signals", "alpha", "backtesting"]
+keywords = ["quant", "trading", "signals", "alpha", "backtesting", "qex"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
@@ -41,7 +41,7 @@ risk = [
     "statsmodels>=0.14",
 ]
 all = [
-    "alpha-parser[dev,data,risk]",
+    "qex[dev,data,risk]",
 ]
 
 [tool.setuptools.packages.find]

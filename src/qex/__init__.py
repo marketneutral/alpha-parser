@@ -1,11 +1,11 @@
 """
-Alpha Parser - A DSL for defining quantitative trading signals.
+Qex (Quant Expression) - A DSL for defining quantitative trading signals.
 
 Example usage:
-    from alpha_parser import alpha, compute_weights, compute_context
+    from qex import qex, compute_weights, compute_context
 
     # Parse a signal expression
-    signal = alpha("rank(-returns(20) / volatility(60))")
+    signal = qex("rank(-returns(20) / volatility(60))")
 
     # Evaluate with data
     result = signal.evaluate(data)
@@ -15,10 +15,13 @@ Example usage:
 
     # Use compute context for caching
     with compute_context():
-        signal1 = alpha("-returns(20) / volatility(60)")
-        signal2 = alpha("rank(returns(252))")
+        signal1 = qex("-returns(20) / volatility(60)")
+        signal2 = qex("rank(returns(252))")
         result1 = signal1.evaluate(data)
         result2 = signal2.evaluate(data)
+
+Backwards compatibility:
+    `alpha()` and `AlphaParser` are still available as aliases.
 """
 
 # Context management
@@ -77,7 +80,7 @@ from .groups import (
 )
 
 # Parser
-from .parser import AlphaParser, alpha, compute_weights
+from .parser import QexParser, qex, AlphaParser, alpha, compute_weights
 
 # Risk model (optional - requires statsmodels)
 try:
@@ -253,8 +256,10 @@ __all__ = [
     'group_sum',
 
     # Parser
-    'AlphaParser',
-    'alpha',
+    'QexParser',
+    'qex',
+    'AlphaParser',  # backwards compatibility
+    'alpha',  # backwards compatibility
     'compute_weights',
 
     # Risk model (optional)

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from alpha_parser import alpha, LazyData, compute_context
+from qex import alpha, LazyData, compute_context
 
 
 class TestLazyData:
