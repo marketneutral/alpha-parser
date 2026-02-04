@@ -5,12 +5,6 @@
 - Python 3.9+
 - numpy, pandas, scipy
 
-## Install from PyPI
-
-```bash
-pip install qex
-```
-
 ## Install from Git
 
 ```bash
@@ -38,12 +32,12 @@ pip install -e ".[all]"
 | `risk` | statsmodels | Factor risk model |
 | `all` | Everything above | Full installation |
 
-Install specific groups:
+Install specific groups (from cloned repo):
 
 ```bash
-pip install "qex[dev]"      # Just testing
-pip install "qex[risk]"     # With risk model
-pip install "qex[all]"      # Everything
+pip install -e ".[dev]"      # Just testing
+pip install -e ".[risk]"     # With risk model
+pip install -e ".[all]"      # Everything
 ```
 
 ## Verify Installation

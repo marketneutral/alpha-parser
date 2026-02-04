@@ -97,12 +97,6 @@ print(result.summary())
 ## Installation
 
 ```bash
-pip install qex
-```
-
-Or from source:
-
-```bash
 git clone https://github.com/marketneutral/alpha-parser
 cd alpha-parser
 pip install -e ".[all]"
