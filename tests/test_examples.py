@@ -3,7 +3,7 @@
 import pytest
 import numpy as np
 
-from alpha_parser import alpha, compute_context
+from qex import alpha, compute_context
 
 
 class TestSimpleReversal:

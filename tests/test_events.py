@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from alpha_parser import alpha, compute_context
+from qex import alpha, compute_context
 
 
 class TestIsValid:

@@ -1,4 +1,4 @@
-# Alpha Parser
+# Qex (Quant Expression)
 
 A DSL (Domain Specific Language) for defining quantitative trading signals and alpha factors.
 
@@ -9,17 +9,17 @@ Quantitative trading signals often involve complex combinations of operations:
 - **Cross-sectional**: ranking stocks, z-scoring, sector neutralization
 - **Event-driven**: handling sparse data like earnings announcements
 
-Writing these from scratch is tedious and error-prone. Alpha Parser lets you express complex signals in a single readable expression:
+Writing these from scratch is tedious and error-prone. Qex lets you express complex signals in a single readable expression:
 
 ```python
 # Instead of 50+ lines of pandas code:
-signal = alpha("rank(ts_corr(returns(1), volume(1), 20))")
+signal = qex("rank(ts_corr(returns(1), volume(1), 20))")
 
 # Sector-neutral momentum with volatility scaling
-signal = alpha("group_demean(returns(60) / volatility(60), 'sector')")
+signal = qex("group_demean(returns(60) / volatility(60), 'sector')")
 
 # Combine multiple factors
-signal = alpha("0.5 * rank(returns(252)) + 0.5 * rank(-volatility(20))")
+signal = qex("0.5 * rank(returns(252)) + 0.5 * rank(-volatility(20))")
 ```
 
 **Key benefits:**
@@ -44,10 +44,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ```bash
 # Basic install
-uv pip install git+https://github.com/youruser/alpha-parser.git
+uv pip install git+https://github.com/youruser/qex.git
 
 # With optional dependencies
-uv pip install "alpha-parser[all] @ git+https://github.com/youruser/alpha-parser.git"
+uv pip install "qex[all] @ git+https://github.com/youruser/qex.git"
 ```
 
 **Option 2: Local development**
@@ -84,10 +84,10 @@ pytest tests/ -v  # integration tests auto-skip if data not present
 ## Usage
 
 ```python
-from alpha_parser import alpha, compute_weights, compute_context
+from qex import qex, compute_weights, compute_context
 
 # Parse a signal expression
-signal = alpha("rank(-returns(20) / volatility(60))")
+signal = qex("rank(-returns(20) / volatility(60))")
 
 # Evaluate with data
 result = signal.evaluate(data)
@@ -97,10 +97,14 @@ weights = signal.to_weights(data, normalize=True, long_only=False)
 
 # Use compute context for caching across multiple signals
 with compute_context():
-    signal1 = alpha("-returns(20) / volatility(60)")
-    signal2 = alpha("rank(returns(252))")
+    signal1 = qex("-returns(20) / volatility(60)")
+    signal2 = qex("rank(returns(252))")
     result1 = signal1.evaluate(data)
     result2 = signal2.evaluate(data)
+
+# Backwards compatibility: alpha() still works
+from qex import alpha  # alias for qex()
+signal = alpha("rank(returns(20))")
 ```
 
 ## Fetching Real Data (FMP)
@@ -139,7 +143,7 @@ data/fmp/
 
 Use with LazyData:
 ```python
-from alpha_parser import alpha, LazyData
+from qex import qex, LazyData
 import pandas as pd
 
 data = LazyData({
@@ -148,7 +152,7 @@ data = LazyData({
     'sector': lambda: pd.read_parquet('data/fmp/sector.parquet'),
 })
 
-signal = alpha("group_rank(rank(-returns(20)), 'sector')")
+signal = qex("group_rank(rank(-returns(20)), 'sector')")
 result = signal.evaluate(data)
 ```
 
@@ -183,7 +187,7 @@ data['earnings_reported'] = earnings_reported_df
 data['analyst_rating'] = analyst_rating_df
 
 # Access in expressions
-signal = alpha("field('analyst_rating') * returns(20)")
+signal = qex("field('analyst_rating') * returns(20)")
 ```
 
 ### Group Data
@@ -194,7 +198,7 @@ For group operations (`group_rank`, `group_demean`, etc.), provide group members
 data['sector'] = sector_df  # Values like 'Tech', 'Finance', 'Healthcare'
 
 # Use in expressions
-signal = alpha("group_rank(returns(20), 'sector')")
+signal = qex("group_rank(returns(20), 'sector')")
 ```
 
 Group DataFrames should have the same index/columns as price data, with string values indicating group membership.
@@ -214,10 +218,10 @@ For event-driven signals (earnings, announcements), use `NaN` for dates without 
 data['earnings_reported'] = earnings_df
 
 # Forward fill to hold signal after event
-signal = alpha("fill_forward(field('earnings_reported'), 5)")
+signal = qex("fill_forward(field('earnings_reported'), 5)")
 
 # Check if data point exists
-signal = alpha("is_valid(field('earnings_reported'))")
+signal = qex("is_valid(field('earnings_reported'))")
 ```
 
 ### Example: Building a Complete Dataset
@@ -258,7 +262,7 @@ for ticker in tickers:
 data['earnings_reported'] = earnings
 
 # Now use it
-signal = alpha("rank(-returns(20) / volatility(60))")
+signal = qex("rank(-returns(20) / volatility(60))")
 result = signal.evaluate(data)
 ```
 
@@ -277,7 +281,7 @@ surprise = "field('earnings_actual') - field('earnings_estimate')"
 held_surprise = f"fill_forward({surprise}, 60)"
 
 # Rank cross-sectionally: go long positive surprises, short negative
-signal = alpha(f"rank({held_surprise}) - 0.5")
+signal = qex(f"rank({held_surprise}) - 0.5")
 ```
 
 **With Proper SUE (Standardized Unexpected Earnings):**
@@ -290,7 +294,7 @@ surprise = "field('earnings_actual') - field('earnings_estimate')"
 sue = f"({surprise}) / ts_std_events({surprise}, 8)"
 
 # Hold for 60 days, rank cross-sectionally
-signal = alpha(f"rank(fill_forward({sue}, 60)) - 0.5")
+signal = qex(f"rank(fill_forward({sue}, 60)) - 0.5")
 ```
 
 **Notes on PEAD Research:**
@@ -300,7 +304,7 @@ signal = alpha(f"rank(fill_forward({sue}, 60)) - 0.5")
 
 ### Technical Indicator Examples
 
-Alpha Parser makes it easy to express classic technical indicators as single-line expressions.
+Qex makes it easy to express classic technical indicators as single-line expressions.
 
 **Bollinger Band Mean-Reversion:**
 
@@ -310,7 +314,7 @@ Bollinger Bands measure how far price is from its moving average in terms of sta
 # Bollinger %B mean-reversion signal
 # When %B is low (near 0), price is near lower band → go long
 # When %B is high (near 1), price is near upper band → go short
-signal = alpha("""
+signal = qex("""
     rank(-(close() - ts_mean(close(), 20)) / (2 * ts_std(close(), 20))) - 0.5
 """)
 ```
@@ -322,7 +326,7 @@ The Relative Strength Index (RSI) measures the ratio of recent gains to total pr
 ```python
 # RSI mean-reversion signal
 # Low RSI (oversold) → go long, High RSI (overbought) → go short
-signal = alpha("""
+signal = qex("""
     rank(-(100 * ts_mean(max(delta(close(), 1), 0), 14)
         / (ts_mean(max(delta(close(), 1), 0), 14)
            + ts_mean(max(-delta(close(), 1), 0), 14)))) - 0.5
@@ -336,7 +340,7 @@ Note: These signals use `rank()` to convert raw indicator values into cross-sect
 For large datasets, use `LazyData` to load fields on demand. Only fields actually used by the signal will be loaded:
 
 ```python
-from alpha_parser import alpha, LazyData
+from qex import qex, LazyData
 import pandas as pd
 
 # Define loaders - these are only called when the field is accessed
@@ -347,7 +351,7 @@ data = LazyData({
 })
 
 # This signal only uses 'close', so 'volume' and 'earnings' are never loaded
-signal = alpha("rank(returns(20))")
+signal = qex("rank(returns(20))")
 result = signal.evaluate(data)
 ```
 
@@ -405,9 +409,9 @@ data.descriptions  # Returns the descriptions dict
 ## Project Structure
 
 ```
-alpha-parser/
+qex/
 ├── src/
-│   ├── alpha_parser/         # Signal DSL package
+│   ├── qex/                  # Signal DSL package
 │   │   ├── __init__.py       # Public API exports
 │   │   ├── context.py        # Compute context and caching
 │   │   ├── signal.py         # Base Signal class
@@ -528,13 +532,13 @@ Use `let` to define variables and avoid repeating complex expressions:
 
 ```python
 # Single variable binding
-signal = alpha("let s = returns(20) in rank(delta(s, 10)) * s")
+signal = qex("let s = returns(20) in rank(delta(s, 10)) * s")
 
 # Multiple comma-separated bindings
-signal = alpha("let mom = returns(20), vol = volatility(60) in rank(mom / vol) * sign(mom)")
+signal = qex("let mom = returns(20), vol = volatility(60) in rank(mom / vol) * sign(mom)")
 
 # Dependent bindings (later variables can reference earlier ones)
-signal = alpha("let mom = returns(20), sharpe = mom / volatility(60) in rank(sharpe) * sign(mom)")
+signal = qex("let mom = returns(20), sharpe = mom / volatility(60) in rank(sharpe) * sign(mom)")
 ```
 
 **Benefits:**
@@ -545,10 +549,10 @@ signal = alpha("let mom = returns(20), sharpe = mom / volatility(60) in rank(sha
 **Use case - Trend-weighted momentum:**
 ```python
 # Without let: repeat the signal expression 3 times
-signal = alpha("rank(delta(returns(5) / volatility(10), 20)) * (returns(5) / volatility(10))")
+signal = qex("rank(delta(returns(5) / volatility(10), 20)) * (returns(5) / volatility(10))")
 
 # With let: define once, use twice
-signal = alpha("let s = returns(5) / volatility(10) in rank(delta(s, 20)) * s")
+signal = qex("let s = returns(5) / volatility(10) in rank(delta(s, 20)) * s")
 ```
 
 ## Risk Model
@@ -556,7 +560,7 @@ signal = alpha("let s = returns(5) / volatility(10) in rank(delta(s, 20)) * s")
 The package includes a multi-factor risk model for portfolio risk estimation:
 
 ```python
-from alpha_parser import FactorRiskModel, DEFAULT_STYLE_FACTORS
+from qex import FactorRiskModel, DEFAULT_STYLE_FACTORS
 
 # Create risk model with default style factors
 risk_model = FactorRiskModel(factors=DEFAULT_STYLE_FACTORS)
@@ -587,7 +591,7 @@ The model includes these style factors (similar to industry-standard multi-facto
 For datasets without fundamental data, use `PRICE_ONLY_FACTORS`:
 
 ```python
-from alpha_parser import FactorRiskModel, PRICE_ONLY_FACTORS
+from qex import FactorRiskModel, PRICE_ONLY_FACTORS
 
 risk_model = FactorRiskModel(factors=PRICE_ONLY_FACTORS)
 ```
@@ -599,7 +603,7 @@ This includes: Size, Momentum, Volatility, Liquidity, and Short-term Reversal.
 Define custom factors using signal expressions:
 
 ```python
-from alpha_parser import FactorRiskModel, FactorDefinition
+from qex import FactorRiskModel, FactorDefinition
 
 custom_factors = [
     FactorDefinition('earnings_yield', "field('earnings') / close()"),
@@ -616,10 +620,10 @@ The evaluation module provides WorldQuant-style backtesting and quantile analysi
 ### Basic Backtest
 
 ```python
-from alpha_parser import alpha, Backtest
+from qex import qex, Backtest
 
 # Create a signal
-signal = alpha("rank(returns(20)) - 0.5")
+signal = qex("rank(returns(20)) - 0.5")
 
 # Run backtest
 bt = Backtest(signal)
@@ -669,9 +673,9 @@ result = bt.run(data)
 Understand signal performance across quintiles:
 
 ```python
-from alpha_parser import alpha, QuantileAnalysis
+from qex import qex, QuantileAnalysis
 
-signal = alpha("rank(returns(60)) - 0.5")
+signal = qex("rank(returns(60)) - 0.5")
 
 # Run quintile analysis
 qa = QuantileAnalysis(signal, n_quantiles=5)

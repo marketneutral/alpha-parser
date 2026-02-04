@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from alpha_parser import alpha
+from qex import alpha
 from evaluation import (
     Backtest,
     BacktestResult,

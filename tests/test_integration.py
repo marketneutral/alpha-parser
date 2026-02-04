@@ -40,7 +40,7 @@ class TestAlphasWithRealData:
 
     def test_momentum_alpha(self, fmp_data):
         """Test basic momentum signal."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("rank(returns(20))")
         weights = signal.to_weights(fmp_data)
@@ -52,7 +52,7 @@ class TestAlphasWithRealData:
 
     def test_reversal_alpha(self, fmp_data):
         """Test mean reversion signal."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("rank(-returns(5) / volatility(20))")
         weights = signal.to_weights(fmp_data)
@@ -62,7 +62,7 @@ class TestAlphasWithRealData:
 
     def test_volume_adjusted_reversal(self, fmp_data):
         """Test volume-adjusted reversal (Alpha #1 from discussion)."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("rank(-returns(5) * (volume(5) / adv(20)))")
         weights = signal.to_weights(fmp_data)
@@ -78,7 +78,7 @@ class TestBacktestWithRealData:
 
     def test_backtest_momentum(self, fmp_data):
         """Backtest momentum strategy."""
-        from alpha_parser import alpha, Backtest
+        from qex import alpha, Backtest
 
         signal = alpha("rank(returns(20)) - 0.5")
         bt = Backtest(signal, transaction_cost=0.001)
@@ -94,7 +94,7 @@ class TestBacktestWithRealData:
 
     def test_backtest_reversal(self, fmp_data):
         """Backtest reversal strategy."""
-        from alpha_parser import alpha, Backtest
+        from qex import alpha, Backtest
 
         signal = alpha("rank(-returns(5)) - 0.5")
         bt = Backtest(signal, transaction_cost=0.001)
@@ -105,7 +105,7 @@ class TestBacktestWithRealData:
 
     def test_backtest_combined_alpha(self, fmp_data):
         """Backtest combined momentum + reversal."""
-        from alpha_parser import alpha, Backtest
+        from qex import alpha, Backtest
 
         # Blend short-term reversal with medium-term momentum
         signal = alpha("rank(-returns(5)) * 0.5 + rank(returns(60)) * 0.5 - 0.5")
@@ -121,7 +121,7 @@ class TestQuantileAnalysisWithRealData:
 
     def test_quantile_momentum(self, fmp_data):
         """Quantile analysis of momentum signal."""
-        from alpha_parser import alpha, QuantileAnalysis
+        from qex import alpha, QuantileAnalysis
 
         signal = alpha("rank(returns(20))")
         qa = QuantileAnalysis(signal, n_quantiles=5)
@@ -136,7 +136,7 @@ class TestQuantileAnalysisWithRealData:
 
     def test_ic_analysis(self, fmp_data):
         """Test Information Coefficient calculation."""
-        from alpha_parser import alpha, QuantileAnalysis
+        from qex import alpha, QuantileAnalysis
 
         signal = alpha("rank(returns(20))")
         qa = QuantileAnalysis(signal, n_quantiles=5)
@@ -156,7 +156,7 @@ class TestComplexAlphasWithRealData:
 
     def test_52week_high_proximity(self, fmp_data):
         """Test 52-week high proximity signal."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("rank(close() / ts_max(close(), 252))")
         weights = signal.to_weights(fmp_data)
@@ -167,7 +167,7 @@ class TestComplexAlphasWithRealData:
 
     def test_volatility_mean_reversion(self, fmp_data):
         """Test volatility regime mean reversion."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("rank(where(volatility(20) > ts_mean(volatility(20), 60), -returns(5), returns(5)))")
         weights = signal.to_weights(fmp_data)
@@ -177,7 +177,7 @@ class TestComplexAlphasWithRealData:
 
     def test_trend_aligned_reversal(self, fmp_data):
         """Test trend-aligned reversal signal."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("rank(sign(returns(60)) * -returns(5))")
         weights = signal.to_weights(fmp_data)
@@ -258,7 +258,7 @@ class TestPairsTradingWithRealData:
 
     def test_pairs_spread_mean_reversion(self, pairs_fmp_data):
         """Test basic pairs mean reversion: long laggard, short leader."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("group_demean(-returns(5), 'pair')")
         result = signal.evaluate(pairs_fmp_data)
@@ -278,7 +278,7 @@ class TestPairsTradingWithRealData:
 
     def test_pairs_zscore_signal(self, pairs_fmp_data):
         """Test z-score normalized pair spread."""
-        from alpha_parser import alpha
+        from qex import alpha
 
         signal = alpha("group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 60)")
         result = signal.evaluate(pairs_fmp_data)
@@ -294,7 +294,7 @@ class TestPairsTradingWithRealData:
 
     def test_pairs_backtest(self, pairs_fmp_data):
         """Backtest pairs mean reversion strategy."""
-        from alpha_parser import alpha, Backtest
+        from qex import alpha, Backtest
 
         # Simple pairs mean reversion
         signal = alpha("group_demean(-returns(5), 'pair')")
@@ -311,7 +311,7 @@ class TestPairsTradingWithRealData:
 
     def test_pairs_zscore_backtest(self, pairs_fmp_data):
         """Backtest z-score normalized pairs strategy."""
-        from alpha_parser import alpha, Backtest
+        from qex import alpha, Backtest
 
         # Z-score normalized - trade when spread is stretched
         signal = alpha("-group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 60)")
