@@ -1,5 +1,5 @@
 """
-Qex Cookbook
+qex Cookbook
 ============
 
 A comprehensive guide to building quantitative trading signals with qex.

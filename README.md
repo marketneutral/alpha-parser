@@ -1,6 +1,8 @@
-# Qex (Quant Expression)
+# qex
 
-A DSL (Domain Specific Language) for defining quantitative trading signals and alpha factors.
+[![Docs](https://img.shields.io/badge/docs-qex-00ff41)](https://marketneutral.github.io/alpha-parser/)
+
+A DSL for quantitative trading signals.
 
 ## Why This Package?
 
@@ -9,7 +11,7 @@ Quantitative trading signals often involve complex combinations of operations:
 - **Cross-sectional**: ranking stocks, z-scoring, sector neutralization
 - **Event-driven**: handling sparse data like earnings announcements
 
-Writing these from scratch is tedious and error-prone. Qex lets you express complex signals in a single readable expression:
+Writing these from scratch is tedious and error-prone. qex lets you express complex signals in a single readable expression:
 
 ```python
 # Instead of 50+ lines of pandas code:
@@ -304,7 +306,7 @@ signal = qex(f"rank(fill_forward({sue}, 60)) - 0.5")
 
 ### Technical Indicator Examples
 
-Qex makes it easy to express classic technical indicators as single-line expressions.
+qex makes it easy to express classic technical indicators as single-line expressions.
 
 **Bollinger Band Mean-Reversion:**
 

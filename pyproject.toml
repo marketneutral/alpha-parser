@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "qex"
 version = "0.3.0"
-description = "Qex (Quant Expression) - A DSL for defining quantitative trading signals"
+description = "qex - A DSL for defining quantitative trading signals"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
@@ -40,8 +40,13 @@ data = [
 risk = [
     "statsmodels>=0.14",
 ]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+]
 all = [
-    "qex[dev,data,risk]",
+    "qex[dev,data,risk,docs]",
 ]
 
 [tool.setuptools.packages.find]

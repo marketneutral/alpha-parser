@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Qex (Quant Expression) is a DSL for defining quantitative trading signals. It parses string expressions like `rank(-returns(20) / volatility(60))` into executable signal trees.
+qex is a DSL for defining quantitative trading signals. It parses string expressions like `rank(-returns(20) / volatility(60))` into executable signal trees.
 
 ## Quick Commands
 
