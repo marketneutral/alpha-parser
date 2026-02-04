@@ -1,0 +1,139 @@
+/* Hacker aesthetic - minimalist, monospace, dark */
+
+:root {
+  --md-primary-fg-color: #000000;
+  --md-primary-bg-color: #0d1117;
+  --md-accent-fg-color: #00ff41;
+}
+
+/* Dark background everywhere */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0d1117;
+  --md-default-fg-color: #c9d1d9;
+  --md-code-bg-color: #161b22;
+  --md-code-fg-color: #00ff41;
+}
+
+/* Monospace everything */
+body {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+}
+
+/* Hero styling */
+.md-typeset h1 {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+/* Code blocks - terminal green */
+.md-typeset code {
+  background-color: #161b22;
+  color: #00ff41;
+  border-radius: 2px;
+  padding: 0.1em 0.3em;
+}
+
+.md-typeset pre > code {
+  color: #c9d1d9;
+}
+
+/* Syntax highlighting tweaks */
+.highlight .c1 { color: #6e7681; }  /* comments */
+.highlight .s1, .highlight .s2 { color: #a5d6ff; }  /* strings */
+.highlight .mi, .highlight .mf { color: #79c0ff; }  /* numbers */
+.highlight .k { color: #ff7b72; }  /* keywords */
+.highlight .nf { color: #d2a8ff; }  /* functions */
+
+/* Navigation - cleaner */
+.md-nav__link {
+  font-size: 0.75rem;
+}
+
+/* Tables - minimal */
+.md-typeset table:not([class]) {
+  border: 1px solid #30363d;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: #161b22;
+}
+
+/* Admonitions - subtle */
+.md-typeset .admonition {
+  border-left: 3px solid var(--md-accent-fg-color);
+  background-color: #161b22;
+}
+
+/* Search */
+.md-search__input {
+  background-color: #161b22;
+}
+
+/* Copy button */
+.md-clipboard {
+  color: #6e7681;
+}
+
+.md-clipboard:hover {
+  color: #00ff41;
+}
+
+/* Footer - minimal */
+.md-footer {
+  background-color: #010409;
+}
+
+/* Hero section for homepage */
+.hero {
+  text-align: center;
+  padding: 4rem 0;
+}
+
+.hero h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  color: #00ff41;
+}
+
+.hero .tagline {
+  font-size: 1.2rem;
+  color: #8b949e;
+  margin-bottom: 2rem;
+}
+
+.hero-code {
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 1.5rem;
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  text-align: left;
+}
+
+/* Feature grid */
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin: 3rem 0;
+}
+
+.feature {
+  padding: 1.5rem;
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+}
+
+.feature h3 {
+  color: #00ff41;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.feature p {
+  color: #8b949e;
+  font-size: 0.8rem;
+  margin: 0;
+}

@@ -1,0 +1,92 @@
+site_name: qex
+site_description: A DSL for quantitative trading signals
+site_url: https://marketneutral.github.io/alpha-parser/
+repo_url: https://github.com/marketneutral/alpha-parser
+repo_name: marketneutral/alpha-parser
+
+theme:
+  name: material
+  palette:
+    # Dark mode only - hacker aesthetic
+    scheme: slate
+    primary: black
+    accent: green
+  font:
+    text: JetBrains Mono
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            heading_level: 3
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Concepts: getting-started/concepts.md
+  - Guides:
+    - Data Format: guides/data-format.md
+    - Momentum Strategies: guides/momentum.md
+    - Mean Reversion: guides/mean-reversion.md
+    - Pairs Trading: guides/pairs-trading.md
+    - Event-Driven: guides/event-driven.md
+    - Backtesting: guides/backtesting.md
+  - Reference:
+    - All Operations: reference/operations.md
+    - Parser & Syntax: reference/parser.md
+    - Signal Class: reference/signal.md
+    - Evaluation: reference/evaluation.md
+  - Cookbook:
+    - Technical Indicators: cookbook/technical-indicators.md
+    - Advanced Patterns: cookbook/advanced-patterns.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/marketneutral/alpha-parser

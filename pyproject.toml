@@ -40,8 +40,13 @@ data = [
 risk = [
     "statsmodels>=0.14",
 ]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+]
 all = [
-    "qex[dev,data,risk]",
+    "qex[dev,data,risk,docs]",
 ]
 
 [tool.setuptools.packages.find]
