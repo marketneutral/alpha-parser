@@ -1178,8 +1178,9 @@ class TestAdvancedPatterns:
         signal = alpha("""
             let sig = rank(returns(60)) - 0.5,
                 sig_ret = delay(sig, 1) * returns(1),
-                cum_pnl = ts_sum(sig_ret, 20),
-                is_dd = cum_pnl < ts_min(cum_pnl, 60)
+                cum_pnl = ts_sum(sig_ret, 252),
+                peak = ts_max(cum_pnl, 252),
+                is_dd = cum_pnl < 0.9 * peak
             in where(is_dd, sig * 0.5, sig)
         """)
         result = signal.evaluate(sample_data)
@@ -1188,7 +1189,7 @@ class TestAdvancedPatterns:
         assert result.shape == sample_data['close'].shape
 
         # After warm-up, should have values
-        valid = result.iloc[70:]
+        valid = result.iloc[260:]
         assert not valid.isna().all().all()
 
         # Values should be bounded (half position in drawdown, full otherwise)
