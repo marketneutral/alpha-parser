@@ -83,9 +83,18 @@ class TsMin(Signal):
 
 
 class Delay(Signal):
-    """Lag/shift any signal."""
+    """Lag/shift any signal.
+
+    Only positive periods are allowed to prevent lookahead bias.
+    delay(x, 1) gives yesterday's value of x.
+    """
 
     def __init__(self, signal: Signal, period: int):
+        if period < 0:
+            raise ValueError(
+                f"delay() period must be >= 0 (got {period}). "
+                "Negative delays cause lookahead bias."
+            )
         self.signal = signal
         self.period = period
 
@@ -98,9 +107,18 @@ class Delay(Signal):
 
 
 class Delta(Signal):
-    """Difference from N periods ago."""
+    """Difference from N periods ago.
+
+    Only positive periods are allowed to prevent lookahead bias.
+    delta(x, 1) = x - delay(x, 1) = today's value minus yesterday's.
+    """
 
     def __init__(self, signal: Signal, period: int):
+        if period < 0:
+            raise ValueError(
+                f"delta() period must be >= 0 (got {period}). "
+                "Negative deltas cause lookahead bias."
+            )
         self.signal = signal
         self.period = period
 

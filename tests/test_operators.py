@@ -1214,6 +1214,34 @@ class TestAdvancedPatterns:
         assert (valid > 0).any().any() or (valid < 0).any().any()
 
 
+class TestLookaheadPrevention:
+    """Test that lookahead bias is prevented."""
+
+    def test_delay_negative_raises_error(self):
+        """Test that delay with negative period raises ValueError."""
+        with pytest.raises(ValueError, match="lookahead bias"):
+            alpha("delay(returns(1), -1)")
+
+    def test_delta_negative_raises_error(self):
+        """Test that delta with negative period raises ValueError."""
+        with pytest.raises(ValueError, match="lookahead bias"):
+            alpha("delta(close(), -1)")
+
+    def test_delay_zero_allowed(self, sample_data):
+        """Test that delay(x, 0) is allowed (returns x unchanged)."""
+        signal = alpha("delay(returns(1), 0)")
+        result = signal.evaluate(sample_data)
+        assert result.shape == sample_data['close'].shape
+
+    def test_delay_positive_allowed(self, sample_data):
+        """Test that delay with positive period works normally."""
+        signal = alpha("delay(returns(1), 1)")
+        result = signal.evaluate(sample_data)
+        # Should have NaN on first row (shifted)
+        assert result.iloc[0].isna().all()
+        assert result.iloc[5:].notna().all().all()
+
+
 class TestEwmaAndBetaOperations:
     """Test EWMA variance/covariance and beta operations."""
 
