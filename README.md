@@ -534,8 +534,8 @@ Use `group()` with `where()` to filter signals by sector membership:
 # Price-to-book ratio isn't meaningful for Financials - zero them out
 signal = qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
 
-# Only trade Technology stocks
-signal = qex("where(group('sector')=='Technology', returns(20), 0)")
+# Only trade Technology stocks (long-only)
+signal = qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
 
 # Exclude multiple sectors using nested where
 signal = qex("""

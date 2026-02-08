@@ -206,8 +206,8 @@ Use `group()` with `where()` to filter signals by sector membership:
 # Price-to-book isn't meaningful for Financials - zero them out
 qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
 
-# Only trade Technology stocks
-qex("where(group('sector')=='Technology', returns(20), 0)")
+# Only trade Technology stocks (long-only)
+qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
 ```
 
 This is useful when factors don't apply to certain sectors (e.g., value metrics for financials, inventory for services).

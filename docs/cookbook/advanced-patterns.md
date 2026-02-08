@@ -170,8 +170,8 @@ qex("""
 Only trade stocks in a specific sector:
 
 ```python
-# Only trade Technology stocks
-qex("where(group('sector')=='Technology', rank(returns(20)) - 0.5, 0)")
+# Only trade Technology stocks (long-only)
+qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
 ```
 
 ## Event Integration
