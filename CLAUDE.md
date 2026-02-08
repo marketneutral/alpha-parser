@@ -22,7 +22,7 @@ PYTHONPATH=src pytest tests/ -v
   - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`), comparison, validity (`is_valid`), and math ops (`log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min`)
   - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`)
   - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`)
-  - `groups.py` - Group-neutral operations (`group_rank`, `group_demean`, `group_std`, `group_count_valid`)
+  - `groups.py` - Group data access (`group`) and group-neutral operations (`group_rank`, `group_demean`, `group_std`, `group_count_valid`)
   - `primitives.py` - Basic signals (`returns`, `volatility`, `volume`, `adv`)
   - `data.py` - Data field access (`close`, `open`, `high`, `low`, `field`) and `LazyData`
   - `conditional.py` - Conditional logic (`where`)
@@ -62,7 +62,18 @@ PYTHONPATH=src pytest tests/ -v
 `rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`
 
 ### Group
-`group_rank`, `group_demean`, `group_std`, `group_sum`, `group_count_valid`
+`group`, `group_rank`, `group_demean`, `group_std`, `group_sum`, `group_count_valid`
+
+### Sector Filtering
+Use `group()` with `where()` to filter signals by sector membership:
+
+```python
+# Price-to-book isn't meaningful for Financials - zero them out
+qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
+
+# Only trade Technology stocks
+qex("where(group('sector')=='Technology', returns(20), 0)")
+```
 
 ### Calendar
 `day_of_week`, `day_of_month`, `month_of_year`

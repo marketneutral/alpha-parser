@@ -133,6 +133,47 @@ qex("""
 """)
 ```
 
+## Sector Filtering
+
+Use `group()` with `where()` to exclude sectors where a signal doesn't apply.
+
+### Price-to-Book for Non-Financials
+
+Price-to-book ratio isn't meaningful for Financials (banks, insurance) because their balance sheets are fundamentally different. Zero them out:
+
+```python
+qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
+```
+
+### Sector-Specific Factors
+
+Some factors only make sense for certain sectors:
+
+```python
+# Inventory turnover - not relevant for services/financials
+qex("""
+    let inv_turn = field('inventory_turnover'),
+        is_relevant = (group('sector') != 'Financials') &
+                      (group('sector') != 'Technology')
+    in where(is_relevant, rank(inv_turn) - 0.5, 0)
+""")
+
+# CapEx/Sales - not meaningful for asset-light businesses
+qex("""
+    where(group('sector')=='Technology', 0,
+        rank(field('capex_to_sales')) - 0.5)
+""")
+```
+
+### Long-Only Sector Bets
+
+Only trade stocks in a specific sector:
+
+```python
+# Only trade Technology stocks
+qex("where(group('sector')=='Technology', rank(returns(20)) - 0.5, 0)")
+```
+
 ## Event Integration
 
 ### Earnings + Momentum

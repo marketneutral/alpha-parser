@@ -186,6 +186,7 @@ Like cross-sectional, but within groups.
 
 | Operation | Description |
 |-----------|-------------|
+| `group('group')` | Access group data for filtering |
 | `group_rank(x, 'group')` | Rank within each group |
 | `group_demean(x, 'group')` | Demean within each group |
 | `group_std(x, 'group', period)` | Rolling std within group |
@@ -196,6 +197,20 @@ Like cross-sectional, but within groups.
 qex("group_demean(returns(20), 'sector')")  # Sector-neutral returns
 qex("group_rank(returns(20), 'industry')")  # Rank within industry
 ```
+
+### Sector Filtering
+
+Use `group()` with `where()` to filter signals by sector membership:
+
+```python
+# Price-to-book isn't meaningful for Financials - zero them out
+qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
+
+# Only trade Technology stocks
+qex("where(group('sector')=='Technology', returns(20), 0)")
+```
+
+This is useful when factors don't apply to certain sectors (e.g., value metrics for financials, inventory for services).
 
 ## Conditional Operations
 
