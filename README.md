@@ -519,11 +519,32 @@ qex/
 - `where(condition, if_true, if_false)` - Ternary operator
 
 ### Group Operations
+- `group('group_name')` - Access group data for filtering (use with `where()`)
 - `group_rank(signal, 'group_name')` - Rank within groups
 - `group_demean(signal, 'group_name')` - Demean within groups (subtract group mean)
 - `group_std(signal, 'group_name', window)` - Rolling std within groups (for normalizing pair spreads)
 - `group_sum(signal, 'group_name')` - Sum within groups, broadcast to all members
 - `group_count_valid(signal, 'group_name', window)` - Count non-NaN within group over window
+
+### Sector Filtering
+
+Use `group()` with `where()` to filter signals by sector membership:
+
+```python
+# Price-to-book ratio isn't meaningful for Financials - zero them out
+signal = qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
+
+# Only trade Technology stocks
+signal = qex("where(group('sector')=='Technology', returns(20), 0)")
+
+# Exclude multiple sectors using nested where
+signal = qex("""
+    where(group('sector')=='Financials', 0,
+        where(group('sector')=='Utilities', 0, returns(20)))
+""")
+```
+
+This is useful when certain signals or factors don't apply to specific sectors (e.g., value metrics for financials, inventory metrics for services).
 
 ### Validity Operations
 - `is_valid(signal)` - Returns 1 where not NaN, 0 otherwise

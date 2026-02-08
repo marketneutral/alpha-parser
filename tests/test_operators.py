@@ -1027,6 +1027,126 @@ class TestPairsTrading:
         assert not valid.isna().all().all()
 
 
+class TestGroupFunction:
+    """Test group() function for accessing group data in expressions."""
+
+    @pytest.fixture
+    def sector_data(self):
+        """Data with sector groupings for filtering tests."""
+        dates = pd.date_range('2020-01-01', periods=50, freq='D')
+        tickers = ['AAPL', 'MSFT', 'GOOGL', 'JPM', 'GS', 'BAC']
+
+        np.random.seed(42)
+
+        close = pd.DataFrame(
+            np.exp(np.random.randn(50, 6).cumsum(axis=0) * 0.02 + 5),
+            index=dates,
+            columns=tickers
+        )
+
+        volume = pd.DataFrame(
+            np.random.lognormal(15, 0.5, (50, 6)),
+            index=dates,
+            columns=tickers
+        )
+
+        # Sector groupings - Tech and Finance
+        sector = pd.DataFrame({
+            'AAPL': 'Tech', 'MSFT': 'Tech', 'GOOGL': 'Tech',
+            'JPM': 'Finance', 'GS': 'Finance', 'BAC': 'Finance',
+        }, index=dates)
+
+        return {'close': close, 'volume': volume, 'sector': sector}
+
+    def test_group_basic(self, sector_data):
+        """Test that group() returns group data as signal."""
+        signal = alpha("group('sector')")
+        result = signal.evaluate(sector_data)
+
+        # Should return the sector DataFrame
+        assert result.shape == sector_data['close'].shape
+        assert (result.loc[result.index[0], 'AAPL'] == 'Tech')
+        assert (result.loc[result.index[0], 'JPM'] == 'Finance')
+
+    def test_group_equality_comparison(self, sector_data):
+        """Test group() == 'value' comparison."""
+        signal = alpha("group('sector')=='Tech'")
+        result = signal.evaluate(sector_data)
+
+        # Should return 1.0 for Tech stocks, 0.0 for Finance
+        assert result.shape == sector_data['close'].shape
+        # Tech stocks should be 1.0
+        assert (result['AAPL'] == 1.0).all()
+        assert (result['MSFT'] == 1.0).all()
+        assert (result['GOOGL'] == 1.0).all()
+        # Finance stocks should be 0.0
+        assert (result['JPM'] == 0.0).all()
+        assert (result['GS'] == 0.0).all()
+        assert (result['BAC'] == 0.0).all()
+
+    def test_group_where_filter(self, sector_data):
+        """Test where(group('sector')=='value', ...) for sector filtering."""
+        # Zero out Finance sector, keep Tech
+        signal = alpha("where(group('sector')=='Finance', 0, returns(20))")
+        result = signal.evaluate(sector_data)
+
+        # Finance stocks should be 0
+        assert (result['JPM'].iloc[25:] == 0).all()
+        assert (result['GS'].iloc[25:] == 0).all()
+        assert (result['BAC'].iloc[25:] == 0).all()
+
+        # Tech stocks should have actual returns
+        assert result['AAPL'].iloc[25:].notna().all()
+        assert (result['AAPL'].iloc[25:] != 0).any()
+
+    def test_group_where_reverse_filter(self, sector_data):
+        """Test filtering to keep only specific sector."""
+        # Keep only Finance sector (zero out Tech)
+        signal = alpha("where(group('sector')=='Tech', 0, returns(20))")
+        result = signal.evaluate(sector_data)
+
+        # Tech stocks should be 0
+        assert (result['AAPL'].iloc[25:] == 0).all()
+        assert (result['MSFT'].iloc[25:] == 0).all()
+
+        # Finance stocks should have actual returns
+        assert result['JPM'].iloc[25:].notna().all()
+        assert (result['JPM'].iloc[25:] != 0).any()
+
+    def test_group_with_nested_groups(self, sample_data):
+        """Test group() with data['groups']['sector'] format."""
+        # sample_data uses nested format: data['groups']['sector']
+        signal = alpha("group('sector')")
+        result = signal.evaluate(sample_data)
+
+        assert result.shape == sample_data['close'].shape
+        # Check sample data's sector assignments
+        assert result.loc[result.index[0], 'AAPL'] == 'Tech'
+        assert result.loc[result.index[0], 'JPM'] == 'Finance'
+
+    def test_group_where_with_nested_groups(self, sample_data):
+        """Test where() filtering with nested groups format."""
+        signal = alpha("where(group('sector')=='Finance', 0, returns(20))")
+        result = signal.evaluate(sample_data)
+
+        # Finance stocks (JPM, BAC, GS) should be 0
+        assert (result['JPM'].iloc[25:] == 0).all()
+        assert (result['BAC'].iloc[25:] == 0).all()
+        assert (result['GS'].iloc[25:] == 0).all()
+
+        # Tech stocks should have values
+        assert (result['AAPL'].iloc[25:] != 0).any()
+
+    def test_group_inequality(self, sector_data):
+        """Test group() != 'value' comparison."""
+        signal = alpha("group('sector')!='Tech'")
+        result = signal.evaluate(sector_data)
+
+        # Should return 0.0 for Tech stocks, 1.0 for Finance
+        assert (result['AAPL'] == 0.0).all()
+        assert (result['JPM'] == 1.0).all()
+
+
 class TestEwmaAndBetaOperations:
     """Test EWMA variance/covariance and beta operations."""
 

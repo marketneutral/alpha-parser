@@ -75,8 +75,8 @@ from .conditional import Where, where
 
 # Group operations
 from .groups import (
-    GroupRank, GroupDemean, GroupCountValid, GroupStd, GroupSum,
-    group_rank, group_demean, group_count_valid, group_std, group_sum,
+    Group, GroupRank, GroupDemean, GroupCountValid, GroupStd, GroupSum,
+    group, group_rank, group_demean, group_count_valid, group_std, group_sum,
 )
 
 # Parser
@@ -244,11 +244,13 @@ __all__ = [
     'where',
 
     # Group
+    'Group',
     'GroupRank',
     'GroupDemean',
     'GroupCountValid',
     'GroupStd',
     'GroupSum',
+    'group',
     'group_rank',
     'group_demean',
     'group_count_valid',
