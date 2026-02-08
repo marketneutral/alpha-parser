@@ -401,10 +401,10 @@ class TestPrimitives:
         result = signal.evaluate(prim_data)
 
         assert result.shape == prim_data['close'].shape
-        # First 4 rows should be NaN (min_periods=5)
-        assert result.iloc[:4].isna().all().all()
+        # First 19 rows should be NaN (min_periods=20)
+        assert result.iloc[:19].isna().all().all()
         # After min_periods, should have values
-        assert result.iloc[5:].notna().all().all()
+        assert result.iloc[20:].notna().all().all()
 
     def test_returns(self, prim_data):
         """Test returns calculation."""
@@ -419,9 +419,10 @@ class TestPrimitives:
         signal = alpha("volatility(10)")
         result = signal.evaluate(prim_data)
 
-        # Volatility should be annualized std of returns (with min_periods=5)
+        # Volatility should be annualized std of returns
+        # min_periods = min(20, 10) = 10 (capped at window size)
         rets = prim_data['close'].pct_change()
-        expected = rets.rolling(10, min_periods=5).std() * np.sqrt(252)
+        expected = rets.rolling(10, min_periods=10).std() * np.sqrt(252)
         pd.testing.assert_frame_equal(result, expected)
 
     def test_volume(self, prim_data):
@@ -734,10 +735,10 @@ class TestTechnicalIndicators:
         result = signal.evaluate(indicator_data)
 
         assert result.shape == indicator_data['close'].shape
-        # First 4 rows should be NaN (min_periods=5)
-        assert result.iloc[:4].isna().all().all()
+        # First 19 rows should be NaN (min_periods=20)
+        assert result.iloc[:19].isna().all().all()
         # After min_periods, should have values
-        assert result.iloc[5:].notna().all().all()
+        assert result.iloc[20:].notna().all().all()
 
     def test_bollinger_mean_reversion_signal(self, indicator_data):
         """Test full Bollinger mean-reversion signal."""
@@ -761,16 +762,16 @@ class TestTechnicalIndicators:
         """Test individual Bollinger Band components."""
         close = indicator_data['close']
 
-        # Middle band = 20-day SMA (with min_periods=5)
+        # Middle band = 20-day SMA (min_periods=min(20,20)=20)
         ma_signal = alpha("ts_mean(close(), 20)")
         ma_result = ma_signal.evaluate(indicator_data)
-        expected_ma = close.rolling(20, min_periods=5).mean()
+        expected_ma = close.rolling(20, min_periods=20).mean()
         pd.testing.assert_frame_equal(ma_result, expected_ma)
 
-        # Standard deviation (with min_periods=5)
+        # Standard deviation (min_periods=min(20,20)=20)
         std_signal = alpha("ts_std(close(), 20)")
         std_result = std_signal.evaluate(indicator_data)
-        expected_std = close.rolling(20, min_periods=5).std()
+        expected_std = close.rolling(20, min_periods=20).std()
         pd.testing.assert_frame_equal(std_result, expected_std)
 
     def test_rsi_basic(self, indicator_data):
@@ -1282,8 +1283,8 @@ class TestEwmaAndBetaOperations:
         # Variance should be non-negative
         valid = result.dropna()
         assert (valid >= 0).all().all()
-        # First 4 rows should be NaN (min_periods=5, but returns(1) adds 1 more NaN)
-        assert result.iloc[:5].isna().all().all()
+        # First 20 rows should be NaN (min_periods=20, plus returns(1) adds 1 more)
+        assert result.iloc[:20].isna().all().all()
 
     def test_ewma_var(self, beta_data):
         """Test EWMA variance."""

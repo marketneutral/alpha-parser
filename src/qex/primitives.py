@@ -4,8 +4,8 @@ import numpy as np
 
 from .signal import Signal
 
-# Default minimum periods for rolling operations
-DEFAULT_MIN_PERIODS = 5
+# Default minimum periods for rolling operations (~1 month)
+DEFAULT_MIN_PERIODS = 20
 
 
 def _get_min_periods(period: int, min_periods: int = None) -> int:
