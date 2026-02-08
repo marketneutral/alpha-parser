@@ -28,6 +28,40 @@ def _get_group_data(data, groups: str) -> pd.DataFrame:
     )
 
 
+class Group(Signal):
+    """Access group/categorical data as a Signal.
+
+    Enables filtering by group membership in expressions like:
+        where(group('sector')=='Financials', 0, returns(60))
+
+    Supports both data formats:
+        - data['sector'] (top-level)
+        - data['groups']['sector'] (nested)
+    """
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def _compute(self, data):
+        return _get_group_data(data, self.name)
+
+    def _cache_key(self):
+        return ('Group', self.name)
+
+
+def group(name: str) -> Group:
+    """Access group/categorical data for use in expressions.
+
+    Example:
+        # Filter out Financials sector
+        qex("where(group('sector')=='Financials', 0, returns(60))")
+
+        # Only trade Technology stocks
+        qex("where(group('sector')=='Technology', returns(20), 0)")
+    """
+    return Group(name)
+
+
 class GroupRank(Signal):
     """Rank within groups (e.g., industry-neutral rank)."""
 
