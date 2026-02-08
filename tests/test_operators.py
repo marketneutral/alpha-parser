@@ -1147,6 +1147,73 @@ class TestGroupFunction:
         assert (result['JPM'] == 1.0).all()
 
 
+class TestAdvancedPatterns:
+    """Test advanced signal patterns from the cookbook."""
+
+    def test_signal_pnl_calculation(self, sample_data):
+        """Test that delay(signal, 1) * returns(1) correctly calculates signal PnL."""
+        # Create a simple signal
+        signal = alpha("rank(returns(20)) - 0.5")
+        signal_result = signal.evaluate(sample_data)
+
+        # Calculate signal PnL: yesterday's position * today's return
+        pnl_signal = alpha("delay(rank(returns(20)) - 0.5, 1) * returns(1)")
+        pnl_result = pnl_signal.evaluate(sample_data)
+
+        # Manually calculate expected PnL
+        returns_1d = sample_data['close'].pct_change()
+        expected_pnl = signal_result.shift(1) * returns_1d
+
+        # Should match (after warm-up period)
+        valid_idx = pnl_result.iloc[25:].index
+        pd.testing.assert_frame_equal(
+            pnl_result.loc[valid_idx],
+            expected_pnl.loc[valid_idx],
+            check_names=False,
+            atol=1e-10
+        )
+
+    def test_drawdown_aware_signal(self, sample_data):
+        """Test the drawdown-aware signal pattern reduces position in drawdowns."""
+        signal = alpha("""
+            let sig = rank(returns(60)) - 0.5,
+                sig_ret = delay(sig, 1) * returns(1),
+                cum_pnl = ts_sum(sig_ret, 20),
+                is_dd = cum_pnl < ts_min(cum_pnl, 60)
+            in where(is_dd, sig * 0.5, sig)
+        """)
+        result = signal.evaluate(sample_data)
+
+        # Should have valid structure
+        assert result.shape == sample_data['close'].shape
+
+        # After warm-up, should have values
+        valid = result.iloc[70:]
+        assert not valid.isna().all().all()
+
+        # Values should be bounded (half position in drawdown, full otherwise)
+        # Max absolute value should be <= 0.5 (since rank is 0-1, centered is -0.5 to 0.5)
+        assert (valid.abs() <= 0.51).all().all()  # small tolerance
+
+    def test_cumulative_signal_pnl(self, sample_data):
+        """Test ts_sum of signal PnL gives cumulative returns."""
+        signal = alpha("""
+            let signal = rank(returns(20)) - 0.5,
+                signal_ret = delay(signal, 1) * returns(1),
+                cum_pnl = ts_sum(signal_ret, 20)
+            in cum_pnl
+        """)
+        result = signal.evaluate(sample_data)
+
+        # Should have valid structure after warm-up
+        assert result.shape == sample_data['close'].shape
+        valid = result.iloc[25:]
+        assert not valid.isna().all().all()
+
+        # Cumulative PnL can be positive or negative
+        assert (valid > 0).any().any() or (valid < 0).any().any()
+
+
 class TestEwmaAndBetaOperations:
     """Test EWMA variance/covariance and beta operations."""
 

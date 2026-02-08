@@ -210,15 +210,15 @@ Reduce position size when the signal itself is in drawdown:
 
 ```python
 qex("""
-    let signal = rank(returns(60)) - 0.5,
-        signal_ret = delay(signal, 1) * returns(1),
-        cum_pnl = ts_sum(signal_ret, 20),
-        in_drawdown = cum_pnl < ts_min(cum_pnl, 60)
-    in where(in_drawdown, signal * 0.5, signal)
+    let sig = rank(returns(60)) - 0.5,
+        sig_ret = delay(sig, 1) * returns(1),
+        cum_pnl = ts_sum(sig_ret, 20),
+        is_dd = cum_pnl < ts_min(cum_pnl, 60)
+    in where(is_dd, sig * 0.5, sig)
 """)
 ```
 
-The key is `delay(signal, 1) * returns(1)` - yesterday's position times today's return gives the signal's daily PnL.
+The key is `delay(sig, 1) * returns(1)` - yesterday's position times today's return gives the signal's daily PnL.
 
 ### Maximum Position Cap
 
