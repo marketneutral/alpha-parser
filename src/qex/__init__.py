@@ -82,6 +82,9 @@ from .groups import (
 # Parser
 from .parser import QexParser, qex, AlphaParser, alpha, compute_weights
 
+# Distributed (optional - graphviz for visualization, dask for distributed)
+from .distributed import SignalGraph, DistributedSignalEngine
+
 # Risk model (optional - requires statsmodels)
 try:
     from .risk import FactorRiskModel, FactorDefinition, RiskModelResults, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
@@ -263,6 +266,10 @@ __all__ = [
     'AlphaParser',  # backwards compatibility
     'alpha',  # backwards compatibility
     'compute_weights',
+
+    # Distributed
+    'SignalGraph',
+    'DistributedSignalEngine',
 
     # Risk model (optional)
     *(['FactorRiskModel', 'FactorDefinition', 'RiskModelResults', 'DEFAULT_STYLE_FACTORS', 'PRICE_ONLY_FACTORS'] if _HAS_RISK else []),

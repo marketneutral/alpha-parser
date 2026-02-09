@@ -776,6 +776,55 @@ The evaluation module provides these metrics:
 - **annualized_volatility** - Std × sqrt(252)
 - **return_on_gmv** - Total PnL / average gross exposure
 
+## Distributed Evaluation
+
+For evaluating thousands of signals efficiently, use `SignalGraph` to build a unified DAG that deduplicates shared sub-expressions:
+
+```python
+from qex import qex, SignalGraph
+
+# Build a graph from multiple signals
+graph = SignalGraph()
+graph.add_signal(qex("rank(returns(60))"), name="momentum")
+graph.add_signal(qex("rank(returns(60) / volatility(60))"), name="sharpe")
+graph.add_signal(qex("rank(-returns(5))"), name="reversal")
+
+# See what's shared - returns(60) computed only once!
+print(graph.stats())
+# {'total_nodes': 7, 'output_signals': 3, 'leaf_nodes': 2, 'shared_nodes': 1}
+
+# Visualize the computation graph
+graph.visualize("signals.png")  # Requires: pip install graphviz
+
+# Compute all signals
+results = graph.compute(data)
+```
+
+### Dask Distributed
+
+For cluster-scale evaluation:
+
+```python
+from dask.distributed import Client
+from qex import DistributedSignalEngine
+
+# Connect to Dask cluster
+client = Client("scheduler:8786")
+
+# Create engine and load data (scattered to all workers once)
+engine = DistributedSignalEngine(client)
+engine.load_data(data)
+
+# Evaluate many signals with shared computation
+expressions = [
+    "rank(returns(60))",
+    "rank(returns(60) / volatility(60))",
+    "rank(-returns(5))",
+    # ... thousands more
+]
+results = engine.evaluate(expressions)
+```
+
 ## Limitations
 
 ### Point-in-Time (PIT) Data
