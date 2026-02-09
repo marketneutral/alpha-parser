@@ -5,8 +5,20 @@ import pandas as pd
 import numpy as np
 import tempfile
 import os
+import shutil
 
 from qex import qex, SignalGraph, DistributedSignalEngine, compute_context
+
+
+def has_graphviz_executable():
+    """Check if graphviz dot executable is available."""
+    return shutil.which('dot') is not None
+
+
+requires_graphviz_exe = pytest.mark.skipif(
+    not has_graphviz_executable(),
+    reason="graphviz executable (dot) not installed"
+)
 
 
 class TestSignalGraph:
@@ -133,6 +145,7 @@ class TestSignalGraph:
 class TestSignalGraphVisualization:
     """Tests for graphviz visualization."""
 
+    @requires_graphviz_exe
     def test_visualize_creates_file(self, sample_data):
         """Visualization creates output file."""
         pytest.importorskip("graphviz")
@@ -147,6 +160,7 @@ class TestSignalGraphVisualization:
             assert result is not None
             assert os.path.exists(result)
 
+    @requires_graphviz_exe
     def test_visualize_svg(self, sample_data):
         """Can output SVG format."""
         pytest.importorskip("graphviz")
@@ -161,6 +175,7 @@ class TestSignalGraphVisualization:
             assert result is not None
             assert result.endswith('.svg')
 
+    @requires_graphviz_exe
     def test_visualize_complex_graph(self, sample_data):
         """Complex graph can be visualized."""
         pytest.importorskip("graphviz")
@@ -190,6 +205,7 @@ class TestSignalGraphVisualization:
         with pytest.raises(ImportError, match="graphviz"):
             graph.visualize("test.png")
 
+    @requires_graphviz_exe
     def test_visualize_options(self, sample_data):
         """Visualization options work."""
         pytest.importorskip("graphviz")
@@ -255,6 +271,7 @@ class TestDistributedSignalEngine:
         with pytest.raises(ValueError, match="No data loaded"):
             engine.evaluate(["returns(20)"])
 
+    @requires_graphviz_exe
     def test_visualize_method(self, sample_data):
         """Engine can visualize expressions."""
         pytest.importorskip("graphviz")
