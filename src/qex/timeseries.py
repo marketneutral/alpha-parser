@@ -6,86 +6,110 @@ from scipy import stats
 
 from .signal import Signal
 
+# Default minimum periods for rolling operations (~1 month)
+DEFAULT_MIN_PERIODS = 20
+
+
+def _get_min_periods(period: int, min_periods: int = None) -> int:
+    """Get effective min_periods, capped at window size."""
+    if min_periods is not None:
+        return min(min_periods, period)
+    return min(DEFAULT_MIN_PERIODS, period)
+
 
 class TsMean(Signal):
     """Rolling mean of any signal."""
 
-    def __init__(self, signal: Signal, period: int):
+    def __init__(self, signal: Signal, period: int, min_periods: int = None):
         self.signal = signal
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-        return values.rolling(self.period).mean()
+        return values.rolling(self.period, min_periods=self.min_periods).mean()
 
     def _cache_key(self):
-        return ('TsMean', self.signal._cache_key(), self.period)
+        return ('TsMean', self.signal._cache_key(), self.period, self.min_periods)
 
 
 class TsStd(Signal):
     """Rolling standard deviation of any signal."""
 
-    def __init__(self, signal: Signal, period: int):
+    def __init__(self, signal: Signal, period: int, min_periods: int = None):
         self.signal = signal
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-        return values.rolling(self.period).std()
+        return values.rolling(self.period, min_periods=self.min_periods).std()
 
     def _cache_key(self):
-        return ('TsStd', self.signal._cache_key(), self.period)
+        return ('TsStd', self.signal._cache_key(), self.period, self.min_periods)
 
 
 class TsSum(Signal):
     """Rolling sum of any signal."""
 
-    def __init__(self, signal: Signal, period: int):
+    def __init__(self, signal: Signal, period: int, min_periods: int = None):
         self.signal = signal
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-        return values.rolling(self.period).sum()
+        return values.rolling(self.period, min_periods=self.min_periods).sum()
 
     def _cache_key(self):
-        return ('TsSum', self.signal._cache_key(), self.period)
+        return ('TsSum', self.signal._cache_key(), self.period, self.min_periods)
 
 
 class TsMax(Signal):
     """Rolling max of any signal."""
 
-    def __init__(self, signal: Signal, period: int):
+    def __init__(self, signal: Signal, period: int, min_periods: int = None):
         self.signal = signal
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-        return values.rolling(self.period).max()
+        return values.rolling(self.period, min_periods=self.min_periods).max()
 
     def _cache_key(self):
-        return ('TsMax', self.signal._cache_key(), self.period)
+        return ('TsMax', self.signal._cache_key(), self.period, self.min_periods)
 
 
 class TsMin(Signal):
     """Rolling min of any signal."""
 
-    def __init__(self, signal: Signal, period: int):
+    def __init__(self, signal: Signal, period: int, min_periods: int = None):
         self.signal = signal
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-        return values.rolling(self.period).min()
+        return values.rolling(self.period, min_periods=self.min_periods).min()
 
     def _cache_key(self):
-        return ('TsMin', self.signal._cache_key(), self.period)
+        return ('TsMin', self.signal._cache_key(), self.period, self.min_periods)
 
 
 class Delay(Signal):
-    """Lag/shift any signal."""
+    """Lag/shift any signal.
+
+    Only positive periods are allowed to prevent lookahead bias.
+    delay(x, 1) gives yesterday's value of x.
+    """
 
     def __init__(self, signal: Signal, period: int):
+        if period < 0:
+            raise ValueError(
+                f"delay() period must be >= 0 (got {period}). "
+                "Negative delays cause lookahead bias."
+            )
         self.signal = signal
         self.period = period
 
@@ -98,9 +122,18 @@ class Delay(Signal):
 
 
 class Delta(Signal):
-    """Difference from N periods ago."""
+    """Difference from N periods ago.
+
+    Only positive periods are allowed to prevent lookahead bias.
+    delta(x, 1) = x - delay(x, 1) = today's value minus yesterday's.
+    """
 
     def __init__(self, signal: Signal, period: int):
+        if period < 0:
+            raise ValueError(
+                f"delta() period must be >= 0 (got {period}). "
+                "Negative deltas cause lookahead bias."
+            )
         self.signal = signal
         self.period = period
 
@@ -164,50 +197,53 @@ class FillForward(Signal):
 class TsCorr(Signal):
     """Rolling correlation between two signals."""
 
-    def __init__(self, signal1: Signal, signal2: Signal, period: int):
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
         self.signal1 = signal1
         self.signal2 = signal2
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values1 = self.signal1.evaluate(data)
         values2 = self.signal2.evaluate(data)
-        return values1.rolling(self.period).corr(values2)
+        return values1.rolling(self.period, min_periods=self.min_periods).corr(values2)
 
     def _cache_key(self):
-        return ('TsCorr', self.signal1._cache_key(), self.signal2._cache_key(), self.period)
+        return ('TsCorr', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
 
 
 class TsCov(Signal):
     """Rolling covariance between two signals."""
 
-    def __init__(self, signal1: Signal, signal2: Signal, period: int):
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
         self.signal1 = signal1
         self.signal2 = signal2
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values1 = self.signal1.evaluate(data)
         values2 = self.signal2.evaluate(data)
-        return values1.rolling(self.period).cov(values2)
+        return values1.rolling(self.period, min_periods=self.min_periods).cov(values2)
 
     def _cache_key(self):
-        return ('TsCov', self.signal1._cache_key(), self.signal2._cache_key(), self.period)
+        return ('TsCov', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
 
 
 class TsVar(Signal):
     """Rolling variance of a signal."""
 
-    def __init__(self, signal: Signal, period: int):
+    def __init__(self, signal: Signal, period: int, min_periods: int = None):
         self.signal = signal
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-        return values.rolling(self.period).var()
+        return values.rolling(self.period, min_periods=self.min_periods).var()
 
     def _cache_key(self):
-        return ('TsVar', self.signal._cache_key(), self.period)
+        return ('TsVar', self.signal._cache_key(), self.period, self.min_periods)
 
 
 class Ewma(Signal):
@@ -264,20 +300,21 @@ class TsBeta(Signal):
     Useful for hedge ratios, market beta, factor exposures.
     """
 
-    def __init__(self, signal1: Signal, signal2: Signal, period: int):
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
         self.signal1 = signal1
         self.signal2 = signal2
         self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
         y = self.signal1.evaluate(data)
         x = self.signal2.evaluate(data)
-        cov = y.rolling(self.period).cov(x)
-        var = x.rolling(self.period).var()
+        cov = y.rolling(self.period, min_periods=self.min_periods).cov(x)
+        var = x.rolling(self.period, min_periods=self.min_periods).var()
         return cov / var
 
     def _cache_key(self):
-        return ('TsBeta', self.signal1._cache_key(), self.signal2._cache_key(), self.period)
+        return ('TsBeta', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
 
 
 class TsBetaEwma(Signal):

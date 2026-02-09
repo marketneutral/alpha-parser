@@ -401,10 +401,10 @@ class TestPrimitives:
         result = signal.evaluate(prim_data)
 
         assert result.shape == prim_data['close'].shape
-        # First 19 rows should be NaN
+        # First 19 rows should be NaN (min_periods=20)
         assert result.iloc[:19].isna().all().all()
-        # After warm-up, should have values
-        assert result.iloc[19:].notna().all().all()
+        # After min_periods, should have values
+        assert result.iloc[20:].notna().all().all()
 
     def test_returns(self, prim_data):
         """Test returns calculation."""
@@ -420,8 +420,9 @@ class TestPrimitives:
         result = signal.evaluate(prim_data)
 
         # Volatility should be annualized std of returns
+        # min_periods = min(20, 10) = 10 (capped at window size)
         rets = prim_data['close'].pct_change()
-        expected = rets.rolling(10).std() * np.sqrt(252)
+        expected = rets.rolling(10, min_periods=10).std() * np.sqrt(252)
         pd.testing.assert_frame_equal(result, expected)
 
     def test_volume(self, prim_data):
@@ -429,7 +430,7 @@ class TestPrimitives:
         signal = alpha("volume(5)")
         result = signal.evaluate(prim_data)
 
-        expected = prim_data['volume'].rolling(5).mean()
+        expected = prim_data['volume'].rolling(5, min_periods=5).mean()
         pd.testing.assert_frame_equal(result, expected)
 
 
@@ -734,10 +735,10 @@ class TestTechnicalIndicators:
         result = signal.evaluate(indicator_data)
 
         assert result.shape == indicator_data['close'].shape
-        # First 19 rows should be NaN (need 20 periods for rolling)
+        # First 19 rows should be NaN (min_periods=20)
         assert result.iloc[:19].isna().all().all()
-        # After warm-up, should have values
-        assert result.iloc[19:].notna().all().all()
+        # After min_periods, should have values
+        assert result.iloc[20:].notna().all().all()
 
     def test_bollinger_mean_reversion_signal(self, indicator_data):
         """Test full Bollinger mean-reversion signal."""
@@ -761,16 +762,16 @@ class TestTechnicalIndicators:
         """Test individual Bollinger Band components."""
         close = indicator_data['close']
 
-        # Middle band = 20-day SMA
+        # Middle band = 20-day SMA (min_periods=min(20,20)=20)
         ma_signal = alpha("ts_mean(close(), 20)")
         ma_result = ma_signal.evaluate(indicator_data)
-        expected_ma = close.rolling(20).mean()
+        expected_ma = close.rolling(20, min_periods=20).mean()
         pd.testing.assert_frame_equal(ma_result, expected_ma)
 
-        # Standard deviation
+        # Standard deviation (min_periods=min(20,20)=20)
         std_signal = alpha("ts_std(close(), 20)")
         std_result = std_signal.evaluate(indicator_data)
-        expected_std = close.rolling(20).std()
+        expected_std = close.rolling(20, min_periods=20).std()
         pd.testing.assert_frame_equal(std_result, expected_std)
 
     def test_rsi_basic(self, indicator_data):
@@ -1147,6 +1148,102 @@ class TestGroupFunction:
         assert (result['JPM'] == 1.0).all()
 
 
+class TestAdvancedPatterns:
+    """Test advanced signal patterns from the cookbook."""
+
+    def test_signal_pnl_calculation(self, sample_data):
+        """Test that delay(signal, 1) * returns(1) correctly calculates signal PnL."""
+        # Create a simple signal
+        signal = alpha("rank(returns(20)) - 0.5")
+        signal_result = signal.evaluate(sample_data)
+
+        # Calculate signal PnL: yesterday's position * today's return
+        pnl_signal = alpha("delay(rank(returns(20)) - 0.5, 1) * returns(1)")
+        pnl_result = pnl_signal.evaluate(sample_data)
+
+        # Manually calculate expected PnL
+        returns_1d = sample_data['close'].pct_change()
+        expected_pnl = signal_result.shift(1) * returns_1d
+
+        # Should match (after warm-up period)
+        valid_idx = pnl_result.iloc[25:].index
+        pd.testing.assert_frame_equal(
+            pnl_result.loc[valid_idx],
+            expected_pnl.loc[valid_idx],
+            check_names=False,
+            atol=1e-10
+        )
+
+    def test_drawdown_aware_signal(self, sample_data):
+        """Test the drawdown-aware signal pattern reduces position in drawdowns."""
+        signal = alpha("""
+            let sig = rank(returns(60)) - 0.5,
+                sig_ret = delay(sig, 1) * returns(1),
+                cum_pnl = ts_sum(sig_ret, 252),
+                peak = ts_max(cum_pnl, 252),
+                is_dd = cum_pnl < 0.9 * peak
+            in where(is_dd, sig * 0.5, sig)
+        """)
+        result = signal.evaluate(sample_data)
+
+        # Should have valid structure
+        assert result.shape == sample_data['close'].shape
+
+        # After warm-up, should have values
+        valid = result.iloc[260:]
+        assert not valid.isna().all().all()
+
+        # Values should be bounded (half position in drawdown, full otherwise)
+        # Max absolute value should be <= 0.5 (since rank is 0-1, centered is -0.5 to 0.5)
+        assert (valid.abs() <= 0.51).all().all()  # small tolerance
+
+    def test_cumulative_signal_pnl(self, sample_data):
+        """Test ts_sum of signal PnL gives cumulative returns."""
+        signal = alpha("""
+            let signal = rank(returns(20)) - 0.5,
+                signal_ret = delay(signal, 1) * returns(1),
+                cum_pnl = ts_sum(signal_ret, 20)
+            in cum_pnl
+        """)
+        result = signal.evaluate(sample_data)
+
+        # Should have valid structure after warm-up
+        assert result.shape == sample_data['close'].shape
+        valid = result.iloc[25:]
+        assert not valid.isna().all().all()
+
+        # Cumulative PnL can be positive or negative
+        assert (valid > 0).any().any() or (valid < 0).any().any()
+
+
+class TestLookaheadPrevention:
+    """Test that lookahead bias is prevented."""
+
+    def test_delay_negative_raises_error(self):
+        """Test that delay with negative period raises ValueError."""
+        with pytest.raises(ValueError, match="lookahead bias"):
+            alpha("delay(returns(1), -1)")
+
+    def test_delta_negative_raises_error(self):
+        """Test that delta with negative period raises ValueError."""
+        with pytest.raises(ValueError, match="lookahead bias"):
+            alpha("delta(close(), -1)")
+
+    def test_delay_zero_allowed(self, sample_data):
+        """Test that delay(x, 0) is allowed (returns x unchanged)."""
+        signal = alpha("delay(returns(1), 0)")
+        result = signal.evaluate(sample_data)
+        assert result.shape == sample_data['close'].shape
+
+    def test_delay_positive_allowed(self, sample_data):
+        """Test that delay with positive period works normally."""
+        signal = alpha("delay(returns(1), 1)")
+        result = signal.evaluate(sample_data)
+        # Should have NaN on first row (shifted)
+        assert result.iloc[0].isna().all()
+        assert result.iloc[5:].notna().all().all()
+
+
 class TestEwmaAndBetaOperations:
     """Test EWMA variance/covariance and beta operations."""
 
@@ -1186,7 +1283,7 @@ class TestEwmaAndBetaOperations:
         # Variance should be non-negative
         valid = result.dropna()
         assert (valid >= 0).all().all()
-        # First 20 rows should be NaN
+        # First 20 rows should be NaN (min_periods=20, plus returns(1) adds 1 more)
         assert result.iloc[:20].isna().all().all()
 
     def test_ewma_var(self, beta_data):

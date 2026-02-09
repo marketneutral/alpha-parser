@@ -170,8 +170,8 @@ qex("""
 Only trade stocks in a specific sector:
 
 ```python
-# Only trade Technology stocks
-qex("where(group('sector')=='Technology', rank(returns(20)) - 0.5, 0)")
+# Only trade Technology stocks (long-only)
+qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
 ```
 
 ## Event Integration
@@ -206,14 +206,20 @@ qex("""
 
 ### Drawdown-Aware
 
+Reduce position size when the signal is in a 10% drawdown from its peak:
+
 ```python
 qex("""
-    let signal = rank(returns(60)) - 0.5,
-        cum_ret = ts_sum(returns(1), 20),
-        in_drawdown = cum_ret < ts_min(cum_ret, 60)
-    in where(in_drawdown, signal * 0.5, signal)
+    let sig = rank(returns(60)) - 0.5,
+        sig_ret = delay(sig, 1) * returns(1),
+        cum_pnl = ts_sum(sig_ret, 252),
+        peak = ts_max(cum_pnl, 252),
+        is_dd = cum_pnl < 0.9 * peak
+    in where(is_dd, sig * 0.5, sig)
 """)
 ```
+
+The key is `delay(sig, 1) * returns(1)` - yesterday's position times today's return gives the signal's daily PnL. When cumulative PnL drops more than 10% from its rolling peak, we halve position size.
 
 ### Maximum Position Cap
 

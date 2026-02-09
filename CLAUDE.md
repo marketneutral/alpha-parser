@@ -27,6 +27,7 @@ PYTHONPATH=src pytest tests/ -v
   - `data.py` - Data field access (`close`, `open`, `high`, `low`, `field`) and `LazyData`
   - `conditional.py` - Conditional logic (`where`)
   - `context.py` - `compute_context()` provides shared caching across signals
+  - `distributed.py` - `SignalGraph` for DAG construction, `DistributedSignalEngine` for Dask
   - `risk.py` - Multi-factor risk model (`FactorRiskModel`, `FactorDefinition`)
 - `src/evaluation/` - Backtesting and evaluation module
   - `backtest.py` - `Backtest` class with `BacktestResult`
@@ -71,8 +72,8 @@ Use `group()` with `where()` to filter signals by sector membership:
 # Price-to-book isn't meaningful for Financials - zero them out
 qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
 
-# Only trade Technology stocks
-qex("where(group('sector')=='Technology', returns(20), 0)")
+# Only trade Technology stocks (long-only)
+qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
 ```
 
 ### Calendar
@@ -136,6 +137,32 @@ Key metrics available:
 - `annualized_return`, `annualized_volatility`
 - `return_on_gmv` (return on gross market value)
 
+## Distributed Evaluation
+
+For evaluating thousands of signals with shared sub-expressions:
+
+```python
+from qex import qex, SignalGraph, DistributedSignalEngine
+
+# Build unified DAG - shared sub-expressions computed once
+graph = SignalGraph()
+graph.add_signal(qex("rank(returns(60))"), name="momentum")
+graph.add_signal(qex("rank(returns(60) / volatility(60))"), name="sharpe")
+
+# Visualize the graph (requires graphviz)
+graph.visualize("signals.png")
+
+# Compute all signals
+results = graph.compute(data)
+
+# For Dask distributed clusters
+from dask.distributed import Client
+client = Client("scheduler:8786")
+engine = DistributedSignalEngine(client)
+engine.load_data(data)  # Scatter once to all workers
+results = engine.evaluate(["rank(returns(60))", "rank(-returns(5))"])
+```
+
 ## Testing
 
 Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture provides synthetic price/volume data with 8 tickers over 4 years.
@@ -143,8 +170,9 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_examples.py` - Core functionality tests
 - `test_events.py` - Sparse/event data tests (PEAD-style alphas)
 - `test_lazy.py` - LazyData on-demand loading tests
-- `test_operators.py` - Comprehensive tests for all operators (96 tests)
-- `test_evaluation.py` - Backtest and quantile analysis tests (30 tests)
+- `test_operators.py` - Comprehensive tests for all operators
+- `test_evaluation.py` - Backtest and quantile analysis tests
+- `test_distributed.py` - Distributed evaluation and graph visualization tests
 - `test_integration.py` - Integration tests with real FMP data (requires data fetch)
 
 ## Data Fetching
