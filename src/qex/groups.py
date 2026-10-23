@@ -28,6 +28,31 @@ def _get_group_data(data, groups: str) -> pd.DataFrame:
     )
 
 
+def _group_codes(values: pd.DataFrame, group_df: pd.DataFrame):
+    """Integer group codes aligned to values' dates and columns, -1 where the group is NaN.
+
+    A date missing from group_df takes group_df's last row, and a column missing from it has
+    no group (NaN), as in the per-date loops these replace.
+    """
+    groups = group_df.reindex(columns=values.columns)
+    rows = groups.reindex(values.index)
+    missing = ~values.index.isin(groups.index)
+    if missing.any():
+        rows.loc[missing] = groups.iloc[-1].values
+    codes, uniques = pd.factorize(rows.to_numpy(dtype=object).ravel())
+    return codes.reshape(rows.shape), len(uniques)
+
+
+def _group_totals(v: np.ndarray, codes: np.ndarray, n_groups: int):
+    """Per (date, group): the key of every cell, and the sum and count of its non-NaN values."""
+    key = np.arange(v.shape[0])[:, None] * n_groups + codes
+    ok = (codes >= 0) & ~np.isnan(v)
+    size = v.shape[0] * n_groups
+    sums = np.bincount(key[ok], weights=v[ok], minlength=size)
+    counts = np.bincount(key[ok], minlength=size)
+    return key, sums, counts
+
+
 class Group(Signal):
     """Access group/categorical data as a Signal.
 
@@ -73,25 +98,18 @@ class GroupRank(Signal):
         values = self.signal.evaluate(data)
         group_df = _get_group_data(data, self.groups)
 
-        result = pd.DataFrame(
-            np.nan,
-            index=values.index,
-            columns=values.columns
-        )
-
-        for date in values.index:
-            date_values = values.loc[date]
-            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
-
-            for group_name in date_groups.unique():
-                if pd.isna(group_name):
-                    continue
-                mask = date_groups == group_name
-                group_values = date_values[mask]
-                ranked = group_values.rank(pct=True)
-                result.loc[date, mask] = ranked
-
-        return result
+        codes, _ = _group_codes(values, group_df)
+        T, N = codes.shape
+        has = (codes >= 0).ravel()
+        long = pd.DataFrame({
+            'date': np.repeat(np.arange(T), N)[has],
+            'group': codes.ravel()[has],
+            'value': values.to_numpy(dtype=float).ravel()[has],
+        })
+        ranked = long.groupby(['date', 'group'])['value'].rank(pct=True).to_numpy()
+        out = np.full(T * N, np.nan)
+        out[has] = ranked
+        return pd.DataFrame(out.reshape(T, N), index=values.index, columns=values.columns)
 
     def _cache_key(self):
         return ('GroupRank', self.signal._cache_key(), self.groups)
@@ -108,25 +126,15 @@ class GroupDemean(Signal):
         values = self.signal.evaluate(data)
         group_df = _get_group_data(data, self.groups)
 
-        result = pd.DataFrame(
-            np.nan,
-            index=values.index,
-            columns=values.columns
-        )
-
-        for date in values.index:
-            date_values = values.loc[date]
-            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
-
-            for group_name in date_groups.unique():
-                if pd.isna(group_name):
-                    continue
-                mask = date_groups == group_name
-                group_values = date_values[mask]
-                demeaned = group_values - group_values.mean()
-                result.loc[date, mask] = demeaned
-
-        return result
+        codes, n_groups = _group_codes(values, group_df)
+        v = values.to_numpy(dtype=float)
+        key, sums, counts = _group_totals(v, codes, n_groups)
+        with np.errstate(invalid='ignore', divide='ignore'):
+            means = sums / counts
+        has = codes >= 0
+        out = np.full(v.shape, np.nan)
+        out[has] = v[has] - means[key[has]]
+        return pd.DataFrame(out, index=values.index, columns=values.columns)
 
     def _cache_key(self):
         return ('GroupDemean', self.signal._cache_key(), self.groups)
@@ -276,25 +284,14 @@ class GroupSum(Signal):
         values = self.signal.evaluate(data)
         group_df = _get_group_data(data, self.groups)
 
-        result = pd.DataFrame(
-            np.nan,
-            index=values.index,
-            columns=values.columns
-        )
-
-        for date in values.index:
-            date_values = values.loc[date]
-            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
-
-            for group_name in date_groups.unique():
-                if pd.isna(group_name):
-                    continue
-                mask = date_groups == group_name
-                group_values = date_values[mask]
-                group_sum = group_values.sum()
-                result.loc[date, mask] = group_sum
-
-        return result
+        codes, n_groups = _group_codes(values, group_df)
+        v = values.to_numpy(dtype=float)
+        key, sums, _ = _group_totals(v, codes, n_groups)
+        # Every member gets its group's sum, including members whose own value is NaN
+        has = codes >= 0
+        out = np.full(v.shape, np.nan)
+        out[has] = sums[key[has]]
+        return pd.DataFrame(out, index=values.index, columns=values.columns)
 
     def _cache_key(self):
         return ('GroupSum', self.signal._cache_key(), self.groups)

@@ -425,15 +425,16 @@ class DecayLinear(Signal):
         weights = np.arange(1, self.period + 1, dtype=float)
         weights = weights / weights.sum()
 
-        def _weighted_mean(arr):
-            valid = ~np.isnan(arr)
-            if valid.sum() == 0:
-                return np.nan
-            # Use only valid weights
-            w = weights[valid]
-            return np.sum(arr[valid] * w) / w.sum()
-
-        return values.rolling(self.period).apply(_weighted_mean, raw=True)
+        # A window needs all `period` values (rolling's default min_periods), so any NaN in it gives
+        # NaN; the full windows are one dot product each with the weights, oldest first.
+        v = values.to_numpy(dtype=float)
+        out = np.full(v.shape, np.nan)
+        if len(v) >= self.period:
+            windows = np.lib.stride_tricks.sliding_window_view(v, self.period, axis=0)
+            out[self.period - 1:] = windows @ weights
+        if isinstance(values, pd.Series):
+            return pd.Series(out, index=values.index, name=values.name)
+        return pd.DataFrame(out, index=values.index, columns=values.columns)
 
     def _cache_key(self):
         return ('DecayLinear', self.signal._cache_key(), self.period)
