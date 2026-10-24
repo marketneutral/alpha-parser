@@ -95,9 +95,11 @@ except ImportError:
 # Evaluation (sibling package)
 from evaluation import (
     Backtest, BacktestResult,
+    BookSettings, build_book,
     QuantileAnalysis, QuantileResult,
     sharpe_ratio, max_drawdown, top_drawdowns, return_on_gmv,
     annualized_return, annualized_volatility, calmar_ratio, sortino_ratio,
+    turnover, fitness, margin_bps,
 )
 
 
@@ -277,6 +279,8 @@ __all__ = [
     # Evaluation
     'Backtest',
     'BacktestResult',
+    'BookSettings',
+    'build_book',
     'QuantileAnalysis',
     'QuantileResult',
     'sharpe_ratio',
@@ -287,4 +291,7 @@ __all__ = [
     'annualized_volatility',
     'calmar_ratio',
     'sortino_ratio',
+    'turnover',
+    'fitness',
+    'margin_bps',
 ]

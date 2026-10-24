@@ -23,6 +23,41 @@ bt = Backtest(signal, transaction_cost=0.001)
 result = bt.run(data)
 ```
 
+## Book Settings (Finding Alphas)
+
+`Backtest` turns a signal into weights with `signal.to_weights()` by default: the signal
+scaled so absolute weights sum to one, traded at the same close it was computed on. Pass
+`settings` to build the book the way *Finding Alphas* (and WorldQuant BRAIN) do instead:
+
+```python
+from qex import qex, Backtest, BookSettings
+
+settings = BookSettings(
+    delay=1,              # day t's weights use data up to day t-1's close
+    universe="member",    # a data field, 1 for names in the universe that day, NaN otherwise
+    neutralize="sector",  # "market", a group field, or None
+    truncation=0.05,      # no name above 5% of the book
+)
+result = Backtest(qex("-returns(5)"), settings=settings).run(data)
+print(result.fitness, result.margin_bps)
+```
+
+Each day the weights are neutralized, scaled to a book of exactly one (gross), and clipped
+at the truncation, repeated until all three hold. The size of the book never changes, so
+a signal's magnitude only moves weight between names; it cannot time the book.
+
+The weights alone, and the statistics the book uses to judge an alpha:
+
+```python
+from qex import build_book, turnover, fitness, margin_bps
+
+w = build_book(signal, data, settings)            # dates x names
+pnl = (w * data["close"].pct_change().shift(-1)).sum(axis=1)
+to = turnover(w)                                  # fraction of the book traded each day
+fitness(pnl, to)      # Sharpe * sqrt(|annual return| / max(turnover, 0.125))
+margin_bps(pnl, to)   # P&L per dollar traded, in basis points
+```
+
 ## Understanding Results
 
 ```python
