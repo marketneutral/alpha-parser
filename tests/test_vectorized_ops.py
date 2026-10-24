@@ -8,7 +8,9 @@ from qex import alpha
 
 
 # Reference implementations: the original per-date / rolling-apply code, kept verbatim in
-# behaviour so the vectorized versions can be checked against it.
+# behaviour so the vectorized versions can be checked against it. Inputs come from qex's own
+# returns(1), whose handling of missing prices follows the installed pandas (pandas 2 pads
+# gaps in pct_change by default, pandas 3 does not).
 
 def _ref_group_apply(values, group_df, fn):
     result = pd.DataFrame(np.nan, index=values.index, columns=values.columns)
@@ -75,7 +77,7 @@ def messy_data():
 def test_group_ops_match_loop(messy_data, name, ref):
     expr = f"{name}(returns(1), 'sector')"
     got = alpha(expr).evaluate(messy_data)
-    want = ref(messy_data['close'].pct_change(fill_method=None), messy_data['sector'])
+    want = ref(alpha("returns(1)").evaluate(messy_data), messy_data['sector'])
     pd.testing.assert_frame_equal(got, want, check_exact=False, rtol=1e-12, atol=1e-15)
 
 
@@ -96,7 +98,7 @@ def test_group_ops_missing_dates_use_last_row(messy_data, name, ref):
 @pytest.mark.parametrize('period', [1, 2, 5, 10, 59, 60, 61])
 def test_decay_linear_matches_rolling_apply(messy_data, period):
     got = alpha(f"decay_linear(returns(1), {period})").evaluate(messy_data)
-    want = ref_decay_linear(messy_data['close'].pct_change(fill_method=None), period)
+    want = ref_decay_linear(alpha("returns(1)").evaluate(messy_data), period)
     pd.testing.assert_frame_equal(got, want, check_exact=False, rtol=1e-12, atol=1e-15)
 
 

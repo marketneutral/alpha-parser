@@ -76,6 +76,68 @@ def return_on_gmv(
     return total_pnl / avg_gmv
 
 
+def turnover(weights: pd.DataFrame) -> pd.Series:
+    """
+    Daily turnover: the sum of absolute weight changes from the previous day.
+
+    For a book scaled to gross one this is the fraction of the book traded. The first
+    day has no previous day and counts as 0.
+
+    Args:
+        weights: Daily weights DataFrame (dates x stocks)
+
+    Returns:
+        Daily turnover series
+    """
+    return weights.diff().abs().sum(axis=1).fillna(0)
+
+
+def fitness(
+    pnl: pd.Series,
+    daily_turnover: pd.Series,
+    annualization: int = 252,
+) -> float:
+    """
+    Fitness, as defined in Finding Alphas.
+
+    Fitness = Sharpe * sqrt(|annual return| / max(average daily turnover, 0.125))
+
+    A high Sharpe is worth more when it comes with real return and little trading;
+    the turnover floor of 0.125 stops a slow book from being rewarded without limit.
+    Meant for a book of constant size (gross one), where P&L is a return on the book.
+
+    Args:
+        pnl: Daily P&L of the book
+        daily_turnover: Daily turnover of the book
+        annualization: Trading days per year (default 252)
+
+    Returns:
+        Fitness; its sign is the Sharpe's
+    """
+    ann = annualized_return(pnl, annualization)
+    return sharpe_ratio(pnl, annualization) * np.sqrt(abs(ann) / max(daily_turnover.mean(), 0.125))
+
+
+def margin_bps(pnl: pd.Series, daily_turnover: pd.Series) -> float:
+    """
+    Margin: total P&L per dollar traded, in basis points.
+
+    An edge must clear trading costs; a book earning 3 bps per dollar traded does not
+    survive 5 bps of costs, whatever its Sharpe.
+
+    Args:
+        pnl: Daily P&L of the book (before costs)
+        daily_turnover: Daily turnover of the book
+
+    Returns:
+        Margin in basis points, NaN if the book never trades
+    """
+    traded = daily_turnover.sum()
+    if traded == 0:
+        return float("nan")
+    return pnl.sum() / traded * 1e4
+
+
 def max_drawdown(cumulative_returns: pd.Series) -> float:
     """
     Calculate maximum drawdown.

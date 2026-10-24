@@ -429,7 +429,8 @@ qex/
 │   └── evaluation/           # Backtesting & evaluation
 │       ├── __init__.py
 │       ├── backtest.py       # Backtest engine
-│       ├── metrics.py        # Performance metrics
+│       ├── book.py           # Book settings: delay, universe, neutralization, truncation
+│       ├── metrics.py        # Performance metrics (incl. fitness, margin, turnover)
 │       └── quantile.py       # Quantile analysis
 ├── tests/
 │   ├── conftest.py           # Test fixtures
@@ -437,7 +438,8 @@ qex/
 │   ├── test_events.py        # Event/sparse data tests
 │   ├── test_lazy.py          # LazyData tests
 │   ├── test_operators.py     # Comprehensive operator tests
-│   └── test_evaluation.py    # Backtest & evaluation tests
+│   ├── test_evaluation.py    # Backtest & evaluation tests
+│   └── test_book.py          # Book settings and Finding Alphas metrics
 ├── data/
 │   ├── fetch_fmp.py          # FMP data fetcher
 │   └── .env.example          # API key template
@@ -690,6 +692,22 @@ Top Drawdowns:
 bt = Backtest(signal, transaction_cost=0.001)
 result = bt.run(data)
 ```
+
+### Book Settings (Finding Alphas)
+
+Build the book with the standard simulation settings (delay, universe, neutralization,
+truncation) and get fitness and margin:
+
+```python
+from qex import Backtest, BookSettings
+
+settings = BookSettings(delay=1, universe="member", neutralize="sector", truncation=0.05)
+result = Backtest(signal, settings=settings).run(data)
+print(result.fitness, result.margin_bps)
+```
+
+Without `settings`, `Backtest` behaves as before. `build_book`, `turnover`, `fitness` and
+`margin_bps` are also available on their own; see the backtesting guide.
 
 ### Quantile Analysis
 

@@ -17,8 +17,11 @@ from .metrics import (
     annualized_volatility,
     calmar_ratio,
     sortino_ratio,
+    fitness,
+    margin_bps,
     Drawdown,
 )
+from .book import BookSettings, build_book
 
 
 @dataclass
@@ -48,6 +51,11 @@ class BacktestResult:
     avg_long_count: float  # Average number of long positions
     avg_short_count: float  # Average number of short positions
     avg_turnover: float  # Average daily turnover (sum of weight changes)
+
+    # Finding Alphas statistics, on P&L before transaction costs (defaults keep older
+    # direct constructions of BacktestResult working)
+    fitness: Optional[float] = None  # Sharpe * sqrt(|annual return| / max(turnover, 0.125))
+    margin_bps: Optional[float] = None  # P&L per dollar traded, in basis points
 
     def summary(self) -> str:
         """Return a formatted summary string."""
@@ -93,8 +101,9 @@ class Backtest:
     WorldQuant-style backtest engine for alpha signals.
 
     Runs a daily-rebalanced long-short backtest with:
-    - Dollar-neutral portfolio (equal long/short exposure)
-    - Weights derived from signal.to_weights()
+    - Weights derived from signal.to_weights(), or, with settings, from
+      build_book(): delay, universe, neutralization, constant book size and
+      truncation, the standard simulation settings of Finding Alphas
     - PnL = sum(weights * forward_returns)
 
     Example:
@@ -102,6 +111,9 @@ class Backtest:
         >>> bt = Backtest(signal)
         >>> result = bt.run(data)
         >>> print(result.summary())
+
+        >>> bt = Backtest(signal, settings=BookSettings(delay=1, truncation=0.05))
+        >>> bt.run(data).fitness
     """
 
     def __init__(
@@ -109,6 +121,7 @@ class Backtest:
         signal: Signal,
         holding_period: int = 1,
         transaction_cost: float = 0.0,
+        settings: Optional[BookSettings] = None,
     ):
         """
         Initialize backtest.
@@ -117,10 +130,13 @@ class Backtest:
             signal: Alpha signal to backtest
             holding_period: Days to hold positions before rebalancing (default 1)
             transaction_cost: One-way transaction cost as decimal (default 0)
+            settings: Book settings (delay, universe, neutralization, truncation).
+                None (default) uses signal.to_weights() at delay 0, as before.
         """
         self.signal = signal
         self.holding_period = holding_period
         self.transaction_cost = transaction_cost
+        self.settings = settings
 
     def run(
         self,
@@ -140,8 +156,11 @@ class Backtest:
             BacktestResult with all metrics and time series
         """
         # Evaluate signal
-        with compute_context():
-            weights = self.signal.to_weights(data)
+        if self.settings is None:
+            with compute_context():
+                weights = self.signal.to_weights(data)
+        else:
+            weights = build_book(self.signal, data, self.settings)
 
         # Calculate forward returns
         close = data["close"]
@@ -168,6 +187,7 @@ class Backtest:
 
         # Calculate PnL (before costs)
         daily_pnl = (weights * forward_returns).sum(axis=1)
+        pnl_before_costs = daily_pnl
 
         # Calculate turnover and transaction costs
         weight_changes = weights.diff().abs().sum(axis=1)
@@ -215,6 +235,9 @@ class Backtest:
             avg_long_count=long_counts.mean(),
             avg_short_count=short_counts.mean(),
             avg_turnover=turnover.mean(),
+            # Finding Alphas statistics
+            fitness=fitness(pnl_before_costs, turnover),
+            margin_bps=margin_bps(pnl_before_costs, turnover),
         )
 
         return result

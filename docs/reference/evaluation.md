@@ -148,6 +148,10 @@ for dd in drawdowns:
         - run
         - run_walk_forward
 
+::: evaluation.book.BookSettings
+
+::: evaluation.book.build_book
+
 ::: evaluation.quantile.QuantileAnalysis
     options:
       members:
