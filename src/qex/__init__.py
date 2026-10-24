@@ -92,15 +92,29 @@ try:
 except ImportError:
     _HAS_RISK = False
 
-# Evaluation (sibling package)
-from evaluation import (
-    Backtest, BacktestResult,
-    BookSettings, build_book,
-    QuantileAnalysis, QuantileResult,
-    sharpe_ratio, max_drawdown, top_drawdowns, return_on_gmv,
-    annualized_return, annualized_volatility, calmar_ratio, sortino_ratio,
-    turnover, fitness, margin_bps,
+# Evaluation (sibling package), re-exported lazily: evaluation imports qex.signal, so importing
+# it here at load time made `import evaluation` (before qex) fail with a circular import.
+_EVALUATION_NAMES = (
+    'Backtest', 'BacktestResult',
+    'BookSettings', 'build_book',
+    'QuantileAnalysis', 'QuantileResult',
+    'sharpe_ratio', 'max_drawdown', 'top_drawdowns', 'return_on_gmv',
+    'annualized_return', 'annualized_volatility', 'calmar_ratio', 'sortino_ratio',
+    'turnover', 'fitness', 'margin_bps',
 )
+
+
+def __getattr__(name):
+    if name in _EVALUATION_NAMES:
+        import evaluation
+        value = getattr(evaluation, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_EVALUATION_NAMES))
 
 
 __all__ = [
