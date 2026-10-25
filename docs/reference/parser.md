@@ -27,9 +27,9 @@ signal = alpha("rank(returns(20))")  # Same as qex()
 ### Function Calls
 
 ```python
-qex("returns(20)")           # One argument
-qex("ts_corr(x, y, 60)")    # Multiple arguments
-qex("close()")               # No arguments
+qex("returns(20)")                        # One argument
+qex("ts_corr(returns(1), volume(1), 60)")  # Multiple arguments
+qex("close()")                            # No arguments
 ```
 
 ### Arithmetic
@@ -37,20 +37,20 @@ qex("close()")               # No arguments
 ```python
 qex("returns(20) / volatility(60)")
 qex("-returns(5)")           # Unary minus
-qex("returns(20) ** 2")      # Power
+qex("returns(20) ** 2")      # Power, as power(returns(20), 2); the exponent must be a number
 ```
 
 ### Comparisons
 
 ```python
 qex("returns(5) > 0")        # Returns 0 or 1
-qex("volume(1) >= adv(20)")
+qex("volume(1) >= volume(20)")
 ```
 
 ### Logical Operations
 
 ```python
-qex("(returns(5) > 0) & (volume(1) > adv(20))")  # AND
+qex("(returns(5) > 0) & (volume(1) > volume(20))")  # AND
 qex("(returns(5) > 0.1) | (returns(5) < -0.1)")  # OR
 ```
 
@@ -99,7 +99,8 @@ qex("group_demean(returns(5), 'sector')")
 
 ## Multi-line Expressions
 
-Python string concatenation or triple-quotes:
+Whitespace is insignificant outside quoted strings, so an expression can break across lines
+anywhere, including after an operator. Use Python string concatenation or triple quotes:
 
 ```python
 # String concatenation
@@ -114,6 +115,13 @@ qex("""
     let mom = returns(60),
         vol = volatility(60)
     in rank(mom / vol)
+""")
+
+# A break after an operator is fine
+qex("""
+    let sharpe = returns(60) /
+                 volatility(60)
+    in rank(sharpe)
 """)
 ```
 

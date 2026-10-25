@@ -14,8 +14,7 @@ You're not computing anything yet. You're building a tree:
 
 ```
 Rank
- └── Returns(period=20)
-      └── Field('close')
+ └── Returns(period=20)        reads data['close']
 ```
 
 The computation happens when you call `.evaluate(data)`.
@@ -44,10 +43,17 @@ delta(x, 10)     # Change over 10 days
 Operate **across columns** (across tickers) for each row (day) independently.
 
 ```python
-rank(x)      # Percentile rank (0-1)
-zscore(x)    # Z-score across tickers
-demean(x)    # Subtract cross-sectional mean
+rank(x)                 # Percentile rank (0-1)
+zscore(x)               # Z-score across tickers
+demean(x)               # Subtract cross-sectional mean
+regression_neut(x, b)   # Remove x's cross-sectional fit on b (e.g. market beta)
 ```
+
+Which tickers they compare is the *cross-sectional universe*. In a book built with
+`BookSettings(universe='member')` it is the day's members, and names outside it get NaN;
+evaluated on its own, a signal compares every ticker with data. Time-series operations
+always see each ticker's full history. See
+[the cross-sectional universe](../reference/operations.md#the-cross-sectional-universe).
 
 ### Group Operations
 
@@ -60,17 +66,20 @@ group_demean(x, 'sector')  # Demean within sector
 
 ## Data Format
 
-Data is a `Dict[str, pd.DataFrame]`:
+Data is a dict of DataFrames, one per field:
 
 ```python
 data = {
     'close': pd.DataFrame(...),   # DatetimeIndex, ticker columns
     'volume': pd.DataFrame(...),
     'sector': pd.DataFrame(...),  # For group operations
+    'market': pd.Series(...),     # A date-only field: broadcast to every ticker
 }
 ```
 
-All DataFrames must share the same index and columns.
+The DataFrames should share the same index and columns. A field with one value per day,
+such as a market index, can be a date-indexed `pd.Series`.
+See [Data Format](../guides/data-format.md).
 
 ## Evaluation
 
@@ -99,7 +108,7 @@ with compute_context() as ctx:
     r1 = s1.evaluate(data)  # returns(20) computed
     r2 = s2.evaluate(data)  # returns(20) reused from cache
 
-    print(f"Cache hits: {len(ctx.cache)}")
+    print(f"Cached results: {len(ctx.cache)}")   # 3: returns(20), the rank, the z-score
 ```
 
 ## Variable Bindings
@@ -130,11 +139,16 @@ qex("""
 `rank()` returns values in [0, 1]. For long/short:
 
 ```python
-# Center around zero
+# Roughly centred (mean 1/(2n) over n names)
 signal = qex("rank(returns(20)) - 0.5")
 
-# Or use demean
+# Exactly centred: longs and shorts equal
 signal = qex("demean(rank(returns(20)))")
 ```
 
-Then `.to_weights(data, normalize=True)` scales so absolute weights sum to 1.
+Then `.to_weights(data, normalize=True)` scales so absolute weights sum to 1. A book built
+with `build_book` is demeaned (or group-demeaned) for you; see
+[Backtesting](../guides/backtesting.md#book-settings-finding-alphas).
+
+Equal long and short dollars do not make a book market-neutral: see
+[Market Beta](../guides/market-beta.md).

@@ -13,15 +13,19 @@ Example:
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional, Union
 
 import numpy as np
 import pandas as pd
 
 from qex.signal import Signal
 from qex.context import compute_context
-from qex.data import close, field, resolve_data
+from qex.data import LazyData, close, field, panel, resolve_data
+from qex.universe import cross_section_universe
 from qex.groups import _get_group_data, _group_codes
+
+
+DateLike = Union[str, pd.Timestamp]
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,12 @@ class BookSettings:
             a few hundred. A day still short of the cap after the last round is neutralized
             and scaled once more, so neutrality and book size always hold exactly and the
             cap is the one that may be exceeded, slightly.
+        mask_cross_section: With a universe set, the signal's cross-sectional operators
+            (rank, zscore, demean, regression_neut, the group operators, ...) compare only the
+            names in the universe that day and give NaN outside it, while time-series operators
+            still see every name's full history (see qex.universe). False compares every name
+            with data and applies the universe only to the finished signal, which reproduces
+            books from before 0.5. Without a universe there is nothing to mask and it has no effect.
     """
 
     delay: int = 1
@@ -51,6 +61,7 @@ class BookSettings:
     neutralize: Optional[str] = "market"
     truncation: Optional[float] = 0.05
     rounds: int = 1000
+    mask_cross_section: bool = True
 
     def __post_init__(self):
         if self.delay < 0:
@@ -63,10 +74,10 @@ class BookSettings:
 
 def build_book(
     signal: Signal,
-    data,
+    data: Union[Dict[str, pd.DataFrame], LazyData],
     settings: BookSettings = BookSettings(),
-    start=None,
-    end=None,
+    start: Optional[DateLike] = None,
+    end: Optional[DateLike] = None,
 ) -> pd.DataFrame:
     """Daily weights of the book a signal implies under the given settings.
 
@@ -81,15 +92,19 @@ def build_book(
         data: Dict or LazyData with at least 'close', plus the universe and group fields
             the settings name.
         settings: Simulation settings.
-        start, end: Optional date bounds, applied after the delay.
+        start: Optional first date, applied after the delay.
+        end: Optional last date, applied after the delay.
 
     Returns:
         DataFrame of weights, dates by names.
     """
     masked = signal + 0 * close()
+    universe = None
     if settings.universe is not None:
         masked = masked + 0 * field(settings.universe)
-    with compute_context():
+        if settings.mask_cross_section:
+            universe = panel(data, settings.universe).notna()
+    with compute_context(), cross_section_universe(universe):
         raw = masked.evaluate(data)
     if settings.delay:
         raw = raw.shift(settings.delay)

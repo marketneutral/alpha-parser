@@ -5,6 +5,7 @@ import pandas as pd
 from scipy import stats
 
 from .signal import Signal
+from .universe import in_universe
 
 # Default minimum periods for rolling operations (~1 month)
 DEFAULT_MIN_PERIODS = 20
@@ -317,6 +318,51 @@ class TsBeta(Signal):
         return ('TsBeta', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
 
 
+class TsBetaShrunk(Signal):
+    """Rolling beta of signal1 on signal2, shrunk toward the cross-sectional mean (Vasicek 1973).
+
+    Each name's OLS beta b over the window is pulled toward the day's cross-sectional mean
+    beta in proportion to how noisy it is:
+
+        b_shrunk = w * b + (1 - w) * mean(b),   w = var_cs(b) / (var_cs(b) + se(b)^2)
+
+    where var_cs is the day's cross-sectional variance of the betas and se(b)^2 the name's
+    sampling variance, residual variance / ((n - 1) * var(x)), from its n paired observations.
+    A name with a short history or a noisy fit moves most of the way to the mean; a long,
+    clean history keeps nearly its own beta. Unlike a fixed blend (Blume's 0.67 b + 0.33),
+    the weight differs by name, so the ordering of betas changes, not just their scale.
+
+    The mean and variance are over the names with a beta that day, within the cross-sectional
+    universe when one is set (see qex.universe). Every name keeps its own shrunk beta.
+    """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
+        self.signal1 = signal1
+        self.signal2 = signal2
+        self.period = period
+        self.min_periods = max(_get_min_periods(period, min_periods), 3)
+
+    def _compute(self, data):
+        y = self.signal1.evaluate(data)
+        x = self.signal2.evaluate(data)
+        both = y.notna() & x.notna()
+        y, x = y.where(both), x.where(both)                      # paired observations only
+        roll = lambda v: v.rolling(self.period, min_periods=self.min_periods)
+        n = roll(both.astype(float).where(both)).count()
+        vx, vy, cov = roll(x).var(), roll(y).var(), roll(y).cov(x)
+        vx = vx.where(vx > 0)
+        b = cov / vx
+        resid = (vy - cov * b).clip(lower=0) * (n - 1) / (n - 2)
+        se2 = resid / ((n - 1) * vx)
+        cs = in_universe(b)                                      # the prior comes from the universe
+        tau2 = cs.var(axis=1)
+        w = (1 / (1 + se2.div(tau2.where(tau2 > 0), axis=0))).where(b.notna())
+        return w * b + (1 - w).mul(cs.mean(axis=1), axis=0)
+
+    def _cache_key(self):
+        return ('TsBetaShrunk', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
+
+
 class TsBetaEwma(Signal):
     """EWMA-weighted beta (regression coefficient) of signal1 on signal2.
 
@@ -487,14 +533,14 @@ def fill_forward(signal: Signal, limit: int) -> FillForward:
     return FillForward(signal, limit)
 
 
-def ts_corr(signal1: Signal, signal2: Signal, period: int) -> TsCorr:
-    """Create a TsCorr signal (rolling correlation)."""
-    return TsCorr(signal1, signal2, period)
+def ts_corr(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsCorr:
+    """Create a TsCorr signal (rolling correlation). min_periods defaults to min(20, period)."""
+    return TsCorr(signal1, signal2, period, min_periods)
 
 
-def ts_cov(signal1: Signal, signal2: Signal, period: int) -> TsCov:
-    """Create a TsCov signal (rolling covariance)."""
-    return TsCov(signal1, signal2, period)
+def ts_cov(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsCov:
+    """Create a TsCov signal (rolling covariance). min_periods defaults to min(20, period)."""
+    return TsCov(signal1, signal2, period, min_periods)
 
 
 def ts_var(signal: Signal, period: int) -> TsVar:
@@ -517,9 +563,14 @@ def ewma_cov(signal1: Signal, signal2: Signal, halflife: int) -> EwmaCov:
     return EwmaCov(signal1, signal2, halflife)
 
 
-def ts_beta(signal1: Signal, signal2: Signal, period: int) -> TsBeta:
-    """Create a TsBeta signal (rolling beta: cov(y, x) / var(x))."""
-    return TsBeta(signal1, signal2, period)
+def ts_beta(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsBeta:
+    """Create a TsBeta signal (rolling beta: cov(y, x) / var(x)). min_periods defaults to min(20, period)."""
+    return TsBeta(signal1, signal2, period, min_periods)
+
+
+def ts_beta_shrunk(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsBetaShrunk:
+    """Create a TsBetaShrunk signal (rolling beta, Vasicek-shrunk toward the day's cross-sectional mean)."""
+    return TsBetaShrunk(signal1, signal2, period, min_periods)
 
 
 def ts_beta_ewma(signal1: Signal, signal2: Signal, halflife: int) -> TsBetaEwma:

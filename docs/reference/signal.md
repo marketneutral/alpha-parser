@@ -17,7 +17,7 @@ signal = qex("rank(returns(20))")
 result = signal.evaluate(data)
 ```
 
-The result is a DataFrame with the same shape as your input data.
+The result is a DataFrame with the same dates and tickers as your input data.
 
 ## Portfolio Weights
 
@@ -43,7 +43,10 @@ weights = signal.to_weights(
 weights = signal.to_weights(data, long_only=True)
 ```
 
-This clips negative weights to zero and normalizes the positive weights.
+This clips negative weights to zero and normalizes the positive weights to sum to 1.
+
+`to_weights` only scales the signal. For a book with a delay, a universe, neutralization and
+a cap per name, use [`build_book`](evaluation.md#book-settings).
 
 ## Caching
 
@@ -79,8 +82,8 @@ class MySignal(Signal):
         child_result = self.child.evaluate(data)
         return child_result * self.param
 
-    def _cache_key(self) -> str:
-        return f"MySignal({self.child._cache_key()}, {self.param})"
+    def _cache_key(self) -> tuple:
+        return ('MySignal', self.child._cache_key(), self.param)
 ```
 
 ## API Reference

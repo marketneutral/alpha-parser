@@ -73,7 +73,7 @@ data = {
 }
 
 # Define a signal
-signal = qex("rank(returns(20)) - 0.5")
+signal = qex("demean(rank(returns(20)))")
 
 # Backtest it
 bt = Backtest(signal, transaction_cost=0.001)
@@ -85,9 +85,10 @@ print(result.summary())
 
 | Category | Operations |
 |----------|------------|
+| **Data** | `close`, `field`, `market` |
 | **Primitives** | `returns`, `volatility`, `volume`, `adv` |
-| **Time-Series** | `ts_mean`, `ts_std`, `delay`, `delta`, `ewma`, `ts_corr`, `ts_beta` |
-| **Cross-Sectional** | `rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale` |
+| **Time-Series** | `ts_mean`, `ts_std`, `delay`, `delta`, `ewma`, `ts_corr`, `ts_beta`, `ts_beta_shrunk` |
+| **Cross-Sectional** | `rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `regression_neut` |
 | **Group** | `group_rank`, `group_demean`, `group_std` |
 | **Math** | `log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min` |
 | **Conditional** | `where`, `is_valid`, `fill_forward` |

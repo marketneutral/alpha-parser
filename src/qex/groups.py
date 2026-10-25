@@ -5,6 +5,7 @@ import pandas as pd
 
 from .signal import Signal
 from .data import resolve_data
+from .universe import in_universe
 
 
 def _get_group_data(data, groups: str) -> pd.DataFrame:
@@ -95,7 +96,7 @@ class GroupRank(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        values = self.signal.evaluate(data)
+        values = in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         codes, _ = _group_codes(values, group_df)
@@ -123,7 +124,7 @@ class GroupDemean(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        values = self.signal.evaluate(data)
+        values = in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         codes, n_groups = _group_codes(values, group_df)
@@ -159,7 +160,7 @@ class GroupCountValid(Signal):
         self.window = window
 
     def _compute(self, data):
-        values = self.signal.evaluate(data)
+        values = in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         result = pd.DataFrame(
@@ -214,7 +215,7 @@ class GroupStd(Signal):
         self.window = window
 
     def _compute(self, data):
-        values = self.signal.evaluate(data)
+        values = in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         result = pd.DataFrame(
@@ -281,7 +282,7 @@ class GroupSum(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        values = self.signal.evaluate(data)
+        values = in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         codes, n_groups = _group_codes(values, group_df)

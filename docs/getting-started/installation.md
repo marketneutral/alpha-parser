@@ -30,6 +30,7 @@ pip install -e ".[all]"
 | `dev` | pytest, pyarrow | Running tests |
 | `data` | requests, python-dotenv, pyarrow | FMP data fetcher |
 | `risk` | statsmodels | Factor risk model |
+| `docs` | mkdocs, mkdocs-material, mkdocstrings | Building this site |
 | `all` | Everything above | Full installation |
 
 Install specific groups (from cloned repo):
@@ -46,5 +47,5 @@ pip install -e ".[all]"      # Everything
 from qex import qex
 
 signal = qex("rank(returns(20))")
-print(signal)  # Should print: Rank(Returns(20))
+print(type(signal).__name__)  # Rank
 ```

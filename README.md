@@ -454,11 +454,12 @@ qex/
 
 ### Data Access
 - `close()`, `open()`, `high()`, `low()` - Price fields
-- `field('name')` - Access any named field
+- `field('name')` - Access any named field. A field stored as a date-indexed `pd.Series` (one value per day) is broadcast to every ticker
+- `market()` - The market's price level, from `data['market']` (e.g. SPY's total-return close as a Series). Any market series works
 
 ### Primitives
-- `returns(period)` - Price returns over period
-- `volatility(period)` - Rolling volatility (annualized)
+- `returns(period, field='close')` - Price returns over period; `returns(1, 'market')` is the market's daily return
+- `volatility(period, field='close')` - Rolling volatility (annualized)
 - `volume(period)` - Rolling average volume
 - `adv(period)` - Average dollar volume (price × volume)
 
@@ -482,9 +483,10 @@ qex/
 - `delta(signal, period)` - Difference from N periods ago
 - `ts_rank(signal, period)` - Percentile rank within rolling window (optimized with scipy)
 - `fill_forward(signal, limit)` - Forward fill NaN for up to N periods
-- `ts_corr(signal1, signal2, period)` - Rolling correlation
-- `ts_cov(signal1, signal2, period)` - Rolling covariance
-- `ts_beta(signal1, signal2, period)` - Rolling beta (cov/var), useful for hedge ratios
+- `ts_corr(signal1, signal2, period[, min_periods])` - Rolling correlation
+- `ts_cov(signal1, signal2, period[, min_periods])` - Rolling covariance
+- `ts_beta(signal1, signal2, period[, min_periods])` - Rolling beta (cov/var), useful for hedge ratios. `min_periods` defaults to min(20, period)
+- `ts_beta_shrunk(signal1, signal2, period[, min_periods])` - Rolling beta shrunk toward the day's cross-sectional mean by its own sampling error (Vasicek): short or noisy histories move most
 - `ewma(signal, halflife)` - Exponentially weighted moving average
 - `ewma_var(signal, halflife)` - EWMA variance
 - `ewma_cov(signal1, signal2, halflife)` - EWMA covariance
@@ -509,6 +511,7 @@ qex/
 - `winsorize(signal, limit)` - Cap extreme values at percentiles (e.g., 0.05 caps at 5th/95th)
 - `scale(signal)` - Scale so absolute values sum to 1
 - `truncate(signal, max_weight)` - Clip values to [-max_weight, max_weight]
+- `regression_neut(y, x)` - Residual of y on x (with intercept), fit across names each day: zero mean and zero covariance with x. `regression_neut(z, ts_beta_shrunk(returns(1), returns(1, 'market'), 252))` takes market beta out of z
 
 > **Note:** Both `rank` and `quantile` are ascending: higher signal values produce higher ranks/buckets.
 
@@ -705,6 +708,21 @@ settings = BookSettings(delay=1, universe="member", neutralize="sector", truncat
 result = Backtest(signal, settings=settings).run(data)
 print(result.fitness, result.margin_bps)
 ```
+
+With a universe set, the signal's cross-sectional operators (`rank`, `demean`,
+`regression_neut`, the group operators, ...) compare only the names in the universe that day, as
+BRAIN does; time-series operators still see every name's full history.
+`BookSettings(mask_cross_section=False)` applies the universe to the finished signal only, which
+reproduces books from before 0.5.
+
+Dollar-neutral is not beta-neutral. To take market beta out of a signal:
+
+```python
+data["market"] = spy_close   # a date-indexed Series
+signal = qex("regression_neut(rank(-returns(5)), ts_beta_shrunk(returns(1), returns(1, 'market'), 252))")
+```
+
+See the Market Beta guide for estimating, shrinking and removing beta.
 
 Without `settings`, `Backtest` behaves as before. `build_book`, `turnover`, `fitness` and
 `margin_bps` are also available on their own; see the backtesting guide.

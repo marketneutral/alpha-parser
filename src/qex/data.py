@@ -1,6 +1,7 @@
 """Data access signals for accessing raw data fields."""
 
 from typing import Callable, Dict, Optional, Union
+import numpy as np
 import pandas as pd
 
 from .signal import Signal
@@ -145,18 +146,40 @@ def resolve_data(data) -> LazyData:
     return LazyData(data)
 
 
+# The data key that market() reads. Point it at any market series: SPY, an equal-weight index, a future.
+MARKET_FIELD = 'market'
+
+
+def panel(data, name: str) -> pd.DataFrame:
+    """A field as a date x ticker panel.
+
+    A field stored as a Series indexed by date (one value per day, such as a market index) is
+    broadcast to every ticker, on the dates and tickers of 'close' (or of the first DataFrame field
+    if there is no 'close'). Dates the series lacks are NaN. DataFrame fields are returned as they are.
+    """
+    data = resolve_data(data)
+    if name not in data:
+        raise ValueError(f"Field '{name}' not found in data. "
+                         f"Available fields: {list(data.keys())}")
+    value = data[name]
+    if not isinstance(value, pd.Series):
+        return value
+    ref = data['close'] if 'close' in data else next(
+        (data[k] for k in data.keys() if isinstance(data[k], pd.DataFrame)), None)
+    if ref is None:
+        raise ValueError(f"Field '{name}' is a Series, and there is no DataFrame field to broadcast it to.")
+    col = value.reindex(ref.index).to_numpy(dtype=float)
+    return pd.DataFrame(np.repeat(col[:, None], ref.shape[1], axis=1), index=ref.index, columns=ref.columns)
+
+
 class Field(Signal):
-    """Access a raw data field by name."""
+    """Access a raw data field by name. A date-indexed Series is broadcast to every ticker."""
 
     def __init__(self, name: str):
         self.name = name
 
     def _compute(self, data):
-        data = resolve_data(data)
-        if self.name not in data:
-            raise ValueError(f"Field '{self.name}' not found in data. "
-                           f"Available fields: {list(data.keys())}")
-        return data[self.name]
+        return panel(data, self.name)
 
     def _cache_key(self):
         return ('Field', self.name)
@@ -185,6 +208,15 @@ def low() -> Field:
 def field(name: str) -> Field:
     """Access any field by name."""
     return Field(name)
+
+
+def market() -> Field:
+    """The market's price level (a total-return index), the same on every ticker.
+
+    Reads data['market'], a date-indexed Series (or a DataFrame). Its returns are
+    returns(1, 'market'), so a name's market beta is ts_beta(returns(1), returns(1, 'market'), 252).
+    """
+    return Field(MARKET_FIELD)
 
 
 # =============================================================================

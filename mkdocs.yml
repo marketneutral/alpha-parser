@@ -78,6 +78,7 @@ nav:
     - Pairs Trading: guides/pairs-trading.md
     - Event-Driven: guides/event-driven.md
     - Backtesting: guides/backtesting.md
+    - Market Beta: guides/market-beta.md
   - Reference:
     - All Operations: reference/operations.md
     - Parser & Syntax: reference/parser.md
@@ -86,6 +87,7 @@ nav:
   - Cookbook:
     - Technical Indicators: cookbook/technical-indicators.md
     - Advanced Patterns: cookbook/advanced-patterns.md
+    - Distributed Evaluation: cookbook/distributed.md
 
 extra:
   social:

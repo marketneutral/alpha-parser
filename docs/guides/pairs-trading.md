@@ -47,14 +47,25 @@ qex("""
 """)
 ```
 
-## Beta-Hedged Pairs
+## Volatility-Matched Pairs
 
-For pairs with different volatilities:
+For pairs with different volatilities, compare risk-adjusted moves, so the quieter stock's
+move counts as much as the noisier one's:
+
+```python
+qex("group_demean(returns(5) / volatility(60), 'pair')")
+```
+
+## Partner Returns
+
+For a group of two, the other member's return is the group sum minus your own. That gives
+each stock its partner's return with no extra data:
 
 ```python
 qex("""
-    let beta = ts_beta(returns(1), field('pair_returns'), 60)
-    in group_demean(returns(5), 'pair') / beta
+    let r = returns(1),
+        partner = group_sum(r, 'pair') - r
+    in ts_beta(r, partner, 60)
 """)
 ```
 
@@ -81,7 +92,7 @@ data['pair'] = pair_df
 For groups with >2 members:
 
 ```python
-# Long 2 cheapest, short 2 richest within each sector
+# Long the bottom 40% of each sector by recent return, short the top 40%
 qex("""
     let ret = returns(5),
         grp_rank = group_rank(ret, 'sector')
@@ -95,7 +106,9 @@ Only trade correlated pairs:
 
 ```python
 qex("""
-    let corr = ts_corr(returns(1), field('pair_returns'), 60),
+    let r = returns(1),
+        partner = group_sum(r, 'pair') - r,
+        corr = ts_corr(r, partner, 60),
         spread = group_demean(returns(5), 'pair')
     in where(corr > 0.7, -spread, 0)
 """)

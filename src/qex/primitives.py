@@ -3,6 +3,7 @@
 import numpy as np
 
 from .signal import Signal
+from .data import panel
 
 # Default minimum periods for rolling operations (~1 month)
 DEFAULT_MIN_PERIODS = 20
@@ -16,14 +17,14 @@ def _get_min_periods(period: int, min_periods: int = None) -> int:
 
 
 class Returns(Signal):
-    """Price returns over a period."""
+    """Price returns over a period, of 'close' or of another price field (such as 'market')."""
 
     def __init__(self, period: int, price_field: str = 'close'):
         self.period = period
         self.price_field = price_field
 
     def _compute(self, data):
-        prices = data[self.price_field]
+        prices = panel(data, self.price_field)
         return prices.pct_change(self.period)
 
     def _cache_key(self):
@@ -39,7 +40,7 @@ class Volatility(Signal):
         self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
-        prices = data[self.price_field]
+        prices = panel(data, self.price_field)
         rets = prices.pct_change()
         return rets.rolling(self.period, min_periods=self.min_periods).std() * np.sqrt(252)
 
@@ -62,14 +63,14 @@ class Volume(Signal):
         return ('Volume', self.period, self.min_periods)
 
 
-def returns(period: int) -> Returns:
-    """Create a Returns signal."""
-    return Returns(period)
+def returns(period: int, price_field: str = 'close') -> Returns:
+    """Create a Returns signal. returns(1, 'market') is the market's daily return."""
+    return Returns(period, price_field)
 
 
-def volatility(period: int) -> Volatility:
-    """Create a Volatility signal."""
-    return Volatility(period)
+def volatility(period: int, price_field: str = 'close') -> Volatility:
+    """Create a Volatility signal. volatility(63, 'market') is the market's."""
+    return Volatility(period, price_field)
 
 
 def volume(period: int) -> Volume:

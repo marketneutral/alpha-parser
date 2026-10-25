@@ -9,15 +9,15 @@ import pandas as pd
 
 from .signal import Signal
 from .operators import Constant, is_valid
-from .data import close, open, high, low, field, day_of_week, day_of_month, month_of_year
+from .data import close, open, high, low, field, market, day_of_week, day_of_month, month_of_year
 from .primitives import returns, volatility, volume, adv
 from .timeseries import (
     ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
-    ts_corr, ts_cov, ts_var, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_ewma,
+    ts_corr, ts_cov, ts_var, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
-from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate
+from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut
 from .conditional import where
 from .groups import group, group_rank, group_demean, group_count_valid, group_std, group_sum
 from .operators import log, abs_, sign, sqrt, power, max_, min_
@@ -45,6 +45,7 @@ class QexParser:
             'high': high,
             'low': low,
             'field': field,
+            'market': market,
 
             # Calendar
             'day_of_week': day_of_week,
@@ -74,6 +75,7 @@ class QexParser:
             'ewma_var': ewma_var,
             'ewma_cov': ewma_cov,
             'ts_beta': ts_beta,
+            'ts_beta_shrunk': ts_beta_shrunk,
             'ts_beta_ewma': ts_beta_ewma,
             'ts_argmax': ts_argmax,
             'ts_argmin': ts_argmin,
@@ -95,6 +97,7 @@ class QexParser:
             'winsorize': winsorize,
             'scale': scale,
             'truncate': truncate,
+            'regression_neut': regression_neut,
 
             # Conditional
             'where': where,
@@ -150,6 +153,9 @@ class QexParser:
         """
         # Reset variables for each parse
         self.variables = {}
+
+        # Whitespace is insignificant: line breaks may fall anywhere, even after an operator
+        expression = _collapse_whitespace(expression)
 
         # Handle let...in syntax
         expression = expression.strip()
@@ -340,6 +346,12 @@ class QexParser:
             raise ValueError(f"Unknown variable: {name}")
         else:
             return self._visit(node)
+
+
+def _collapse_whitespace(expression: str) -> str:
+    """Turn every run of whitespace outside quoted strings into one space."""
+    parts = re.split(r"""('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")""", expression)
+    return "".join(p if i % 2 else re.sub(r"\s+", " ", p) for i, p in enumerate(parts))
 
 
 # Backwards compatibility alias

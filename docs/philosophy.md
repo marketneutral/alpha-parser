@@ -50,7 +50,9 @@ Each operation snaps together like lego. Cross-sectional ranks, validity masks, 
 
 ### No lookahead by construction
 
-A common source of backtest errors is accidentally using future data. qex eliminates this by design—every operation only looks backward in time. There's no way to write an expression that peeks at tomorrow's price. The language makes the right thing easy and the wrong thing impossible.
+A common source of backtest errors is accidentally using future data. qex rules this out by design: every operation looks only backward in time, and `delay()` refuses a negative lag. There's no way to write an expression that peeks at tomorrow's price.
+
+One thing the language cannot decide for you is *when* you trade on a value. A signal computed from today's close can't be traded at that same close in practice; build the book with `delay=1` (see [Backtesting](guides/backtesting.md#book-settings-finding-alphas)) so that today's weights use only yesterday's data.
 
 ## Who writes quant expressions?
 
@@ -124,10 +126,10 @@ Robust signals handle edge cases explicitly:
 
 ```python
 let raw = returns(5) / volatility(20) in
-rank(where(adv(20) > 500000, raw, 0))
+where(adv(20) > 500000, rank(raw) - 0.5, 0)
 ```
 
-This says: compute risk-adjusted momentum, but zero it out for illiquid stocks.
+This says: rank risk-adjusted momentum, and hold no position in illiquid stocks. (Zeroing *before* the rank, `rank(where(..., raw, 0))`, would not do it: the illiquid stocks would all share the rank of 0 and still get a weight.)
 
 ### Consider what you're betting against
 

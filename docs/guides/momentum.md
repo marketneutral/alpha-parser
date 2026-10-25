@@ -11,7 +11,8 @@ Buy winners, sell losers:
 signal = qex("rank(returns(20)) - 0.5")
 ```
 
-Higher returns → higher rank → long position.
+Higher returns → higher rank → long position. `rank(x) - 0.5` is roughly centred; a book
+built with `build_book` is demeaned exactly, and `demean(rank(x))` centres it yourself.
 
 ## Time-Scale Variations
 
@@ -60,10 +61,10 @@ qex("""
 
 ## Volume-Adjusted Momentum
 
-Weight by unusual volume:
+Weight by unusual volume (recent volume relative to its own norm):
 
 ```python
-qex("rank(returns(20) * (volume(5) / adv(20))) - 0.5")
+qex("rank(returns(20) * (volume(5) / volume(60))) - 0.5")
 ```
 
 ## Sector-Neutral Momentum
@@ -71,7 +72,7 @@ qex("rank(returns(20) * (volume(5) / adv(20))) - 0.5")
 Remove sector effects:
 
 ```python
-qex("group_demean(rank(returns(60)), 'sector') ")
+qex("group_demean(rank(returns(60)), 'sector')")
 ```
 
 Or rank within sector:
@@ -134,6 +135,18 @@ Recent returns weighted more:
 
 ```python
 qex("rank(decay_linear(returns(1), 20)) - 0.5")
+```
+
+## Beta-Neutral Momentum
+
+Momentum books pick up the market's direction: after a rally the winners are the
+high-beta names. Regress beta out (see [Market Beta](market-beta.md)):
+
+```python
+qex("""
+    let b = ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
+    in regression_neut(rank(delay(returns(252), 20)), b)
+""")
 ```
 
 ## Backtest Example
