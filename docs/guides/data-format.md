@@ -53,6 +53,22 @@ data['analyst_rating'] = rating_df
 qex("field('earnings_surprise') * field('analyst_rating')")
 ```
 
+### Date-only fields and the market
+
+A field with one value per day, such as an index level or a rate, can be stored as a
+`pd.Series` indexed by date. `field('name')` broadcasts it to every ticker, on the dates and
+tickers of `close` (dates the series lacks are NaN).
+
+`market()` reads the field `'market'`. Point it at whatever market you hedge against:
+
+```python
+data['market'] = spy_total_return_close     # pd.Series, date-indexed
+
+qex("returns(1, 'market')")                                     # market daily return
+qex("ts_beta(returns(1), returns(1, 'market'), 252)")           # each name's beta
+qex("ts_corr(returns(1), returns(1, 'market'), 252)")             # each name's market correlation
+```
+
 ## Group Data
 
 For `group_rank`, `group_demean`, etc.:

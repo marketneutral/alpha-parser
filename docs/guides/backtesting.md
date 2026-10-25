@@ -46,6 +46,25 @@ Each day the weights are neutralized, scaled to a book of exactly one (gross), a
 at the truncation, repeated until all three hold. The size of the book never changes, so
 a signal's magnitude only moves weight between names; it cannot time the book.
 
+With `mask_cross_section=True` the signal's cross-sectional operators (`rank`, `demean`,
+`zscore`, `regression_neut`, the group operators, ...) compare only the names in the
+universe that day, as BRAIN does, and time-series operators still see every name's full
+history. It is off by default so that existing books are unchanged; without it, `rank(x)`
+ranks a member among every name with data and the universe applies only to the finished signal.
+
+Dollar-neutral is not beta-neutral. To take market beta out of a signal, regress it out
+across names before the book is built:
+
+```python
+settings = BookSettings(delay=1, universe="member", truncation=0.05, mask_cross_section=True)
+data["market"] = spy_close                                   # a date-indexed Series
+signal = qex("regression_neut(rank(-returns(5)), ts_beta_shrunk(returns(1), returns(1, 'market'), 252))")
+```
+
+The book is then close to beta-neutral, not exactly: truncation comes after the regression, so
+a signal whose weight sits in a few capped names keeps more of its beta. Check the realized
+correlation of the book's P&L with the market.
+
 The weights alone, and the statistics the book uses to judge an alpha:
 
 ```python

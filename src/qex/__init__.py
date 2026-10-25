@@ -26,6 +26,7 @@ Backwards compatibility:
 
 # Context management
 from .context import compute_context, get_context, ComputeContext
+from .universe import cross_section_universe
 
 # Base class
 from .signal import Signal
@@ -44,7 +45,7 @@ from .operators import (
 
 # Data access
 from .data import (
-    Field, close, open, high, low, field, LazyData,
+    Field, close, open, high, low, field, market, panel, MARKET_FIELD, LazyData,
     DayOfWeek, DayOfMonth, MonthOfYear,
     day_of_week, day_of_month, month_of_year,
 )
@@ -55,19 +56,19 @@ from .primitives import Returns, Volatility, Volume, Adv, returns, volatility, v
 # Time-series operations
 from .timeseries import (
     TsMean, TsStd, TsSum, TsMax, TsMin, TsVar, Delay, Delta, TsRank, FillForward,
-    TsCorr, TsCov, Ewma, EwmaVar, EwmaCov, TsBeta, TsBetaEwma,
+    TsCorr, TsCov, Ewma, EwmaVar, EwmaCov, TsBeta, TsBetaShrunk, TsBetaEwma,
     TsArgmax, TsArgmin, TsSkew, TsKurt, DecayLinear,
     TsMeanEvents, TsStdEvents, TsSumEvents, TsCountEvents,
     ts_mean, ts_std, ts_sum, ts_max, ts_min, ts_var, delay, delta, ts_rank, fill_forward,
-    ts_corr, ts_cov, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_ewma,
+    ts_corr, ts_cov, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 
 # Cross-sectional operations
 from .crosssection import (
-    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate,
-    rank, zscore, demean, quantile, winsorize, scale, truncate,
+    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate, RegressionNeut,
+    rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut,
 )
 
 # Conditional operations
@@ -122,6 +123,7 @@ __all__ = [
     'compute_context',
     'get_context',
     'ComputeContext',
+    'cross_section_universe',
 
     # Base
     'Signal',
@@ -169,6 +171,9 @@ __all__ = [
     'high',
     'low',
     'field',
+    'market',
+    'panel',
+    'MARKET_FIELD',
 
     # Calendar
     'DayOfWeek',
@@ -205,6 +210,7 @@ __all__ = [
     'EwmaVar',
     'EwmaCov',
     'TsBeta',
+    'TsBetaShrunk',
     'TsBetaEwma',
     'TsArgmax',
     'TsArgmin',
@@ -227,6 +233,7 @@ __all__ = [
     'ewma_var',
     'ewma_cov',
     'ts_beta',
+    'ts_beta_shrunk',
     'ts_beta_ewma',
     'ts_argmax',
     'ts_argmin',
@@ -250,6 +257,7 @@ __all__ = [
     'Winsorize',
     'Scale',
     'Truncate',
+    'RegressionNeut',
     'rank',
     'zscore',
     'demean',
@@ -257,6 +265,7 @@ __all__ = [
     'winsorize',
     'scale',
     'truncate',
+    'regression_neut',
 
     # Conditional
     'Where',

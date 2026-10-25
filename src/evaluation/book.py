@@ -20,7 +20,8 @@ import pandas as pd
 
 from qex.signal import Signal
 from qex.context import compute_context
-from qex.data import close, field, resolve_data
+from qex.data import close, field, panel, resolve_data
+from qex.universe import cross_section_universe
 from qex.groups import _get_group_data, _group_codes
 
 
@@ -44,6 +45,11 @@ class BookSettings:
             a few hundred. A day still short of the cap after the last round is neutralized
             and scaled once more, so neutrality and book size always hold exactly and the
             cap is the one that may be exceeded, slightly.
+        mask_cross_section: If True, the signal's cross-sectional operators (rank, zscore,
+            demean, regression_neut, the group operators, ...) compare only the names in the
+            universe that day, and give NaN outside it; time-series operators still see every
+            name's full history (see qex.universe). If False, they compare every name with data
+            and the universe is applied only to the finished signal, as before 0.5. Needs a universe.
     """
 
     delay: int = 1
@@ -51,6 +57,7 @@ class BookSettings:
     neutralize: Optional[str] = "market"
     truncation: Optional[float] = 0.05
     rounds: int = 1000
+    mask_cross_section: bool = False
 
     def __post_init__(self):
         if self.delay < 0:
@@ -59,6 +66,8 @@ class BookSettings:
             raise ValueError(f"truncation must be in (0, 1] or None (got {self.truncation})")
         if self.rounds < 1:
             raise ValueError(f"rounds must be >= 1 (got {self.rounds})")
+        if self.mask_cross_section and self.universe is None:
+            raise ValueError("mask_cross_section needs a universe")
 
 
 def build_book(
@@ -87,9 +96,12 @@ def build_book(
         DataFrame of weights, dates by names.
     """
     masked = signal + 0 * close()
+    universe = None
     if settings.universe is not None:
         masked = masked + 0 * field(settings.universe)
-    with compute_context():
+        if settings.mask_cross_section:
+            universe = panel(data, settings.universe).notna()
+    with compute_context(), cross_section_universe(universe):
         raw = masked.evaluate(data)
     if settings.delay:
         raw = raw.shift(settings.delay)

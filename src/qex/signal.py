@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Dict
 import pandas as pd
 
 from .context import get_context
+from .universe import universe_token
 
 if TYPE_CHECKING:
     from .operators import (
@@ -43,8 +44,11 @@ class Signal(ABC):
             ctx.cache = {}
             ctx.data_hash = data_hash
 
-        # Check cache
+        # Check cache (keyed by the cross-sectional universe too, which changes the result)
         cache_key = self._cache_key()
+        token = universe_token()
+        if token is not None:
+            cache_key = ('universe', token, cache_key)
         if cache_key in ctx.cache:
             return ctx.cache[cache_key]
 

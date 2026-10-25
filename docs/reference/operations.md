@@ -11,18 +11,25 @@ Complete reference of qex operations.
 | `high()` | Daily highs |
 | `low()` | Daily lows |
 | `field('name')` | Access any named field |
+| `market()` | The market's price level, `data['market']` |
 
 ```python
 qex("close()")
 qex("field('earnings_surprise')")
+qex("returns(1, 'market')")   # the market's daily return
 ```
+
+A field stored as a `pd.Series` indexed by date (one value per day: an index, a rate) is
+broadcast to every ticker, on the dates and tickers of `close`. `market()` reads
+`data['market']`, which can be any market series: SPY's total-return close, an
+equal-weight index of the universe, a future.
 
 ## Primitives
 
 | Operation | Description |
 |-----------|-------------|
-| `returns(period)` | Price returns over period |
-| `volatility(period)` | Rolling annualized volatility |
+| `returns(period, field='close')` | Returns over period, of `close` or another price field |
+| `volatility(period, field='close')` | Rolling annualized volatility |
 | `volume(period)` | Rolling average volume |
 | `adv(period)` | Average dollar volume (price × volume) |
 
@@ -96,13 +103,26 @@ qex("ts_rank(volume(1), 20)")  # Where does today's volume rank vs last 20 days?
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_corr(x, y, period)` | Rolling correlation |
-| `ts_cov(x, y, period)` | Rolling covariance |
-| `ts_beta(y, x, period)` | Rolling beta (cov/var) |
+| `ts_corr(x, y, period[, min_periods])` | Rolling correlation |
+| `ts_cov(x, y, period[, min_periods])` | Rolling covariance |
+| `ts_beta(y, x, period[, min_periods])` | Rolling beta (cov/var) |
+| `ts_beta_shrunk(y, x, period[, min_periods])` | Rolling beta, Vasicek-shrunk toward the cross-sectional mean |
+
+`min_periods` (default `min(20, period)`) is the fewest paired observations a window needs
+before it gives a value. With the default, a name 20 days after listing gets a 252-day beta
+from 20 days; raise it (`ts_beta(returns(1), returns(1, 'market'), 252, 126)`) to require more.
+
+`ts_beta_shrunk` pulls each name's beta b toward the day's mean beta by its own noise:
+`w * b + (1 - w) * mean(b)`, `w = var(b) / (var(b) + se(b)^2)`, where `var(b)` is the
+cross-sectional variance and `se(b)^2` the name's sampling variance. Short or noisy histories
+move most. A fixed blend such as Bloomberg's `0.67 b + 0.33` is a linear transform: it rescales
+betas but keeps their order, so it changes nothing that `rank` or `regression_neut` sees.
 
 ```python
-qex("ts_corr(returns(1), volume(1), 60)")  # Return-volume correlation
-qex("ts_beta(returns(1), field('market'), 60)")  # Market beta
+qex("ts_corr(returns(1), volume(1), 60)")                       # Return-volume correlation
+qex("ts_beta(returns(1), returns(1, 'market'), 252)")           # Market beta
+qex("ts_beta_shrunk(returns(1), returns(1, 'market'), 252)")    # ... shrunk
+qex("ts_beta(winsorize(returns(1), 0.01), returns(1, 'market'), 252)")  # ... less moved by jump days
 ```
 
 ### Exponential Weighted
@@ -168,12 +188,37 @@ Operate across tickers for each day independently.
 | `winsorize(x, limit)` | Cap at percentiles (e.g., 0.05 caps at 5th/95th) |
 | `scale(x)` | Scale so absolute values sum to 1 |
 | `truncate(x, max)` | Clip to [-max, max] |
+| `regression_neut(y, x)` | Residual of y on x (with intercept), fit across names each day |
 
 ```python
 qex("rank(returns(20))")  # Higher return → higher rank
 qex("rank(-returns(20))")  # Higher return → lower rank (reversal)
 qex("zscore(returns(20))")
 qex("winsorize(returns(1), 0.01)")  # Cap 1% tails
+qex("regression_neut(rank(returns(20)), ts_beta_shrunk(returns(1), returns(1, 'market'), 252))")  # momentum, beta out
+```
+
+`regression_neut(y, x)` is ordinary least squares on purpose: only OLS residuals have exactly
+zero covariance with x, which is what "neutral to x" means. Names where either input is NaN
+are NaN. Restrict both inputs to the universe you trade. Inside a book built with
+`BookSettings(universe=..., mask_cross_section=True)` this happens automatically; otherwise the fit runs
+over every name with data, and a book later restricted to members is not neutral among them. The expression is then neutral; the book is only close
+to it, because truncation and rescaling come after.
+
+### The cross-sectional universe
+
+Cross-sectional operators compare names with each other, so which names they compare matters.
+By default it is every name with data. Inside `cross_section_universe(mask)`, or in a book
+with `BookSettings(universe=..., mask_cross_section=True)`, they compare only the names in
+the universe that day and give NaN outside it. Time-series operators are not restricted: a
+name that joined today still has its past returns, volatility and beta. One consequence: a
+time-series operator over a cross-sectional result, such as `ts_mean(rank(x), 20)`, has no
+history for a name from before it joined.
+
+```python
+from qex import cross_section_universe
+with cross_section_universe(data['member'].notna()):
+    r = qex("rank(returns(5))").evaluate(data)   # ranked among members
 ```
 
 !!! warning "rank() is Ascending"
