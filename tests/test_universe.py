@@ -134,9 +134,10 @@ def test_ts_beta_shrunk_prior_from_universe(uni_data):
 
 def test_build_book_masking(uni_data):
     data = uni_data
-    s = BookSettings(delay=1, universe='member', truncation=0.2)
+    s = BookSettings(delay=1, universe='member', truncation=0.2, mask_cross_section=False)
     off = build_book(qex("power(rank(returns(5)), 3)"), data, s)
-    on = build_book(qex("power(rank(returns(5)), 3)"), data, BookSettings(delay=1, universe='member', truncation=0.2, mask_cross_section=True))
+    on = build_book(qex("power(rank(returns(5)), 3)"), data, BookSettings(delay=1, universe='member', truncation=0.2))
+    assert BookSettings().mask_cross_section                      # on by default
     # the masked book equals a book from the same signal computed by hand among members
     x = qex("returns(5)").evaluate(data).where(_members(data))
     manual = build_book(qex("field('r')"), {**data, 'r': x.rank(axis=1, pct=True) ** 3}, s)
@@ -148,6 +149,9 @@ def test_build_book_masking(uni_data):
     pd.testing.assert_frame_equal(off, again)
 
 
-def test_mask_cross_section_needs_universe():
-    with pytest.raises(ValueError, match="needs a universe"):
-        BookSettings(mask_cross_section=True)
+def test_mask_cross_section_without_universe_has_no_effect(uni_data):
+    data = uni_data
+    e = qex("power(rank(returns(5)), 3)")
+    a = build_book(e, data, BookSettings(universe=None, truncation=0.2))
+    b = build_book(e, data, BookSettings(universe=None, truncation=0.2, mask_cross_section=False))
+    pd.testing.assert_frame_equal(a, b)

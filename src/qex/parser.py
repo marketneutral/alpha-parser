@@ -154,6 +154,9 @@ class QexParser:
         # Reset variables for each parse
         self.variables = {}
 
+        # Whitespace is insignificant: line breaks may fall anywhere, even after an operator
+        expression = _collapse_whitespace(expression)
+
         # Handle let...in syntax
         expression = expression.strip()
         if expression.startswith('let '):
@@ -343,6 +346,12 @@ class QexParser:
             raise ValueError(f"Unknown variable: {name}")
         else:
             return self._visit(node)
+
+
+def _collapse_whitespace(expression: str) -> str:
+    """Turn every run of whitespace outside quoted strings into one space."""
+    parts = re.split(r"""('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")""", expression)
+    return "".join(p if i % 2 else re.sub(r"\s+", " ", p) for i, p in enumerate(parts))
 
 
 # Backwards compatibility alias

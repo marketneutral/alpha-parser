@@ -709,10 +709,20 @@ result = Backtest(signal, settings=settings).run(data)
 print(result.fitness, result.margin_bps)
 ```
 
-`mask_cross_section=True` makes the signal's cross-sectional operators (`rank`, `demean`,
+With a universe set, the signal's cross-sectional operators (`rank`, `demean`,
 `regression_neut`, the group operators, ...) compare only the names in the universe that day, as
-BRAIN does; time-series operators still see every name's full history. It is off by default, so
-existing books are unchanged.
+BRAIN does; time-series operators still see every name's full history.
+`BookSettings(mask_cross_section=False)` applies the universe to the finished signal only, which
+reproduces books from before 0.5.
+
+Dollar-neutral is not beta-neutral. To take market beta out of a signal:
+
+```python
+data["market"] = spy_close   # a date-indexed Series
+signal = qex("regression_neut(rank(-returns(5)), ts_beta_shrunk(returns(1), returns(1, 'market'), 252))")
+```
+
+See the Market Beta guide for estimating, shrinking and removing beta.
 
 Without `settings`, `Backtest` behaves as before. `build_book`, `turnover`, `fitness` and
 `margin_bps` are also available on their own; see the backtesting guide.

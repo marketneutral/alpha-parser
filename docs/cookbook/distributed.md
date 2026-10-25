@@ -19,7 +19,7 @@ graph.add_signal(qex("rank(-returns(5))"), name="reversal")
 
 # See what's shared
 print(graph.stats())
-# {'total_nodes': 7, 'output_signals': 3, 'leaf_nodes': 2, 'shared_nodes': 1}
+# {'total_nodes': 8, 'output_signals': 3, 'leaf_nodes': 3, 'shared_nodes': 1}
 
 # Compute all signals
 results = graph.compute(data)

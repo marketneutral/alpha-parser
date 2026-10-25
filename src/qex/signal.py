@@ -108,6 +108,14 @@ class Signal(ABC):
         from .operators import Div, _ensure_signal
         return Div(self, _ensure_signal(other))
 
+    def __pow__(self, other):
+        from .operators import Constant, Power
+        if isinstance(other, Constant):
+            other = other.value
+        if isinstance(other, Signal):
+            raise TypeError("The exponent of ** must be a number, as in power(x, n)")
+        return Power(self, other)
+
     def __radd__(self, other):
         from .operators import Add, _ensure_signal
         return Add(_ensure_signal(other), self)

@@ -19,10 +19,10 @@ qex("rank(-returns(5) / volatility(20)) - 0.5")
 
 ## Volume-Weighted Reversal
 
-More conviction when volume is high:
+More conviction when volume is high relative to its norm:
 
 ```python
-qex("rank(-returns(5) * (volume(5) / adv(20))) - 0.5")
+qex("rank(-returns(5) * (volume(5) / volume(60))) - 0.5")
 ```
 
 ## Z-Score Reversal
@@ -63,9 +63,8 @@ qex("""
 """)
 ```
 
-This buys:
-- Oversold stocks in uptrends
-- Avoids catching falling knives in downtrends
+In an uptrend this buys short-term losers (dips). In a downtrend the sign flips: it buys
+short-term *winners*, so it never buys a stock that is falling in a falling trend.
 
 ## Bollinger Band Reversion
 

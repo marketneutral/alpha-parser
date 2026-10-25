@@ -41,10 +41,9 @@ print(result.tail())
 
 Output:
 ```
-            AAPL      MSFT      GOOG      AMZN
-2020-12-24  0.0312   -0.0187    0.0456   -0.0234
-2020-12-28  0.0289   -0.0145    0.0512   -0.0189
-...
+              AAPL    MSFT    GOOG    AMZN
+2020-12-16  0.0901 -0.0524 -0.0807  0.0294
+2020-12-17  0.0794 -0.0154 -0.0536  0.0348
 ```
 
 ## 3. Rank Cross-Sectionally
@@ -58,46 +57,41 @@ result = signal.evaluate(data)
 ## 4. Convert to Weights
 
 ```python
-# Center for long/short, normalize to sum to 1
-signal = qex("rank(returns(20)) - 0.5")
+# Demean for long/short (longs and shorts equal), then scale so |weights| sum to 1
+signal = qex("demean(rank(returns(20)))")
 weights = signal.to_weights(data, normalize=True)
 
-print(weights.tail())
+print(weights.tail(2))
 ```
 
 Output:
 ```
-            AAPL      MSFT      GOOG      AMZN
-2020-12-28 -0.167   -0.333    0.333     0.167
-...
+             AAPL   MSFT   GOOG   AMZN
+2020-12-16  0.375 -0.125 -0.375  0.125
+2020-12-17  0.375 -0.125 -0.375  0.125
 ```
+
+`rank()` is between 0 and 1, so `rank(x) - 0.5` is only roughly centred: its mean is
+`1 / (2n)` over `n` names, which matters for small universes. `demean()` centres exactly.
 
 ## 5. Run a Backtest
 
 ```python
 from qex import Backtest
 
-signal = qex("rank(returns(20)) - 0.5")
+signal = qex("demean(rank(returns(20)))")
 bt = Backtest(signal, transaction_cost=0.001)
 result = bt.run(data)
 
 print(result.summary())
 ```
 
-Output:
-```
-==================================================
-BACKTEST RESULTS
-==================================================
+The summary reports performance (total and annual return, volatility, Sharpe, Sortino,
+Calmar, maximum drawdown, return on gross), position counts and turnover, and the deepest
+drawdowns. On this random data there is nothing to find, so expect a Sharpe near zero.
 
-Performance Metrics:
-  Total Return:        8.42%
-  Annual Return:       8.42%
-  Annual Volatility:  12.31%
-  Sharpe Ratio:        0.68
-  Max Drawdown:        9.21%
-==================================================
-```
+For books built the way *Finding Alphas* and WorldQuant BRAIN simulate them (delay,
+universe, neutralization, truncation), see [Backtesting](../guides/backtesting.md#book-settings-finding-alphas).
 
 ## 6. Use Compute Context for Caching
 
@@ -119,4 +113,6 @@ with compute_context():
 
 - [Concepts](concepts.md) - Understand signals, operations, and evaluation
 - [Data Format](../guides/data-format.md) - Detailed data requirements
+- [Backtesting](../guides/backtesting.md) - Books, costs and statistics
+- [Market Beta](../guides/market-beta.md) - Measuring and removing market exposure
 - [Operations Reference](../reference/operations.md) - All available operations

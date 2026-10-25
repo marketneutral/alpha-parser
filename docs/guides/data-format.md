@@ -4,7 +4,7 @@ How to structure data for qex.
 
 ## Basic Structure
 
-Data is a `Dict[str, pd.DataFrame]`:
+Data is a dict of fields:
 
 ```python
 data = {
@@ -14,11 +14,14 @@ data = {
 }
 ```
 
-Each DataFrame must have:
+Each DataFrame field has:
 
 - **Index**: `DatetimeIndex` (trading dates)
 - **Columns**: Ticker symbols
 - **Values**: Float (use `NaN` for missing)
+
+A field with a single value per day can instead be a date-indexed `pd.Series`
+(see [Date-only fields](#date-only-fields-and-the-market)).
 
 ## Required Fields
 
@@ -64,10 +67,28 @@ tickers of `close` (dates the series lacks are NaN).
 ```python
 data['market'] = spy_total_return_close     # pd.Series, date-indexed
 
-qex("returns(1, 'market')")                                     # market daily return
-qex("ts_beta(returns(1), returns(1, 'market'), 252)")           # each name's beta
-qex("ts_corr(returns(1), returns(1, 'market'), 252)")             # each name's market correlation
+qex("returns(1, 'market')")                              # market daily return
+qex("ts_beta(returns(1), returns(1, 'market'), 252)")    # each name's beta
+qex("ts_corr(returns(1), returns(1, 'market'), 252)")    # each name's market correlation
 ```
+
+Use a total-return series (dividends reinvested), so that ex-dividend days are not market
+moves. [Market Beta](market-beta.md) covers choosing the market and estimating beta.
+
+## Universe
+
+A universe field marks which names are in the investable universe each day: 1 (or any
+finite value) for members, NaN otherwise. `BookSettings(universe='member')` uses it both
+to restrict the book and to restrict the signal's cross-sectional operators to the day's
+members (see [Backtesting](backtesting.md#the-universe-inside-the-signal)).
+
+```python
+data['member'] = member_df     # same index and columns as close; 1.0 or NaN
+```
+
+Keep every name's full price history in `close`, including days before it joined and after
+it left: time-series operators use it, so a new member has a beta and a volatility on its
+first day.
 
 ## Group Data
 
@@ -191,7 +212,8 @@ result = signal.evaluate(data)
 
 ## Data Alignment
 
-All DataFrames must be aligned:
+All DataFrame fields should share the same index and columns (a date-indexed Series is
+aligned to `close` automatically):
 
 ```python
 # Check alignment

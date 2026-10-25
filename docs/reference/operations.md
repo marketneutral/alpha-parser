@@ -30,13 +30,14 @@ equal-weight index of the universe, a future.
 |-----------|-------------|
 | `returns(period, field='close')` | Returns over period, of `close` or another price field |
 | `volatility(period, field='close')` | Rolling annualized volatility |
-| `volume(period)` | Rolling average volume |
+| `volume(period)` | Rolling average volume, in shares |
 | `adv(period)` | Average dollar volume (price × volume) |
 
 ```python
-qex("returns(20)")         # 20-day returns
-qex("volatility(60)")      # 60-day annualized vol
-qex("volume(5) / adv(20)") # Volume ratio
+qex("returns(20)")             # 20-day returns
+qex("volatility(60)")          # 60-day annualized vol
+qex("volume(5) / volume(60)")  # Recent volume relative to its norm
+qex("returns(1, 'market')")    # The market's daily return
 ```
 
 ## Math Operations
@@ -112,17 +113,16 @@ qex("ts_rank(volume(1), 20)")  # Where does today's volume rank vs last 20 days?
 before it gives a value. With the default, a name 20 days after listing gets a 252-day beta
 from 20 days; raise it (`ts_beta(returns(1), returns(1, 'market'), 252, 126)`) to require more.
 
-`ts_beta_shrunk` pulls each name's beta b toward the day's mean beta by its own noise:
-`w * b + (1 - w) * mean(b)`, `w = var(b) / (var(b) + se(b)^2)`, where `var(b)` is the
-cross-sectional variance and `se(b)^2` the name's sampling variance. Short or noisy histories
-move most. A fixed blend such as Bloomberg's `0.67 b + 0.33` is a linear transform: it rescales
-betas but keeps their order, so it changes nothing that `rank` or `regression_neut` sees.
+`ts_beta_shrunk` pulls each name's beta `b` toward the day's mean beta in proportion to its
+own sampling error (Vasicek 1973): `w * b + (1 - w) * mean(b)`, with
+`w = var(b) / (var(b) + se(b)^2)`. Short or noisy histories move most. See
+[Market Beta](../guides/market-beta.md#shrinking-beta) for the derivation, and why a fixed
+blend like Bloomberg's `0.67 b + 0.33` changes nothing that `rank` or `regression_neut` sees.
 
 ```python
 qex("ts_corr(returns(1), volume(1), 60)")                       # Return-volume correlation
 qex("ts_beta(returns(1), returns(1, 'market'), 252)")           # Market beta
 qex("ts_beta_shrunk(returns(1), returns(1, 'market'), 252)")    # ... shrunk
-qex("ts_beta(winsorize(returns(1), 0.01), returns(1, 'market'), 252)")  # ... less moved by jump days
 ```
 
 ### Exponential Weighted
@@ -199,21 +199,27 @@ qex("regression_neut(rank(returns(20)), ts_beta_shrunk(returns(1), returns(1, 'm
 ```
 
 `regression_neut(y, x)` is ordinary least squares on purpose: only OLS residuals have exactly
-zero covariance with x, which is what "neutral to x" means. Names where either input is NaN
-are NaN. Restrict both inputs to the universe you trade. Inside a book built with
-`BookSettings(universe=..., mask_cross_section=True)` this happens automatically; otherwise the fit runs
-over every name with data, and a book later restricted to members is not neutral among them. The expression is then neutral; the book is only close
-to it, because truncation and rescaling come after.
+zero covariance with `x`, which is what "neutral to `x`" means. Names where either input is NaN
+are NaN. The fit runs over the cross-sectional universe (below), which `build_book` sets from
+`BookSettings(universe=...)`. The signal is then exactly neutral; the book is only close to it,
+because truncation and rescaling come after. See [Market Beta](../guides/market-beta.md).
 
 ### The cross-sectional universe
 
 Cross-sectional operators compare names with each other, so which names they compare matters.
-By default it is every name with data. Inside `cross_section_universe(mask)`, or in a book
-with `BookSettings(universe=..., mask_cross_section=True)`, they compare only the names in
-the universe that day and give NaN outside it. Time-series operators are not restricted: a
-name that joined today still has its past returns, volatility and beta. One consequence: a
-time-series operator over a cross-sectional result, such as `ts_mean(rank(x), 20)`, has no
+In a book built with `BookSettings(universe=...)`, and inside `cross_section_universe(mask)`,
+they compare only the names in the universe that day and give NaN outside it. This applies to
+`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `regression_neut`, the group
+operators and the prior of `ts_beta_shrunk`. Evaluated on its own, with no universe set, a
+signal compares every name with data.
+
+Time-series operators are not restricted: a name that joined today still has its past
+returns, volatility and beta. One consequence: a time-series operator over a cross-sectional
+result, such as `ts_mean(rank(x), 20)` or `ts_beta(winsorize(returns(1), 0.01), ...)`, has no
 history for a name from before it joined.
+
+`BookSettings(mask_cross_section=False)` turns this off, so the universe applies only to the
+finished signal, as in qex before 0.5.
 
 ```python
 from qex import cross_section_universe
@@ -251,7 +257,7 @@ Use `group()` with `where()` to filter signals by sector membership:
 # Price-to-book isn't meaningful for Financials - zero them out
 qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
 
-# Only trade Technology stocks (long-only)
+# A signal for Technology stocks only (0 elsewhere)
 qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
 ```
 
@@ -296,7 +302,7 @@ Standard Python operators work:
 
 ```python
 qex("returns(20) / volatility(60)")
-qex("(returns(5) > 0) & (volume(1) > adv(20))")
+qex("(returns(5) > 0) & (volume(1) > volume(20))")
 ```
 
 ## Variable Bindings
@@ -317,3 +323,4 @@ Rules:
 - Later bindings can reference earlier ones
 - Variable names cannot shadow function names
 - Variables are scoped to the expression
+- Whitespace, including line breaks, is insignificant outside quoted strings

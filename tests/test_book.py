@@ -162,7 +162,8 @@ def test_matches_alpha_lab_reference(book_data, expr):
     with compute_context():
         raw = delay(alpha(expr) + 0 * close() + 0 * field("member"), 1).evaluate(book_data)
     want = _lab_to_book(raw.where(book_data["close"].notna()).loc['2020-03-01':])
-    got = build_book(alpha(expr), book_data, BookSettings(delay=1, universe='member', truncation=0.05),
+    # alpha_lab's construction predates the cross-sectional universe: the universe applies to the finished signal
+    got = build_book(alpha(expr), book_data, BookSettings(delay=1, universe='member', truncation=0.05, mask_cross_section=False),
                      start='2020-03-01')
     pd.testing.assert_frame_equal(got, want, check_exact=False, rtol=0, atol=1e-8)
 
