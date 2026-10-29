@@ -206,3 +206,22 @@ def test_ts_beta_shrunk_pulls_noisy_betas_in(mkt_data):
     m2 = r2.mean()
     pull = 1 - (s2 - m2).abs() / (r2 - m2).abs()
     assert pull['T0'] > 3 * pull.drop('T0').median()
+
+
+def test_ts_beta_uses_paired_days_only(mkt_data):
+    # T3 has a 10-day gap (11 missing returns); var(x) must skip those days too, not just cov(y, x)
+    data, _ = mkt_data
+    y = qex("returns(1)").evaluate(data)
+    x = qex("returns(1, 'market')").evaluate(data)
+    both = y.notna() & x.notna()
+    yp, xp = y.where(both), x.where(both)
+    out = qex("ts_beta(returns(1), returns(1, 'market'), 60)").evaluate(data)
+    ref = yp.rolling(60, min_periods=20).cov(xp) / xp.rolling(60, min_periods=20).var()
+    np.testing.assert_allclose(out.to_numpy(), ref.to_numpy(), rtol=1e-12, equal_nan=True)
+    ew = qex("ts_beta_ewma(returns(1), returns(1, 'market'), 20)").evaluate(data)
+    ref_ew = yp.ewm(halflife=20).cov(xp) / xp.ewm(halflife=20).var()
+    np.testing.assert_allclose(ew.to_numpy(), ref_ew.to_numpy(), rtol=1e-12, equal_nan=True)
+    # the unpaired version differs on the gapped name inside the window, and matches elsewhere
+    unpaired = y.rolling(60, min_periods=20).cov(x) / x.rolling(60, min_periods=20).var()
+    assert not np.allclose(out['T3'].iloc[70:100], unpaired['T3'].iloc[70:100])
+    np.testing.assert_allclose(out['T1'].to_numpy(), unpaired['T1'].to_numpy(), rtol=1e-12, equal_nan=True)

@@ -297,7 +297,9 @@ class EwmaCov(Signal):
 class TsBeta(Signal):
     """Rolling beta (regression coefficient) of signal1 on signal2.
 
-    Computes: cov(y, x) / var(x) where y=signal1, x=signal2.
+    Computes: cov(y, x) / var(x) where y=signal1, x=signal2, the OLS slope with an intercept.
+    Both moments use only the days where y and x both have a value, so a gap in y (a late
+    listing, a halt) doesn't leave var(x) spanning days the covariance never saw.
     Useful for hedge ratios, market beta, factor exposures.
     """
 
@@ -310,6 +312,8 @@ class TsBeta(Signal):
     def _compute(self, data):
         y = self.signal1.evaluate(data)
         x = self.signal2.evaluate(data)
+        both = y.notna() & x.notna()
+        y, x = y.where(both), x.where(both)                      # paired observations only
         cov = y.rolling(self.period, min_periods=self.min_periods).cov(x)
         var = x.rolling(self.period, min_periods=self.min_periods).var()
         return cov / var
@@ -366,7 +370,8 @@ class TsBetaShrunk(Signal):
 class TsBetaEwma(Signal):
     """EWMA-weighted beta (regression coefficient) of signal1 on signal2.
 
-    Computes: ewma_cov(y, x) / ewma_var(x) where y=signal1, x=signal2.
+    Computes: ewma_cov(y, x) / ewma_var(x) where y=signal1, x=signal2, on the days where
+    both have a value (see TsBeta).
     More robust than equal-weighted rolling beta, gives more weight to recent observations.
     """
 
@@ -378,6 +383,8 @@ class TsBetaEwma(Signal):
     def _compute(self, data):
         y = self.signal1.evaluate(data)
         x = self.signal2.evaluate(data)
+        both = y.notna() & x.notna()
+        y, x = y.where(both), x.where(both)                      # paired observations only
         cov = y.ewm(halflife=self.halflife).cov(x)
         var = x.ewm(halflife=self.halflife).var()
         return cov / var
