@@ -225,3 +225,46 @@ def test_ts_beta_uses_paired_days_only(mkt_data):
     unpaired = y.rolling(60, min_periods=20).cov(x) / x.rolling(60, min_periods=20).var()
     assert not np.allclose(out['T3'].iloc[70:100], unpaired['T3'].iloc[70:100])
     np.testing.assert_allclose(out['T1'].to_numpy(), unpaired['T1'].to_numpy(), rtol=1e-12, equal_nan=True)
+
+
+def test_ts_intercept_matches_ols_with_gaps(mkt_data):
+    data, _ = mkt_data
+    a = qex("ts_intercept(returns(1), returns(1, 'market'), 60)").evaluate(data)
+    b = qex("ts_beta(returns(1), returns(1, 'market'), 60)").evaluate(data)
+    y = qex("returns(1)").evaluate(data)
+    x = qex("returns(1, 'market')").evaluate(data)
+    for t, i in [('T3', 80), ('T7', 230), ('T12', 399)]:              # T3 / T7 windows straddle their gaps
+        yw, xw = y[t].iloc[i - 59:i + 1], x[t].iloc[i - 59:i + 1]
+        ok = yw.notna() & xw.notna()
+        slope, icpt = np.polyfit(xw[ok], yw[ok], 1)
+        assert a[t].iloc[i] == pytest.approx(icpt, rel=1e-9, abs=1e-12)
+        assert b[t].iloc[i] == pytest.approx(slope, rel=1e-9)
+    assert a.isna().equals(b.isna())
+
+
+def test_ts_intercept_recovers_alpha():
+    rng = np.random.default_rng(5)
+    dates = pd.date_range('2020-01-01', periods=600, freq='B')
+    tickers = [f'T{i}' for i in range(10)]
+    m = rng.normal(0.0005, 0.01, len(dates))
+    alphas = np.linspace(-0.001, 0.001, len(tickers))
+    r = alphas + m[:, None] * 1.2 + rng.normal(0, 0.002, (len(dates), len(tickers)))
+    data = {'close': pd.DataFrame(100 * np.exp(np.cumsum(r, axis=0)), index=dates, columns=tickers),
+            'market': pd.Series(100 * np.exp(np.cumsum(m)), index=dates)}
+    a = qex("ts_intercept(log(close() / delay(close(), 1)), log(market() / delay(market(), 1)), 500)").evaluate(data)
+    np.testing.assert_allclose(a.iloc[-1].to_numpy(), alphas, atol=2e-4)
+
+
+def test_ts_intercept_shrunk_goes_with_shrunk_beta(mkt_data):
+    # the shrunk line runs through the window means: a_s + b_s * mean(x) == mean(y) == a + b * mean(x)
+    data, _ = mkt_data
+    late = data['close'].copy(); late.iloc[:-25, 0] = np.nan             # T0 is shrunk hard
+    d = {**data, 'close': late}
+    e = "returns(1), returns(1, 'market'), 252"
+    a, b = (qex(f"{f}({e})").evaluate(d) for f in ('ts_intercept', 'ts_beta'))
+    a_s, b_s = (qex(f"{f}({e})").evaluate(d) for f in ('ts_intercept_shrunk', 'ts_beta_shrunk'))
+    x = qex("returns(1, 'market')").evaluate(d).where(qex("returns(1)").evaluate(d).notna())
+    mx = x.rolling(252, min_periods=20).mean()
+    np.testing.assert_allclose((a_s + b_s * mx).to_numpy(), (a + b * mx).to_numpy(), rtol=1e-9, atol=1e-14, equal_nan=True)
+    assert a_s.iloc[-1]['T0'] != pytest.approx(a.iloc[-1]['T0'])
+    assert qex(f"ts_intercept_shrunk({e}, 60)").min_periods == 60

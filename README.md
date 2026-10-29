@@ -487,6 +487,8 @@ qex/
 - `ts_cov(signal1, signal2, period[, min_periods])` - Rolling covariance
 - `ts_beta(signal1, signal2, period[, min_periods])` - Rolling beta (cov/var), useful for hedge ratios. `min_periods` defaults to min(20, period)
 - `ts_beta_shrunk(signal1, signal2, period[, min_periods])` - Rolling beta shrunk toward the day's cross-sectional mean by its own sampling error (Vasicek): short or noisy histories move most
+- `ts_intercept(signal1, signal2, period[, min_periods])` - Rolling regression intercept, `mean(y) - ts_beta(y, x) * mean(x)` over the paired days (e.g. daily alpha vs the market)
+- `ts_intercept_shrunk(signal1, signal2, period[, min_periods])` - Intercept that goes with `ts_beta_shrunk`: `mean(y) - ts_beta_shrunk(y, x) * mean(x)`
 - `ewma(signal, halflife)` - Exponentially weighted moving average
 - `ewma_var(signal, halflife)` - EWMA variance
 - `ewma_cov(signal1, signal2, halflife)` - EWMA covariance

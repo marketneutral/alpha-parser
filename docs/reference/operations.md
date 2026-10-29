@@ -108,10 +108,19 @@ qex("ts_rank(volume(1), 20)")  # Where does today's volume rank vs last 20 days?
 | `ts_cov(x, y, period[, min_periods])` | Rolling covariance |
 | `ts_beta(y, x, period[, min_periods])` | Rolling beta (cov/var) |
 | `ts_beta_shrunk(y, x, period[, min_periods])` | Rolling beta, Vasicek-shrunk toward the cross-sectional mean |
+| `ts_intercept(y, x, period[, min_periods])` | Rolling regression intercept: `mean(y) - ts_beta(y, x) * mean(x)` |
+| `ts_intercept_shrunk(y, x, period[, min_periods])` | Intercept that goes with `ts_beta_shrunk` |
 
 `min_periods` (default `min(20, period)`) is the fewest paired observations a window needs
 before it gives a value. With the default, a name 20 days after listing gets a 252-day beta
 from 20 days; raise it (`ts_beta(returns(1), returns(1, 'market'), 252, 126)`) to require more.
+Every moment in these fits (means, variance, covariance) uses only the days where both `y`
+and `x` have a value. That is why `ts_intercept` is not the same as
+`ts_mean(y, n) - ts_beta(y, x, n) * ts_mean(x, n)` on a name with gaps: there `ts_mean(x, n)`
+also averages the days `y` is missing.
+
+`ts_intercept_shrunk` is `mean(y) - ts_beta_shrunk(y, x) * mean(x)`, the best-fitting
+intercept given the shrunk slope; the intercept itself is not shrunk.
 
 `ts_beta_shrunk` pulls each name's beta `b` toward the day's mean beta in proportion to its
 own sampling error (Vasicek 1973): `w * b + (1 - w) * mean(b)`, with
@@ -123,6 +132,7 @@ blend like Bloomberg's `0.67 b + 0.33` changes nothing that `rank` or `regressio
 qex("ts_corr(returns(1), volume(1), 60)")                       # Return-volume correlation
 qex("ts_beta(returns(1), returns(1, 'market'), 252)")           # Market beta
 qex("ts_beta_shrunk(returns(1), returns(1, 'market'), 252)")    # ... shrunk
+qex("ts_intercept(returns(1), returns(1, 'market'), 252)")      # Daily alpha vs the market
 ```
 
 ### Exponential Weighted

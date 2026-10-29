@@ -54,7 +54,7 @@ PYTHONPATH=src pytest tests/ -v
 `log(x)`, `abs(x)`, `sign(x)`, `sqrt(x)`, `power(x, n)`, `max(x, y)`, `min(x, y)`
 
 ### Time-Series
-`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ewma_var`, `ewma_cov`, `ts_beta`, `ts_beta_ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
+`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ewma_var`, `ewma_cov`, `ts_beta`, `ts_beta_shrunk`, `ts_beta_ewma`, `ts_intercept`, `ts_intercept_shrunk`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
 
 ### Event-Based (for sparse data)
 `ts_mean_events`, `ts_std_events`, `ts_sum_events`, `ts_count_events`
