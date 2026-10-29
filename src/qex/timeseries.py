@@ -294,10 +294,18 @@ class EwmaCov(Signal):
         return ('EwmaCov', self.signal1._cache_key(), self.signal2._cache_key(), self.halflife)
 
 
+def _paired(y: pd.DataFrame, x: pd.DataFrame):
+    """y and x masked to the days where both have a value."""
+    both = y.notna() & x.notna()
+    return y.where(both), x.where(both)
+
+
 class TsBeta(Signal):
     """Rolling beta (regression coefficient) of signal1 on signal2.
 
-    Computes: cov(y, x) / var(x) where y=signal1, x=signal2.
+    Computes: cov(y, x) / var(x) where y=signal1, x=signal2, the OLS slope with an intercept.
+    Both moments use only the days where y and x both have a value, so a gap in y (a late
+    listing, a halt) doesn't leave var(x) spanning days the covariance never saw.
     Useful for hedge ratios, market beta, factor exposures.
     """
 
@@ -308,14 +316,38 @@ class TsBeta(Signal):
         self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
-        y = self.signal1.evaluate(data)
-        x = self.signal2.evaluate(data)
+        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
+        return self._beta(y, x)
+
+    def _beta(self, y, x):
         cov = y.rolling(self.period, min_periods=self.min_periods).cov(x)
         var = x.rolling(self.period, min_periods=self.min_periods).var()
         return cov / var
 
     def _cache_key(self):
         return ('TsBeta', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
+
+
+class TsIntercept(TsBeta):
+    """Rolling intercept of signal1 regressed on signal2: mean(y) - ts_beta(y, x) * mean(x).
+
+    The constant in the same window fit as ts_beta, over the same paired days. For stock
+    returns on the market this is the daily alpha: the mean return beta doesn't explain.
+    The slope is a ts_beta node, so with `let b = ts_beta(...), a = ts_intercept(...)` in a
+    compute_context the fit runs once.
+    """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
+        super().__init__(signal1, signal2, period, min_periods)
+        self.beta = TsBeta(signal1, signal2, period, min_periods)
+
+    def _compute(self, data):
+        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
+        roll = lambda v: v.rolling(self.period, min_periods=self.min_periods).mean()
+        return roll(y) - self.beta.evaluate(data) * roll(x)
+
+    def _cache_key(self):
+        return ('TsIntercept', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
 
 
 class TsBetaShrunk(Signal):
@@ -343,12 +375,12 @@ class TsBetaShrunk(Signal):
         self.min_periods = max(_get_min_periods(period, min_periods), 3)
 
     def _compute(self, data):
-        y = self.signal1.evaluate(data)
-        x = self.signal2.evaluate(data)
-        both = y.notna() & x.notna()
-        y, x = y.where(both), x.where(both)                      # paired observations only
+        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
+        return self._beta(y, x)
+
+    def _beta(self, y, x):
         roll = lambda v: v.rolling(self.period, min_periods=self.min_periods)
-        n = roll(both.astype(float).where(both)).count()
+        n = roll(x).count()
         vx, vy, cov = roll(x).var(), roll(y).var(), roll(y).cov(x)
         vx = vx.where(vx > 0)
         b = cov / vx
@@ -363,10 +395,33 @@ class TsBetaShrunk(Signal):
         return ('TsBetaShrunk', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
 
 
+class TsInterceptShrunk(TsBetaShrunk):
+    """Rolling intercept that goes with ts_beta_shrunk: mean(y) - ts_beta_shrunk(y, x) * mean(x).
+
+    Given the shrunk slope, this is the intercept that best fits the window (the least-squares
+    line through the means with that slope), so y - a - b * x uses one consistent fit. The
+    intercept is not shrunk itself: it moves only by (b - b_shrunk) * mean(x). The slope is a
+    ts_beta_shrunk node, shared with any ts_beta_shrunk of the same arguments (see TsIntercept).
+    """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
+        super().__init__(signal1, signal2, period, min_periods)
+        self.beta = TsBetaShrunk(signal1, signal2, period, min_periods)
+
+    def _compute(self, data):
+        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
+        roll = lambda v: v.rolling(self.period, min_periods=self.min_periods).mean()
+        return roll(y) - self.beta.evaluate(data) * roll(x)
+
+    def _cache_key(self):
+        return ('TsInterceptShrunk', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
+
+
 class TsBetaEwma(Signal):
     """EWMA-weighted beta (regression coefficient) of signal1 on signal2.
 
-    Computes: ewma_cov(y, x) / ewma_var(x) where y=signal1, x=signal2.
+    Computes: ewma_cov(y, x) / ewma_var(x) where y=signal1, x=signal2, on the days where
+    both have a value (see TsBeta).
     More robust than equal-weighted rolling beta, gives more weight to recent observations.
     """
 
@@ -376,8 +431,7 @@ class TsBetaEwma(Signal):
         self.halflife = halflife
 
     def _compute(self, data):
-        y = self.signal1.evaluate(data)
-        x = self.signal2.evaluate(data)
+        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
         cov = y.ewm(halflife=self.halflife).cov(x)
         var = x.ewm(halflife=self.halflife).var()
         return cov / var
@@ -571,6 +625,16 @@ def ts_beta(signal1: Signal, signal2: Signal, period: int, min_periods: int = No
 def ts_beta_shrunk(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsBetaShrunk:
     """Create a TsBetaShrunk signal (rolling beta, Vasicek-shrunk toward the day's cross-sectional mean)."""
     return TsBetaShrunk(signal1, signal2, period, min_periods)
+
+
+def ts_intercept(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsIntercept:
+    """Create a TsIntercept signal (rolling intercept: mean(y) - ts_beta(y, x) * mean(x))."""
+    return TsIntercept(signal1, signal2, period, min_periods)
+
+
+def ts_intercept_shrunk(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsInterceptShrunk:
+    """Create a TsInterceptShrunk signal (rolling intercept that goes with ts_beta_shrunk)."""
+    return TsInterceptShrunk(signal1, signal2, period, min_periods)
 
 
 def ts_beta_ewma(signal1: Signal, signal2: Signal, halflife: int) -> TsBetaEwma:

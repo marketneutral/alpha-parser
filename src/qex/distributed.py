@@ -76,27 +76,13 @@ class SignalGraph:
         return cache_key
 
     def _get_children(self, signal: Signal) -> List[Signal]:
-        """Extract child signals from a signal node."""
+        """Extract child signals from a signal node: every attribute holding a Signal (or a list of them)."""
         children = []
-
-        # Check common attribute patterns
-        if hasattr(signal, 'left') and isinstance(signal.left, Signal):
-            children.append(signal.left)
-        if hasattr(signal, 'right') and isinstance(signal.right, Signal):
-            children.append(signal.right)
-        if hasattr(signal, 'signal') and isinstance(signal.signal, Signal):
-            children.append(signal.signal)
-        if hasattr(signal, 'x') and isinstance(signal.x, Signal):
-            children.append(signal.x)
-        if hasattr(signal, 'y') and isinstance(signal.y, Signal):
-            children.append(signal.y)
-        if hasattr(signal, 'condition') and isinstance(signal.condition, Signal):
-            children.append(signal.condition)
-        if hasattr(signal, 'if_true') and isinstance(signal.if_true, Signal):
-            children.append(signal.if_true)
-        if hasattr(signal, 'if_false') and isinstance(signal.if_false, Signal):
-            children.append(signal.if_false)
-
+        for value in vars(signal).values():
+            if isinstance(value, Signal):
+                children.append(value)
+            elif isinstance(value, (list, tuple)):
+                children.extend(v for v in value if isinstance(v, Signal))
         return children
 
     def _format_key(self, key: tuple) -> str:

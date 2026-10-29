@@ -594,9 +594,25 @@ def factor_neutral_examples():
     print("    Note: Requires market returns in your data (e.g., SPY).")
 
     # ---------------------------------------------------------------------
+    # Residual Alpha (Regression Intercept)
+    # ---------------------------------------------------------------------
+    # The intercept of the same rolling fit is the mean return the market
+    # doesn't explain. ts_intercept reuses the ts_beta node, so binding both
+    # with let fits the regression once inside a compute_context.
+
+    print("\n5.5 Residual Alpha, Beta-Neutral")
+    print("    Formula: let y = returns(1), m = returns(1, 'market'),")
+    print("                 b = ts_beta_shrunk(y, m, 252),")
+    print("                 a = ts_intercept_shrunk(y, m, 252)")
+    print("             in regression_neut(rank(a), b)")
+    print("    Rationale: Rank stocks by their market alpha (the intercept),")
+    print("               then neutralize the book to their beta.")
+    print("    Note: Requires a 'market' price series in your data.")
+
+    # ---------------------------------------------------------------------
     # Multi-Factor Neutral (Advanced)
     # ---------------------------------------------------------------------
-    print("\n5.5 Multi-Factor Neutral Signal (Advanced)")
+    print("\n5.6 Multi-Factor Neutral Signal (Advanced)")
     print("    Approach: Use FactorRiskModel to compute factor exposures,")
     print("              then construct signal from residuals.")
     print("    See: qex.FactorRiskModel for implementation.")

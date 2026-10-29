@@ -206,3 +206,97 @@ def test_ts_beta_shrunk_pulls_noisy_betas_in(mkt_data):
     m2 = r2.mean()
     pull = 1 - (s2 - m2).abs() / (r2 - m2).abs()
     assert pull['T0'] > 3 * pull.drop('T0').median()
+
+
+def test_ts_beta_uses_paired_days_only(mkt_data):
+    # a 10-day hole in y's returns; var(x) must skip those days too, not just cov(y, x).
+    # The hole is put in the returns directly: older pandas pct_change pads over NaN prices.
+    data, _ = mkt_data
+    ret = data['close'].pct_change(fill_method=None)
+    ret.iloc[50:60, 3] = np.nan
+    mret = data['market'].pct_change()
+    d = {**data, 'ret': ret, 'mret': mret}
+    y, x = qex("field('ret')").evaluate(d), qex("field('mret')").evaluate(d)
+    both = y.notna() & x.notna()
+    yp, xp = y.where(both), x.where(both)
+    out = qex("ts_beta(field('ret'), field('mret'), 60)").evaluate(d)
+    ref = yp.rolling(60, min_periods=20).cov(xp) / xp.rolling(60, min_periods=20).var()
+    np.testing.assert_allclose(out.to_numpy(), ref.to_numpy(), rtol=1e-12, equal_nan=True)
+    ew = qex("ts_beta_ewma(field('ret'), field('mret'), 20)").evaluate(d)
+    ref_ew = yp.ewm(halflife=20).cov(xp) / xp.ewm(halflife=20).var()
+    np.testing.assert_allclose(ew.to_numpy(), ref_ew.to_numpy(), rtol=1e-12, equal_nan=True)
+    # the unpaired version differs on the gapped name inside the window, and matches elsewhere
+    unpaired = y.rolling(60, min_periods=20).cov(x) / x.rolling(60, min_periods=20).var()
+    assert not np.allclose(out['T3'].iloc[70:100], unpaired['T3'].iloc[70:100])
+    np.testing.assert_allclose(out['T1'].to_numpy(), unpaired['T1'].to_numpy(), rtol=1e-12, equal_nan=True)
+
+
+def test_ts_intercept_matches_ols_with_gaps(mkt_data):
+    data, _ = mkt_data
+    a = qex("ts_intercept(returns(1), returns(1, 'market'), 60)").evaluate(data)
+    b = qex("ts_beta(returns(1), returns(1, 'market'), 60)").evaluate(data)
+    y = qex("returns(1)").evaluate(data)
+    x = qex("returns(1, 'market')").evaluate(data)
+    for t, i in [('T3', 80), ('T7', 230), ('T12', 399)]:              # T3 / T7 windows straddle their gaps
+        yw, xw = y[t].iloc[i - 59:i + 1], x[t].iloc[i - 59:i + 1]
+        ok = yw.notna() & xw.notna()
+        slope, icpt = np.polyfit(xw[ok], yw[ok], 1)
+        assert a[t].iloc[i] == pytest.approx(icpt, rel=1e-9, abs=1e-12)
+        assert b[t].iloc[i] == pytest.approx(slope, rel=1e-9)
+    assert a.isna().equals(b.isna())
+
+
+def test_ts_intercept_recovers_alpha():
+    rng = np.random.default_rng(5)
+    dates = pd.date_range('2020-01-01', periods=600, freq='B')
+    tickers = [f'T{i}' for i in range(10)]
+    m = rng.normal(0.0005, 0.01, len(dates))
+    alphas = np.linspace(-0.001, 0.001, len(tickers))
+    r = alphas + m[:, None] * 1.2 + rng.normal(0, 0.002, (len(dates), len(tickers)))
+    data = {'close': pd.DataFrame(100 * np.exp(np.cumsum(r, axis=0)), index=dates, columns=tickers),
+            'market': pd.Series(100 * np.exp(np.cumsum(m)), index=dates)}
+    a = qex("ts_intercept(log(close() / delay(close(), 1)), log(market() / delay(market(), 1)), 500)").evaluate(data)
+    np.testing.assert_allclose(a.iloc[-1].to_numpy(), alphas, atol=2e-4)
+
+
+def test_ts_intercept_shrunk_goes_with_shrunk_beta(mkt_data):
+    # the shrunk line runs through the window means: a_s + b_s * mean(x) == mean(y) == a + b * mean(x)
+    data, _ = mkt_data
+    late = data['close'].copy(); late.iloc[:-25, 0] = np.nan             # T0 is shrunk hard
+    d = {**data, 'close': late}
+    e = "returns(1), returns(1, 'market'), 252"
+    a, b = (qex(f"{f}({e})").evaluate(d) for f in ('ts_intercept', 'ts_beta'))
+    a_s, b_s = (qex(f"{f}({e})").evaluate(d) for f in ('ts_intercept_shrunk', 'ts_beta_shrunk'))
+    x = qex("returns(1, 'market')").evaluate(d).where(qex("returns(1)").evaluate(d).notna())
+    mx = x.rolling(252, min_periods=20).mean()
+    np.testing.assert_allclose((a_s + b_s * mx).to_numpy(), (a + b * mx).to_numpy(), rtol=1e-9, atol=1e-14, equal_nan=True)
+    assert a_s.iloc[-1]['T0'] != pytest.approx(a.iloc[-1]['T0'])
+    assert qex(f"ts_intercept_shrunk({e}, 60)").min_periods == 60
+
+
+@pytest.mark.parametrize('beta_op,icpt_op,cls', [
+    ('ts_beta', 'ts_intercept', 'TsBeta'),
+    ('ts_beta_shrunk', 'ts_intercept_shrunk', 'TsBetaShrunk'),
+])
+def test_intercept_shares_the_beta_fit(mkt_data, beta_op, icpt_op, cls):
+    # with both bound in one expression the regression is fitted once, in either order
+    import qex.timeseries as ts
+    from qex import SignalGraph
+    data, _ = mkt_data
+    Beta = getattr(ts, cls)
+    args = "returns(1), returns(1, 'market'), 120"
+    for body in ("rank(a) - rank(b)", "rank(b) - rank(a)"):
+        e = f"let b = {beta_op}({args}), a = {icpt_op}({args}) in {body}"
+        fits = []
+        orig = Beta._beta
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(Beta, '_beta', lambda self, y, x: fits.append(1) or orig(self, y, x))
+            with compute_context():
+                qex(e).evaluate(data)
+        assert len(fits) == 1
+    g = SignalGraph()
+    g.add_signal(qex(e), name='s')
+    icpt = next(k for k in g.nodes if k[0] == cls.replace('Beta', 'Intercept'))
+    beta = next(k for k in g.nodes if k[0] == cls)
+    assert beta in g.dependencies[icpt]
+    assert [k[0] for k in g.dependencies[beta]] == ['Returns', 'Returns']

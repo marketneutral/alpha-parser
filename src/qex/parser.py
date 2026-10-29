@@ -14,6 +14,7 @@ from .primitives import returns, volatility, volume, adv
 from .timeseries import (
     ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward,
     ts_corr, ts_cov, ts_var, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
+    ts_intercept, ts_intercept_shrunk,
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
@@ -76,6 +77,8 @@ class QexParser:
             'ewma_cov': ewma_cov,
             'ts_beta': ts_beta,
             'ts_beta_shrunk': ts_beta_shrunk,
+            'ts_intercept': ts_intercept,
+            'ts_intercept_shrunk': ts_intercept_shrunk,
             'ts_beta_ewma': ts_beta_ewma,
             'ts_argmax': ts_argmax,
             'ts_argmin': ts_argmin,
