@@ -120,6 +120,19 @@ qex("let mom = returns(60) in rank(mom)")
 qex("rank(returns(60))")
 ```
 
+Operators built on another operator share it too. `ts_intercept` evaluates its slope as a
+`ts_beta` node, so the fit runs once when both appear:
+
+```python
+graph = SignalGraph()
+graph.add_signal(qex("""
+    let b = ts_beta(returns(1), returns(1, 'market'), 252),
+        a = ts_intercept(returns(1), returns(1, 'market'), 252)
+    in rank(a) - rank(b)
+"""), name="alpha_vs_beta")
+# TsIntercept depends on returns(1), returns(1, 'market') and the shared TsBeta node
+```
+
 ## API Reference
 
 ### SignalGraph

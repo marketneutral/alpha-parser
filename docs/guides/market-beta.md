@@ -154,6 +154,45 @@ neutralization sees.
   outliers still need the multi-day returns and the clipping above, and they combine:
   `ts_beta_shrunk(min(max(r, -4 * s), 4 * s), returns(1, 'market'), 252)`.
 
+## Alpha: the intercept
+
+The same window fit has an intercept, `ts_intercept`: the stock's mean daily return that the
+market doesn't explain (Jensen's alpha over the window).
+
+```python
+qex("ts_intercept(returns(1), returns(1, 'market'), 252)")
+```
+
+It is `mean(y) - ts_beta(y, x) * mean(x)`, with both means over the days `y` and `x` are both
+valid, the same days as the beta. Writing it by hand as
+`ts_mean(y, n) - ts_beta(y, x, n) * ts_mean(x, n)` is the same for a stock with a full
+history but wrong for one with gaps: `ts_mean(x, n)` also averages the market on days the
+stock has no return. On a stock with a two-week halt that error can be larger than the
+alpha being estimated.
+
+`ts_intercept_shrunk` is the intercept that goes with `ts_beta_shrunk`:
+`mean(y) - ts_beta_shrunk(y, x) * mean(x)`. Given the shrunk slope it is the best-fitting
+intercept, so `y - a - b * x` is the residual of one consistent fit. The intercept is not
+itself shrunk toward a cross-sectional mean.
+
+Using both in one expression fits the regression once. `ts_intercept` evaluates its slope as
+a `ts_beta` node with the same arguments, so inside `compute_context()` (and in
+`SignalGraph.compute`) the two share the cached beta:
+
+```python
+qex("""
+    let y = returns(1), m = returns(1, 'market'),
+        b = ts_beta_shrunk(y, m, 252),
+        a = ts_intercept_shrunk(y, m, 252)
+    in regression_neut(rank(a), b)
+""")
+```
+
+That is a residual-alpha signal: rank stocks by the return the market doesn't explain, then
+take beta out of the book. A year of daily alpha is a noisy estimate (its standard error is
+roughly the residual volatility divided by the square root of the window), so rank it rather
+than using it in levels.
+
 ## Taking beta out of a signal
 
 `regression_neut(y, x)` regresses `y` on `x` across stocks each day, with an intercept, and

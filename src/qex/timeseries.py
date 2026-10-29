@@ -333,12 +333,18 @@ class TsIntercept(TsBeta):
 
     The constant in the same window fit as ts_beta, over the same paired days. For stock
     returns on the market this is the daily alpha: the mean return beta doesn't explain.
+    The slope is a ts_beta node, so with `let b = ts_beta(...), a = ts_intercept(...)` in a
+    compute_context the fit runs once.
     """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
+        super().__init__(signal1, signal2, period, min_periods)
+        self.beta = TsBeta(signal1, signal2, period, min_periods)
 
     def _compute(self, data):
         y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
         roll = lambda v: v.rolling(self.period, min_periods=self.min_periods).mean()
-        return roll(y) - self._beta(y, x) * roll(x)
+        return roll(y) - self.beta.evaluate(data) * roll(x)
 
     def _cache_key(self):
         return ('TsIntercept', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
@@ -394,13 +400,18 @@ class TsInterceptShrunk(TsBetaShrunk):
 
     Given the shrunk slope, this is the intercept that best fits the window (the least-squares
     line through the means with that slope), so y - a - b * x uses one consistent fit. The
-    intercept is not shrunk itself: it moves only by (b - b_shrunk) * mean(x).
+    intercept is not shrunk itself: it moves only by (b - b_shrunk) * mean(x). The slope is a
+    ts_beta_shrunk node, shared with any ts_beta_shrunk of the same arguments (see TsIntercept).
     """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
+        super().__init__(signal1, signal2, period, min_periods)
+        self.beta = TsBetaShrunk(signal1, signal2, period, min_periods)
 
     def _compute(self, data):
         y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
         roll = lambda v: v.rolling(self.period, min_periods=self.min_periods).mean()
-        return roll(y) - self._beta(y, x) * roll(x)
+        return roll(y) - self.beta.evaluate(data) * roll(x)
 
     def _cache_key(self):
         return ('TsInterceptShrunk', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)

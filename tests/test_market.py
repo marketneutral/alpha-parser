@@ -268,3 +268,31 @@ def test_ts_intercept_shrunk_goes_with_shrunk_beta(mkt_data):
     np.testing.assert_allclose((a_s + b_s * mx).to_numpy(), (a + b * mx).to_numpy(), rtol=1e-9, atol=1e-14, equal_nan=True)
     assert a_s.iloc[-1]['T0'] != pytest.approx(a.iloc[-1]['T0'])
     assert qex(f"ts_intercept_shrunk({e}, 60)").min_periods == 60
+
+
+@pytest.mark.parametrize('beta_op,icpt_op,cls', [
+    ('ts_beta', 'ts_intercept', 'TsBeta'),
+    ('ts_beta_shrunk', 'ts_intercept_shrunk', 'TsBetaShrunk'),
+])
+def test_intercept_shares_the_beta_fit(mkt_data, beta_op, icpt_op, cls):
+    # with both bound in one expression the regression is fitted once, in either order
+    import qex.timeseries as ts
+    from qex import SignalGraph
+    data, _ = mkt_data
+    Beta = getattr(ts, cls)
+    args = "returns(1), returns(1, 'market'), 120"
+    for body in ("rank(a) - rank(b)", "rank(b) - rank(a)"):
+        e = f"let b = {beta_op}({args}), a = {icpt_op}({args}) in {body}"
+        fits = []
+        orig = Beta._beta
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(Beta, '_beta', lambda self, y, x: fits.append(1) or orig(self, y, x))
+            with compute_context():
+                qex(e).evaluate(data)
+        assert len(fits) == 1
+    g = SignalGraph()
+    g.add_signal(qex(e), name='s')
+    icpt = next(k for k in g.nodes if k[0] == cls.replace('Beta', 'Intercept'))
+    beta = next(k for k in g.nodes if k[0] == cls)
+    assert beta in g.dependencies[icpt]
+    assert [k[0] for k in g.dependencies[beta]] == ['Returns', 'Returns']
