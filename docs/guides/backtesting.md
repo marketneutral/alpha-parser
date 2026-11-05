@@ -83,14 +83,34 @@ market. [Market Beta](market-beta.md) covers estimating, shrinking and removing 
 ### Weights and statistics on their own
 
 ```python
-from qex import build_book, turnover, fitness, margin_bps
+from qex import build_book, hold_untradable, forward_returns, turnover, fitness, margin_bps
 
-w = build_book(signal, data, settings)            # dates x names
-pnl = (w * data["close"].pct_change(fill_method=None).shift(-1)).sum(axis=1)
+w = build_book(signal, data, settings)            # dates x names: the target book
+w = hold_untradable(w, data["close"])             # what Backtest holds (see below)
+pnl = (w * forward_returns(data["close"]).reindex_like(w).fillna(0)).sum(axis=1)
 to = turnover(w)                                  # fraction of the book traded each day
 fitness(pnl, to)      # Sharpe * sqrt(|annual return| / max(turnover, 0.125))
 margin_bps(pnl, to)   # P&L per dollar traded, in basis points
 ```
+
+## Missing Prices: Halts and Delistings
+
+Every return in qex, on the signal side and in P&L, follows one rule (`price_returns`):
+
+- a return is the ratio of two observed prices; a day with no price has a NaN return, not 0%;
+- a missing start price is replaced by the last valid one before it, so the day a halted name
+  reopens carries the whole move since its last price;
+- a price more than `MAX_PRICE_GAP` (10) rows old no longer counts.
+
+`Backtest` also accounts for the fact that a name with no price can't be traded: it holds the
+position from the name's last priced day (`hold_untradable`), marked at the last price, so
+P&L is 0 during a halt and the gap move is booked on the day before the reopen. A position is
+held for at most `MAX_PRICE_GAP` days; after that (a delisting, or a long suspension) it is
+dropped with no P&L for the missing move. Delisting returns are not modelled, which is
+optimistic for names that delist after bad news.
+
+Held weights are not rescaled, so on a day a halted name is held, the book's gross can be a
+little above or below 1. `build_book` itself still returns the exact target book.
 
 ## Understanding Results
 

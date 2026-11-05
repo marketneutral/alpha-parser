@@ -40,6 +40,13 @@ qex("volume(5) / volume(60)")  # Recent volume relative to its norm
 qex("returns(1, 'market')")    # The market's daily return
 ```
 
+`returns(n)` is `p[t] / p[last valid at or before t - n] - 1`, and NaN on a day with no
+price. A halted or delisted name has NaN returns (it drops out of `rank`, `zscore` and the
+group operators instead of counting as 0%), the reopen day carries the whole move since the
+last price, and a price more than `MAX_PRICE_GAP` (10) rows old no longer counts. The same
+rule (`qex.price_returns`) gives the daily returns behind `volatility`, the risk model and the
+forward returns of `Backtest` and `QuantileAnalysis`, and it is the same on pandas 2 and 3.
+
 ## Math Operations
 
 | Operation | Description |

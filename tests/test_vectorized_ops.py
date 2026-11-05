@@ -9,8 +9,8 @@ from qex import alpha
 
 # Reference implementations: the original per-date / rolling-apply code, kept verbatim in
 # behaviour so the vectorized versions can be checked against it. Inputs come from qex's own
-# returns(1), whose handling of missing prices follows the installed pandas (pandas 2 pads
-# gaps in pct_change by default, pandas 3 does not).
+# returns(1), which handles missing prices the same way on every pandas version (see
+# qex.price_returns).
 
 def _ref_group_apply(values, group_df, fn):
     result = pd.DataFrame(np.nan, index=values.index, columns=values.columns)

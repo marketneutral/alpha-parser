@@ -10,6 +10,7 @@ from evaluation import (
     BacktestResult,
     BookSettings,
     build_book,
+    hold_untradable,
     turnover,
     fitness,
     margin_bps,
@@ -188,7 +189,7 @@ def test_fitness_and_margin_by_hand():
     assert np.isnan(margin_bps(pnl, pd.Series(np.zeros(500))))
 
 
-# Backward compatibility with 0.3.1
+# Backward compatibility with 0.3.1 (on data with no missing prices; see test_missing_prices.py)
 
 def _backtest_031(signal, data, holding_period=1, transaction_cost=0.0):
     """Backtest.run as of qex 0.3.1, the parts that produce the numbers."""
@@ -241,8 +242,17 @@ def test_backtest_result_constructs_with_031_fields():
 
 
 def test_backtest_with_settings(book_data):
-    r = Backtest(alpha("-returns(5)"), settings=BookSettings(delay=1, universe='member')).run(book_data)
+    settings = BookSettings(delay=1, universe='member')
+    r = Backtest(alpha("-returns(5)"), settings=settings).run(book_data)
+    # The backtest holds the target book, except that names with no close keep their weight
+    target = build_book(alpha("-returns(5)"), book_data, settings)
+    held = hold_untradable(target, book_data['close'])
+    pd.testing.assert_frame_equal(r.weights, held.loc[r.weights.index])
+    # Days with no held (untradable) position are exactly the target book: gross 1
+    untradable = book_data['close'].reindex_like(r.weights).isna()
+    clean = ~((r.weights != 0) & untradable).any(axis=1)
     gross = r.weights.abs().sum(axis=1)
-    assert np.allclose(gross[gross > 0], 1.0)
+    assert clean.sum() > 0 and (~clean).sum() > 0
+    assert np.allclose(gross[clean & (gross > 0)], 1.0)
     assert r.weights.abs().max().max() <= 0.05 + 1e-9
     assert r.fitness is not None and r.margin_bps is not None

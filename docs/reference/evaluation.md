@@ -97,6 +97,22 @@ w = build_book(qex("rank(-returns(5))"), data, settings)
 | `rounds` | `1000` | Most neutralize, scale and clip rounds per day |
 | `mask_cross_section` | `True` | With a universe, cross-sectional operators in the signal compare only the day's universe ([details](operations.md#the-cross-sectional-universe)); `False` applies the universe to the finished signal only, as before 0.5 |
 
+### Untradable names
+
+A name with no close that day can't be traded. `Backtest` holds its previous weight until it
+trades again, for at most `MAX_PRICE_GAP` (10) days, and then drops it (a delisting).
+`hold_untradable` applies the same rule to any weights:
+
+```python
+from qex import hold_untradable, forward_returns
+
+held = hold_untradable(w, data['close'])                 # what Backtest holds
+pnl = (held * forward_returns(data['close']).reindex_like(held).fillna(0)).sum(axis=1)
+```
+
+Forward returns in `Backtest` and `QuantileAnalysis` are `forward_returns(close, holding_period)`:
+NaN when the end price is missing, measured from the last valid price when the start price is.
+
 ### Book statistics
 
 ```python

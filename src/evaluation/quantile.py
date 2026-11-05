@@ -8,6 +8,7 @@ import pandas as pd
 
 from qex.signal import Signal
 from qex.context import compute_context
+from qex.primitives import forward_returns as forward_price_returns
 from .metrics import sharpe_ratio, annualized_return
 
 
@@ -132,8 +133,7 @@ class QuantileAnalysis:
             signal_values = self.signal.evaluate(data)
 
         # Calculate forward returns
-        close = data["close"]
-        forward_returns = close.pct_change(self.holding_period).shift(-self.holding_period)
+        forward_returns = forward_price_returns(data["close"], self.holding_period)
 
         # Align dates
         common_idx = signal_values.index.intersection(forward_returns.index)
@@ -254,8 +254,7 @@ class QuantileAnalysis:
             signal_values = self.signal.evaluate(data)
 
         # Calculate forward returns
-        close = data["close"]
-        forward_returns = close.pct_change(self.holding_period).shift(-self.holding_period)
+        forward_returns = forward_price_returns(data["close"], self.holding_period)
 
         # Align dates
         common_idx = signal_values.index.intersection(forward_returns.index)
@@ -285,7 +284,8 @@ class QuantileAnalysis:
                     "n_stocks": len(common),
                 })
 
-        ic_df = pd.DataFrame(ics).set_index("date")
+        # No day with enough names gives an empty frame (statistics come out NaN), not a KeyError
+        ic_df = pd.DataFrame(ics, columns=["date", "rank_ic", "pearson_ic", "n_stocks"]).set_index("date")
 
         # Summary statistics
         summary = {

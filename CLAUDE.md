@@ -23,7 +23,7 @@ PYTHONPATH=src pytest tests/ -v
   - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`)
   - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`)
   - `groups.py` - Group data access (`group`) and group-neutral operations (`group_rank`, `group_demean`, `group_std`, `group_count_valid`)
-  - `primitives.py` - Basic signals (`returns`, `volatility`, `volume`, `adv`)
+  - `primitives.py` - Basic signals (`returns`, `volatility`, `volume`, `adv`) and `price_returns`/`forward_returns`, the one rule for turning prices into returns
   - `data.py` - Data field access (`close`, `open`, `high`, `low`, `field`) and `LazyData`
   - `conditional.py` - Conditional logic (`where`)
   - `context.py` - `compute_context()` provides shared caching across signals
@@ -42,6 +42,7 @@ PYTHONPATH=src pytest tests/ -v
 - Data is passed as `Dict[str, pd.DataFrame]` with keys like `'close'`, `'volume'`
 - Use `LazyData` wrapper for large datasets - fields are loaded on demand
 - Use `LazyData(data, descriptions={...})` for self-documenting data - call `data.describe()` to inspect
+- Never call `pct_change` on prices: use `price_returns`/`forward_returns` (NaN on days with no price, bridged from the last valid price up to `MAX_PRICE_GAP` rows; identical on pandas 2 and 3). `Backtest` holds untradable names' weights via `hold_untradable`
 - Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 
@@ -172,6 +173,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_lazy.py` - LazyData on-demand loading tests
 - `test_operators.py` - Comprehensive tests for all operators
 - `test_evaluation.py` - Backtest and quantile analysis tests
+- `test_missing_prices.py` - Returns across halts/delistings, held weights in backtests, forward returns
 - `test_distributed.py` - Distributed evaluation and graph visualization tests
 - `test_integration.py` - Integration tests with real FMP data (requires data fetch)
 

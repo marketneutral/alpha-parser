@@ -1,7 +1,7 @@
 """Evaluation module for alpha signal backtesting and analysis."""
 
 from .backtest import Backtest, BacktestResult
-from .book import BookSettings, build_book
+from .book import BookSettings, build_book, hold_untradable
 from .metrics import (
     sharpe_ratio,
     max_drawdown,
@@ -24,6 +24,7 @@ __all__ = [
     # Book construction
     "BookSettings",
     "build_book",
+    "hold_untradable",
     # Metrics
     "sharpe_ratio",
     "max_drawdown",
