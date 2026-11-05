@@ -38,7 +38,7 @@ PYTHONPATH=src pytest tests/ -v
 
 - All signals inherit from `Signal` ABC and implement `_compute()` and `_cache_key()`
 - Use `qex("expression")` to parse strings into Signal objects (or `alpha()` for backwards compatibility)
-- Wrap multiple evaluations in `with compute_context():` for cache sharing
+- Wrap multiple evaluations in `with compute_context():` for cache sharing; the cache knows its data by identity (the frames a dict holds), so a value changed in place needs `ctx.clear()`
 - Data is passed as `Dict[str, pd.DataFrame]` with keys like `'close'`, `'volume'`
 - Use `LazyData` wrapper for large datasets - fields are loaded on demand
 - Use `LazyData(data, descriptions={...})` for self-documenting data - call `data.describe()` to inspect
