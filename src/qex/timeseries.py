@@ -147,9 +147,11 @@ class Delta(Signal):
 
 
 class TsRank(Signal):
-    """Time-series rank (percentile within rolling window).
+    """Time-series rank: the percentile of today's value within the last ``period`` values.
 
-    Optimized using scipy.stats.rankdata for better performance.
+    ``(average rank of today's value among the window) / period``, with ties given their average
+    rank. The window must hold ``period`` valid values, and at least two; otherwise the result
+    is NaN (so ``period`` 1 is always NaN).
     """
 
     def __init__(self, signal: Signal, period: int):
@@ -158,23 +160,9 @@ class TsRank(Signal):
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-
-        def _rank_pct(arr):
-            """Compute percentile rank of last element in array."""
-            valid = ~np.isnan(arr)
-            if valid.sum() < 2:
-                return np.nan
-            # rankdata returns 1-based ranks, convert to percentile
-            ranks = stats.rankdata(arr[valid], method='average')
-            # Find position of the last element in the valid array
-            last_valid_idx = np.where(valid)[0][-1] if valid[-1] else -1
-            if last_valid_idx == -1 or not valid[-1]:
-                return np.nan
-            # Get the rank of the last valid element
-            last_rank = ranks[-1]  # Last element in valid subset
-            return last_rank / len(ranks)
-
-        return values.rolling(self.period).apply(_rank_pct, raw=True)
+        if self.period < 2:
+            return values.astype(float) * np.nan
+        return values.rolling(self.period).rank(method='average', pct=True)
 
     def _cache_key(self):
         return ('TsRank', self.signal._cache_key(), self.period)
@@ -294,10 +282,25 @@ class EwmaCov(Signal):
         return ('EwmaCov', self.signal1._cache_key(), self.signal2._cache_key(), self.halflife)
 
 
+def _paired(y, x):
+    """y and x with every observation where either is missing set to NaN in both.
+
+    A beta's covariance and variance must come from the same days. Estimating the variance of x
+    on days y is missing (before a listing, during a halt) biases the beta.
+    """
+    if isinstance(x, pd.Series) and isinstance(y, pd.DataFrame):
+        x = pd.DataFrame({c: x for c in y.columns}, index=y.index)
+    elif isinstance(y, pd.Series) and isinstance(x, pd.DataFrame):
+        y = pd.DataFrame({c: y for c in x.columns}, index=x.index)
+    both = y.notna() & x.notna()
+    return y.where(both), x.where(both)
+
+
 class TsBeta(Signal):
     """Rolling beta (regression coefficient) of signal1 on signal2.
 
-    Computes: cov(y, x) / var(x) where y=signal1, x=signal2.
+    Computes: cov(y, x) / var(x) where y=signal1, x=signal2, both over the days in the window
+    where y and x are both valid (paired observations, as least squares does).
     Useful for hedge ratios, market beta, factor exposures.
     """
 
@@ -308,8 +311,7 @@ class TsBeta(Signal):
         self.min_periods = _get_min_periods(period, min_periods)
 
     def _compute(self, data):
-        y = self.signal1.evaluate(data)
-        x = self.signal2.evaluate(data)
+        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
         cov = y.rolling(self.period, min_periods=self.min_periods).cov(x)
         var = x.rolling(self.period, min_periods=self.min_periods).var()
         return cov / var
@@ -354,7 +356,7 @@ class TsBetaShrunk(Signal):
         b = cov / vx
         resid = (vy - cov * b).clip(lower=0) * (n - 1) / (n - 2)
         se2 = resid / ((n - 1) * vx)
-        cs = in_universe(b)                                      # the prior comes from the universe
+        cs = in_universe(b)                                    # the prior comes from the universe
         tau2 = cs.var(axis=1)
         w = (1 / (1 + se2.div(tau2.where(tau2 > 0), axis=0))).where(b.notna())
         return w * b + (1 - w).mul(cs.mean(axis=1), axis=0)
@@ -366,7 +368,8 @@ class TsBetaShrunk(Signal):
 class TsBetaEwma(Signal):
     """EWMA-weighted beta (regression coefficient) of signal1 on signal2.
 
-    Computes: ewma_cov(y, x) / ewma_var(x) where y=signal1, x=signal2.
+    Computes: ewma_cov(y, x) / ewma_var(x) where y=signal1, x=signal2, both over the days
+    where y and x are both valid (paired observations).
     More robust than equal-weighted rolling beta, gives more weight to recent observations.
     """
 
@@ -376,8 +379,7 @@ class TsBetaEwma(Signal):
         self.halflife = halflife
 
     def _compute(self, data):
-        y = self.signal1.evaluate(data)
-        x = self.signal2.evaluate(data)
+        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
         cov = y.ewm(halflife=self.halflife).cov(x)
         var = x.ewm(halflife=self.halflife).var()
         return cov / var

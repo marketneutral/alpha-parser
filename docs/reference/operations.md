@@ -211,6 +211,11 @@ are NaN. The fit runs over the cross-sectional universe (below), which `build_bo
 `BookSettings(universe=...)`. The signal is then exactly neutral; the book is only close to it,
 because truncation and rescaling come after. See [Market Beta](../guides/market-beta.md).
 
+**Infinities.** `zscore`, `demean`, `winsorize`, `scale`, `regression_neut`, `group_demean`,
+`group_std` and `group_sum` leave an infinite value out of the day's statistics and give that
+name NaN, so one division by zero (a zero-volume day in `volume(20) / volume(1)`) can't empty the
+whole cross-section. `rank`, `quantile` and `group_rank` rank an infinity first or last, as before.
+
 ### The cross-sectional universe
 
 Cross-sectional operators compare names with each other, so which names they compare matters.

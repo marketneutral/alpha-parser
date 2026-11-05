@@ -174,6 +174,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_operators.py` - Comprehensive tests for all operators
 - `test_evaluation.py` - Backtest and quantile analysis tests
 - `test_missing_prices.py` - Returns across halts/delistings, held weights in backtests, forward returns
+- `test_bugfixes_052.py` - Regression tests for the 0.5.2 fixes (paired betas, infinities in cross-sections, risk model, ts_rank, math of numbers)
 - `test_distributed.py` - Distributed evaluation and graph visualization tests
 - `test_integration.py` - Integration tests with real FMP data (requires data fetch)
 

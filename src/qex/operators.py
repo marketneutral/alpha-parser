@@ -197,8 +197,9 @@ class Abs(Signal):
         self.signal = signal
 
     def _compute(self, data):
+        import numpy as np
         values = self.signal.evaluate(data)
-        return values.abs()
+        return np.abs(values)
 
     def _cache_key(self):
         return ('Abs', self.signal._cache_key())
@@ -243,10 +244,12 @@ class Power(Signal):
 
     def _compute(self, data):
         values = self.signal.evaluate(data)
-        return values ** self.exponent
+        exponent = self.exponent.evaluate(data) if isinstance(self.exponent, Signal) else self.exponent
+        return values ** exponent
 
     def _cache_key(self):
-        return ('Power', self.signal._cache_key(), self.exponent)
+        exponent = self.exponent._cache_key() if isinstance(self.exponent, Signal) else self.exponent
+        return ('Power', self.signal._cache_key(), exponent)
 
 
 class Max(BinaryOp):
@@ -257,11 +260,10 @@ class Max(BinaryOp):
         import pandas as pd
         left = self.left.evaluate(data)
         right = self.right.evaluate(data)
-        return pd.DataFrame(
-            np.maximum(left, right),
-            index=left.index,
-            columns=left.columns
-        )
+        frame = left if isinstance(left, pd.DataFrame) else right
+        if not isinstance(frame, pd.DataFrame):
+            return np.maximum(left, right)                 # both constants
+        return pd.DataFrame(np.maximum(left, right), index=frame.index, columns=frame.columns)
 
 
 class Min(BinaryOp):
@@ -272,38 +274,37 @@ class Min(BinaryOp):
         import pandas as pd
         left = self.left.evaluate(data)
         right = self.right.evaluate(data)
-        return pd.DataFrame(
-            np.minimum(left, right),
-            index=left.index,
-            columns=left.columns
-        )
+        frame = left if isinstance(left, pd.DataFrame) else right
+        if not isinstance(frame, pd.DataFrame):
+            return np.minimum(left, right)                 # both constants
+        return pd.DataFrame(np.minimum(left, right), index=frame.index, columns=frame.columns)
 
 
 # Factory functions for math operations
 
-def log(signal: Signal) -> Log:
+def log(signal) -> Log:
     """Create a Log signal (natural logarithm)."""
-    return Log(signal)
+    return Log(_ensure_signal(signal))
 
 
-def abs_(signal: Signal) -> Abs:
+def abs_(signal) -> Abs:
     """Create an Abs signal (absolute value)."""
-    return Abs(signal)
+    return Abs(_ensure_signal(signal))
 
 
-def sign(signal: Signal) -> Sign:
+def sign(signal) -> Sign:
     """Create a Sign signal."""
-    return Sign(signal)
+    return Sign(_ensure_signal(signal))
 
 
-def sqrt(signal: Signal) -> Sqrt:
+def sqrt(signal) -> Sqrt:
     """Create a Sqrt signal."""
-    return Sqrt(signal)
+    return Sqrt(_ensure_signal(signal))
 
 
-def power(signal: Signal, exponent) -> Power:
-    """Create a Power signal."""
-    return Power(signal, exponent)
+def power(signal, exponent) -> Power:
+    """Create a Power signal. Either argument may be a number or a signal."""
+    return Power(_ensure_signal(signal), exponent)
 
 
 def max_(left: Signal, right: Signal) -> Max:

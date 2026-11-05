@@ -336,6 +336,13 @@ class QexParser:
             return self._visit(node)
         elif isinstance(node, (ast.Constant, ast.Num)):
             return node.value if isinstance(node, ast.Constant) else node.n
+        elif (isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd))
+              and isinstance(node.operand, ast.Constant)
+              and isinstance(node.operand.value, (int, float))
+              and not isinstance(node.operand.value, bool)):
+            # A signed number literal (delay(x, -1), power(x, -2)) is a number, not a Neg signal
+            value = node.operand.value
+            return -value if isinstance(node.op, ast.USub) else value
         elif isinstance(node, ast.Str):
             return node.s
         elif isinstance(node, ast.Name):

@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.5.2
+
+Bug fixes, from the reports in qexarena's `IDEAS.md`. **Numbers change** for `ts_beta` and
+`ts_beta_ewma` on names with missing values, for cross-sections containing an infinity, and for
+everything `FactorRiskModel` produces.
+
+### `ts_beta` and `ts_beta_ewma` pair their observations
+
+The covariance was estimated on the days both inputs were valid, but the variance of `x` on all
+of `x`'s days, so a hole in `y` (a new listing, a halt) biased the beta. Both now use only the
+days where both are valid, as the documentation already said and as least squares does. Names
+with no missing values give the same betas as before. The workaround
+`ts_beta(y, x + 0 * y, n)` is no longer needed. (#20)
+
+### One infinite value no longer empties a cross-section
+
+`zscore`, `demean`, `winsorize`, `scale`, `regression_neut`, `group_demean`, `group_std` and
+`group_sum` now leave infinite values out of the day's statistics, and the infinite name gets NaN.
+Before, one zero volume in `zscore(volume(20) / volume(1))` gave NaN for every stock, `demean`
+gave −inf for every other stock, and `scale` gave them all 0. Rank-based operators are unchanged.
+
+### `FactorRiskModel`
+
+Three fixes, each of which changed every number the model produced. On simulated data with one
+market factor and a 1-day reversal factor (750 days, 300 stocks), before and after:
+
+| | 0.5.1 | 0.5.2 |
+|---|---|---|
+| Reversal factor return Sharpe (true value 0) | −300 | −0.6 |
+| `diag(factor_covariance) / (252 · var(factor_returns))` | 0.0013 | 1.0 |
+| Equal-weight long book: forecast vol (realized 19.3%) | 0.0% | 19.4% |
+
+- **No look-ahead.** Day t's returns are now regressed on the exposures known at day t−1's
+  close. Before, same-day exposures let a factor built from day t's return (reversal,
+  volatility) explain that return with hindsight.
+- **Covariance and specific variance were about n times too small.** The weights were
+  normalized to sum to one and then the weighted series passed to `.cov()`. They are now a
+  proper weighted covariance (equal to `.cov()` with equal weights, and to `numpy.cov` with
+  `aweights`).
+- **The market factor is in the exposures.** It was in the factor covariance but not in
+  `factor_exposures`, so `portfolio_risk` and `factor_attribution` left it out. Every stock now
+  has exposure 1 to `market`, in the fitted exposures and in `get_exposures`.
+
+### Smaller fixes
+
+- `ts_rank` is vectorized: about 0.4 s for 600 names over 1,500 days with a 252-day window,
+  against about a minute. Results are identical.
+- Math functions accept numbers: `sqrt(5)`, `log(2)`, `abs(-3)`, `power(2.0, x)` and an exponent
+  that is a signal no longer raise `AttributeError`.
+- A signed number in a function argument is a number: `delay(close(), -1)` now says
+  `got -1` instead of printing an object, and `power(x, -1)` works.
+- CI installs the `risk` extra, so the risk model's tests run.
+
 ## 0.5.1
 
 Bug fixes. **Numbers change** for any data with missing prices (halts, gaps, delistings):
