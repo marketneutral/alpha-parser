@@ -1,4 +1,11 @@
-"""Group operations for signals (e.g., sector-neutral operations)."""
+"""Group operations for signals (e.g., sector-neutral operations).
+
+A group operator's groups are a group's name ('sector', looked up in the data) or any expression that gives each
+stock a label on each day: quantile(field('mcap'), 5), coalesce(group('sector'), 'other'), or group_cross(...) of
+several groupings. A stock with no label is in no group, and the operator gives it no value.
+"""
+
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -8,8 +15,29 @@ from .data import resolve_data
 from .universe import in_universe, finite_in_universe
 
 
-def _get_group_data(data, groups: str) -> pd.DataFrame:
-    """Get group DataFrame, supporting both data['sector'] and data['groups']['sector'] formats."""
+GroupsArg = Union[str, Signal]
+
+
+def _as_groups(groups):
+    """A group operator's groups as given: a group's name, or an expression giving labels."""
+    if isinstance(groups, (str, Signal)):
+        return groups
+    raise TypeError(f"groups are a group's name ('sector') or an expression that gives each stock a label "
+                    f"(quantile(x, 5)), not {groups!r}")
+
+
+def _groups_key(groups):
+    return groups._cache_key() if isinstance(groups, Signal) else groups
+
+
+def _get_group_data(data, groups) -> pd.DataFrame:
+    """The labels, dates x names: an expression's value, or by name from data['sector'] or data['groups']['sector']."""
+    if isinstance(groups, Signal):
+        labels = groups.evaluate(data)
+        if not isinstance(labels, pd.DataFrame):
+            raise ValueError(f"groups must give each stock a label on each day, not one value for all of them "
+                             f"({labels!r}); write a group's name, or an expression such as quantile(x, 5)")
+        return labels
     data = resolve_data(data)
 
     # Try direct access first: data['sector']
@@ -29,17 +57,24 @@ def _get_group_data(data, groups: str) -> pd.DataFrame:
     )
 
 
+def _align_labels(group_df: pd.DataFrame, index, columns) -> pd.DataFrame:
+    """Labels on these dates and names: a date missing from group_df takes its last row, a name missing from it has
+    no group (NaN)."""
+    groups = group_df.reindex(columns=columns)
+    rows = groups.reindex(index).astype(object)
+    missing = ~index.isin(groups.index)
+    if missing.any():
+        rows.loc[missing] = groups.iloc[-1].values
+    return rows
+
+
 def _group_codes(values: pd.DataFrame, group_df: pd.DataFrame):
     """Integer group codes aligned to values' dates and columns, -1 where the group is NaN.
 
     A date missing from group_df takes group_df's last row, and a column missing from it has
     no group (NaN), as in the per-date loops these replace.
     """
-    groups = group_df.reindex(columns=values.columns)
-    rows = groups.reindex(values.index)
-    missing = ~values.index.isin(groups.index)
-    if missing.any():
-        rows.loc[missing] = groups.iloc[-1].values
+    rows = _align_labels(group_df, values.index, values.columns)
     codes, uniques = pd.factorize(rows.to_numpy(dtype=object).ravel())
     return codes.reshape(rows.shape), len(uniques)
 
@@ -91,9 +126,9 @@ def group(name: str) -> Group:
 class GroupRank(Signal):
     """Rank within groups (e.g., industry-neutral rank)."""
 
-    def __init__(self, signal: Signal, groups: str):
+    def __init__(self, signal: Signal, groups: GroupsArg):
         self.signal = signal
-        self.groups = groups
+        self.groups = _as_groups(groups)
 
     def _compute(self, data):
         values = in_universe(self.signal.evaluate(data))
@@ -113,15 +148,15 @@ class GroupRank(Signal):
         return pd.DataFrame(out.reshape(T, N), index=values.index, columns=values.columns)
 
     def _cache_key(self):
-        return ('GroupRank', self.signal._cache_key(), self.groups)
+        return ('GroupRank', self.signal._cache_key(), _groups_key(self.groups))
 
 
 class GroupDemean(Signal):
     """Demean within groups (subtract group mean)."""
 
-    def __init__(self, signal: Signal, groups: str):
+    def __init__(self, signal: Signal, groups: GroupsArg):
         self.signal = signal
-        self.groups = groups
+        self.groups = _as_groups(groups)
 
     def _compute(self, data):
         values = finite_in_universe(self.signal.evaluate(data))
@@ -138,25 +173,98 @@ class GroupDemean(Signal):
         return pd.DataFrame(out, index=values.index, columns=values.columns)
 
     def _cache_key(self):
-        return ('GroupDemean', self.signal._cache_key(), self.groups)
+        return ('GroupDemean', self.signal._cache_key(), _groups_key(self.groups))
 
 
-def group_rank(signal: Signal, groups: str) -> GroupRank:
+def group_rank(signal: Signal, groups: GroupsArg) -> GroupRank:
     """Create a GroupRank signal."""
     return GroupRank(signal, groups)
 
 
-def group_demean(signal: Signal, groups: str) -> GroupDemean:
+def group_demean(signal: Signal, groups: GroupsArg) -> GroupDemean:
     """Create a GroupDemean signal."""
     return GroupDemean(signal, groups)
+
+
+class GroupQuantile(Signal):
+    """Quantile buckets within groups, 1 (lowest) to n, as quantile() within each group: a dependent double sort is
+    group_quantile(value, quantile(size, 3), 3)."""
+
+    def __init__(self, signal: Signal, groups: GroupsArg, buckets: int):
+        if isinstance(buckets, bool) or not isinstance(buckets, int) or buckets < 1:
+            raise ValueError(f"group_quantile takes a whole number of buckets, at least 1 (got {buckets!r})")
+        self.signal = signal
+        self.groups = _as_groups(groups)
+        self.buckets = buckets
+
+    def _compute(self, data):
+        ranks = GroupRank(self.signal, self.groups).evaluate(data)          # percentile in (0, 1] within the group
+        return np.ceil(ranks * self.buckets).clip(1, self.buckets)
+
+    def _cache_key(self):
+        return ('GroupQuantile', self.signal._cache_key(), _groups_key(self.groups), self.buckets)
+
+
+def group_quantile(signal: Signal, groups: GroupsArg, buckets: int) -> GroupQuantile:
+    """Quantile buckets (1 to n, ascending) within each group."""
+    return GroupQuantile(signal, groups, buckets)
+
+
+def _label_text(v):
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
+class GroupCross(Signal):
+    """One grouping from several: each stock's label is its labels joined, 'Technology|3', and it has none where any
+    part has none. group_demean(x, group_cross('sector', quantile(field('mcap'), 3))) demeans within sector and size."""
+
+    def __init__(self, *groups):
+        if len(groups) < 2:
+            raise ValueError("group_cross takes two or more groupings")
+        self.groups = tuple(Group(g) if isinstance(g, str) else _as_groups(g) for g in groups)
+
+    def _compute(self, data):
+        parts = [_get_group_data(data, g) for g in self.groups]
+        index = parts[0].index
+        for p in parts[1:]:
+            index = index.union(p.index)
+        columns = parts[0].columns
+        for p in parts[1:]:
+            columns = columns.union(p.columns, sort=False)
+        rows = [_align_labels(p, index, columns).to_numpy(dtype=object) for p in parts]
+        missing = np.zeros(rows[0].shape, bool)
+        for r in rows:
+            missing |= pd.isna(r)
+        text = np.frompyfunc(_label_text, 1, 1)
+        parts_text = [text(r[~missing]) for r in rows]
+        for g, t in zip(self.groups, parts_text):
+            bad = [v for v in t if "|" in v]
+            if bad:                                       # 'a|b' + 'c' and 'a' + 'b|c' would be one group
+                raise ValueError(f"group_cross joins labels with '|', so a label cannot contain one: {bad[0]!r}")
+        joined = rows[0].copy()
+        joined[~missing] = parts_text[0]
+        for t in parts_text[1:]:
+            joined[~missing] = joined[~missing] + "|" + t
+        joined[missing] = np.nan
+        return pd.DataFrame(joined, index=index, columns=columns)
+
+    def _cache_key(self):
+        return ('GroupCross',) + tuple(g._cache_key() for g in self.groups)
+
+
+def group_cross(*groups) -> GroupCross:
+    """Combine groupings (names or label expressions) into one: group_cross('sector', quantile(field('mcap'), 3))."""
+    return GroupCross(*groups)
 
 
 class GroupCountValid(Signal):
     """Count non-NaN values within each group over a rolling window, broadcast to all members."""
 
-    def __init__(self, signal: Signal, groups: str, window: int):
+    def __init__(self, signal: Signal, groups: GroupsArg, window: int):
         self.signal = signal
-        self.groups = groups
+        self.groups = _as_groups(groups)
         self.window = window
 
     def _compute(self, data):
@@ -193,10 +301,10 @@ class GroupCountValid(Signal):
         return result
 
     def _cache_key(self):
-        return ('GroupCountValid', self.signal._cache_key(), self.groups, self.window)
+        return ('GroupCountValid', self.signal._cache_key(), _groups_key(self.groups), self.window)
 
 
-def group_count_valid(signal: Signal, groups: str, window: int) -> GroupCountValid:
+def group_count_valid(signal: Signal, groups: GroupsArg, window: int) -> GroupCountValid:
     """Create a GroupCountValid signal."""
     return GroupCountValid(signal, groups, window)
 
@@ -209,9 +317,9 @@ class GroupStd(Signal):
     pair spreads.
     """
 
-    def __init__(self, signal: Signal, groups: str, window: int):
+    def __init__(self, signal: Signal, groups: GroupsArg, window: int):
         self.signal = signal
-        self.groups = groups
+        self.groups = _as_groups(groups)
         self.window = window
 
     def _compute(self, data):
@@ -252,10 +360,10 @@ class GroupStd(Signal):
         return result
 
     def _cache_key(self):
-        return ('GroupStd', self.signal._cache_key(), self.groups, self.window)
+        return ('GroupStd', self.signal._cache_key(), _groups_key(self.groups), self.window)
 
 
-def group_std(signal: Signal, groups: str, window: int) -> GroupStd:
+def group_std(signal: Signal, groups: GroupsArg, window: int) -> GroupStd:
     """Create a GroupStd signal.
 
     Computes rolling standard deviation within each group. Useful for
@@ -277,9 +385,9 @@ class GroupSum(Signal):
     or total pair exposure.
     """
 
-    def __init__(self, signal: Signal, groups: str):
+    def __init__(self, signal: Signal, groups: GroupsArg):
         self.signal = signal
-        self.groups = groups
+        self.groups = _as_groups(groups)
 
     def _compute(self, data):
         values = finite_in_universe(self.signal.evaluate(data))
@@ -295,10 +403,10 @@ class GroupSum(Signal):
         return pd.DataFrame(out, index=values.index, columns=values.columns)
 
     def _cache_key(self):
-        return ('GroupSum', self.signal._cache_key(), self.groups)
+        return ('GroupSum', self.signal._cache_key(), _groups_key(self.groups))
 
 
-def group_sum(signal: Signal, groups: str) -> GroupSum:
+def group_sum(signal: Signal, groups: GroupsArg) -> GroupSum:
     """Create a GroupSum signal.
 
     Sums values within each group and broadcasts to all members.

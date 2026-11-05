@@ -521,6 +521,7 @@ qex/
 - `month_of_year()` - Month of year (1-12). Useful for seasonal effects (January effect, etc.)
 
 ### Conditional
+- `group_quantile(x, groups, n)`, `group_cross(a, b)` - buckets within groups, and crossed groupings; every group operator takes a name or a labels expression
 - `where(condition, if_true, if_false)` - Ternary operator; missing where the condition is missing (comparisons with a missing side are missing, and `&` `|` `~` are three-valued)
 - `coalesce(x, y)` - `x` where it has a value, else `y`: `coalesce(close() > 8, 0)` treats a missing comparison as false
 

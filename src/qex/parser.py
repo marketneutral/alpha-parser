@@ -19,7 +19,7 @@ from .timeseries import (
 )
 from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut
 from .conditional import where, coalesce
-from .groups import group, group_rank, group_demean, group_count_valid, group_std, group_sum
+from .groups import group, group_rank, group_demean, group_count_valid, group_std, group_sum, group_quantile, group_cross
 from .operators import log, abs_, sign, sqrt, power, max_, min_
 
 
@@ -110,6 +110,8 @@ class QexParser:
             'group_count_valid': group_count_valid,
             'group_std': group_std,
             'group_sum': group_sum,
+            'group_quantile': group_quantile,
+            'group_cross': group_cross,
 
             # Validity ops
             'is_valid': is_valid,
@@ -378,8 +380,9 @@ def qex(expression: str) -> Signal:
     Example:
         signal = qex("rank(-returns(20) / volatility(60))")
     """
+    from .kinds import check                          # labels only where labels belong, before anything runs
     parser = QexParser()
-    return parser.parse(expression)
+    return check(parser.parse(expression))
 
 
 # Backwards compatibility alias

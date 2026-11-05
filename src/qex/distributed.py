@@ -96,6 +96,11 @@ class SignalGraph:
             children.append(signal.if_true)
         if hasattr(signal, 'if_false') and isinstance(signal.if_false, Signal):
             children.append(signal.if_false)
+        groups = getattr(signal, 'groups', None)             # a group operator's labels, when an expression gives them
+        if isinstance(groups, Signal):
+            children.append(groups)
+        elif isinstance(groups, tuple):
+            children.extend(g for g in groups if isinstance(g, Signal))
 
         return children
 

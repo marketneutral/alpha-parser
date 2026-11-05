@@ -78,8 +78,8 @@ from .conditional import Where, where, Coalesce, coalesce
 
 # Group operations
 from .groups import (
-    Group, GroupRank, GroupDemean, GroupCountValid, GroupStd, GroupSum,
-    group, group_rank, group_demean, group_count_valid, group_std, group_sum,
+    Group, GroupRank, GroupDemean, GroupCountValid, GroupStd, GroupSum, GroupQuantile, GroupCross,
+    group, group_rank, group_demean, group_count_valid, group_std, group_sum, group_quantile, group_cross,
 )
 
 # Parser
@@ -285,12 +285,16 @@ __all__ = [
     'GroupCountValid',
     'GroupStd',
     'GroupSum',
+    'GroupQuantile',
+    'GroupCross',
     'group',
     'group_rank',
     'group_demean',
     'group_count_valid',
     'group_std',
     'group_sum',
+    'group_quantile',
+    'group_cross',
 
     # Parser
     'QexParser',
