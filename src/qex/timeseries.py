@@ -1,5 +1,7 @@
 """Time-series operations for signals."""
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -169,9 +171,9 @@ class TsRank(Signal):
 
 
 class FillForward(Signal):
-    """Forward fill missing values for up to N periods."""
+    """Forward fill missing values for up to N periods (with no limit, until the next value)."""
 
-    def __init__(self, signal: Signal, limit: int):
+    def __init__(self, signal: Signal, limit: Optional[int] = None):
         self.signal = signal
         self.limit = limit
 
@@ -530,9 +532,46 @@ def ts_rank(signal: Signal, period: int) -> TsRank:
     return TsRank(signal, period)
 
 
-def fill_forward(signal: Signal, limit: int) -> FillForward:
-    """Create a FillForward signal."""
+def fill_forward(signal: Signal, limit: Optional[int] = None) -> FillForward:
+    """Carry each value forward over missing days: for up to limit days, or with no limit until the next value."""
     return FillForward(signal, limit)
+
+
+class Latch(Signal):
+    """1 from a day on is true until a day off is true, then 0 until on is true again; 0 before on is first true.
+
+    The state changes only on a day with an answer: a day where on or off is missing changes nothing. On a day both
+    are true, off wins. Hysteresis is a latch, enter at one line and leave at a lower one:
+    latch(mcap >= 300e6, mcap < 240e6).
+    """
+
+    def __init__(self, on: Signal, off: Signal):
+        from .conditional import _ensure_signal
+        self.on = _ensure_signal(on)
+        self.off = _ensure_signal(off)
+
+    def _compute(self, data):
+        import numpy as np
+        on, off = self.on.evaluate(data), self.off.evaluate(data)
+        frames = [x for x in (on, off) if isinstance(x, (pd.DataFrame, pd.Series))]
+        if not frames:
+            raise ValueError("latch needs a value per day: on and off cannot both be constants")
+        like = frames[0]
+        on = on if isinstance(on, (pd.DataFrame, pd.Series)) else pd.DataFrame(on, index=like.index, columns=like.columns) if isinstance(like, pd.DataFrame) else pd.Series(on, index=like.index)
+        off = off if isinstance(off, (pd.DataFrame, pd.Series)) else on * 0 + off
+        off = off.reindex_like(on)
+        state = pd.DataFrame(np.nan, index=on.index, columns=on.columns) if isinstance(on, pd.DataFrame) else pd.Series(np.nan, index=on.index)
+        state = state.mask(on.notna() & (on != 0), 1.0)
+        state = state.mask(off.notna() & (off != 0), 0.0)          # off wins
+        return state.ffill().fillna(0.0)
+
+    def _cache_key(self):
+        return ('Latch', self.on._cache_key(), self.off._cache_key())
+
+
+def latch(on: Signal, off: Signal) -> Latch:
+    """1 from a day on is true until a day off is true (off wins a tie), 0 before; missing days change nothing."""
+    return Latch(on, off)
 
 
 def ts_corr(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsCorr:

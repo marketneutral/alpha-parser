@@ -44,6 +44,7 @@ PYTHONPATH=src pytest tests/ -v
 - Use `LazyData(data, descriptions={...})` for self-documenting data - call `data.describe()` to inspect
 - Never call `pct_change` on prices: use `price_returns`/`forward_returns` (NaN on days with no price, bridged from the last valid price up to `MAX_PRICE_GAP` rows; identical on pandas 2 and 3). `Backtest` holds untradable names' weights via `hold_untradable`
 - Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
+- A universe is a mask, a field name, or a qex expression (nonzero = member), evaluated over all stocks with no universe active (`universe.py: universe_mask`); `latch(on, off)` is hysteresis (since 0.9.0)
 - Expressions give numbers or labels (`group`, `group_cross`, strings); labels only compare (`==`, `!=`), group, or pass through `coalesce`/`where`, else the parse is refused (`kinds.py`)
 - Group operators take a group's name or any labels expression (`quantile(field('mcap'), 5)`, `group_cross('sector', ...)`); `group_quantile` sorts within groups (since 0.8.0)
 - Comparisons and logic are three-valued (since 0.7.0): a comparison with a missing side is missing, `&` `|` `~` follow Kleene (false & missing = 0, true | missing = 1), and `where` with a missing condition is missing; `coalesce(x, y)` (x where it has a value, else y) says what missing should mean, as `coalesce(close() > 8, 0)`

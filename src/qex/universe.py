@@ -15,6 +15,15 @@ Example:
     ...     r = qex("rank(returns(5))").evaluate(data)     # ranked among members only
 
 build_book does this itself with BookSettings(universe=..., mask_cross_section=True).
+
+A universe is a mask, the name of a data field (1 in, NaN out), or a universe expression: qex that gives each stock
+a number each day, nonzero for a member. An expression is evaluated over every stock with no universe active (it
+defines the cross-section, so it cannot be computed inside one), must give numbers, and is computed once per
+compute_context:
+
+    >>> STANDARD = "latch((close() >= 2) & (field('mcap') >= 300e6), field('mcap') < 240e6)"
+    >>> with cross_section_universe(STANDARD, data):
+    ...     r = qex("rank(returns(5))").evaluate(data)
 """
 
 import itertools
@@ -29,17 +38,70 @@ _token: Optional[int] = None
 _tokens = itertools.count()
 
 
-@contextmanager
-def cross_section_universe(mask: Optional[pd.DataFrame]):
-    """Restrict cross-sectional operators to the names where mask is True (or finite), day by day.
-
-    mask is a date x ticker DataFrame of booleans, or a universe field (1 in, NaN out). Dates or
-    tickers it does not cover are outside the universe. None leaves operators unrestricted.
-    """
+def universe_mask(universe, data=None) -> Optional[pd.DataFrame]:
+    """The members, date x ticker True/False, of a universe given as None, a mask, a data field's name, or a universe
+    expression (qex text or a Signal) evaluated on data. Text that names a field of data is that field."""
+    if universe is None:
+        return None
+    if isinstance(universe, pd.DataFrame):
+        return universe if not universe.dtypes.ne(bool).any() else (universe.notna() & universe.ne(0))
+    from .signal import Signal
+    if isinstance(universe, str):
+        if data is not None and universe in data:
+            return universe_mask(_field_frame(data, universe))
+        from .parser import qex
+        universe = qex(universe)
+    if not isinstance(universe, Signal):
+        raise TypeError(f"a universe is a mask, a field's name or a qex expression, not {type(universe).__name__}")
+    if data is None:
+        raise TypeError("a universe expression needs the data to evaluate it on: cross_section_universe(expr, data)")
+    from .kinds import kind, LABELS
+    if kind(universe) == LABELS:
+        raise ValueError("a universe gives numbers (nonzero for a member), not labels: compare the labels "
+                         "(group('category') == 'Domestic Common Stock')")
+    from .context import get_context, compute_context
+    ctx = get_context()
+    key = ("universe mask", universe._cache_key())
+    if ctx is not None and key in ctx.cache:
+        ctx.check(data)
+        if key in ctx.cache:
+            return ctx.cache[key]
     global _mask, _token
     old = _mask, _token
-    if mask is not None and mask.dtypes.ne(bool).any():
-        mask = mask.notna() & mask.ne(0)
+    _mask, _token = None, None                            # a universe is computed over every stock
+    try:
+        if ctx is None:
+            with compute_context():
+                values = universe.evaluate(data)
+        else:
+            values = universe.evaluate(data)
+    finally:
+        _mask, _token = old
+    if not isinstance(values, pd.DataFrame):
+        raise ValueError("a universe gives each stock a value on each day, not one value for all of them")
+    v = values.to_numpy(dtype=float)
+    mask = pd.DataFrame(np.isfinite(v) & (v != 0), index=values.index, columns=values.columns)
+    if ctx is not None:
+        ctx.cache[key] = mask
+    return mask
+
+
+def _field_frame(data, name):
+    from .data import resolve_data
+    return resolve_data(data)[name]
+
+
+@contextmanager
+def cross_section_universe(mask, data=None):
+    """Restrict cross-sectional operators to the members of a universe, day by day.
+
+    mask is a date x ticker DataFrame of booleans, a universe field (1 in, NaN out), or, with data, a field's name or a
+    universe expression (see the module docstring). Dates or tickers it does not cover are outside the universe. None
+    leaves operators unrestricted.
+    """
+    global _mask, _token
+    mask = universe_mask(mask, data)
+    old = _mask, _token
     _mask, _token = mask, (None if mask is None else next(_tokens))
     try:
         yield
