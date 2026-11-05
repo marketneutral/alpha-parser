@@ -43,7 +43,7 @@ qex("returns(20) ** 2")      # Power, as power(returns(20), 2); the exponent mus
 ### Comparisons
 
 ```python
-qex("returns(5) > 0")        # Returns 0 or 1
+qex("returns(5) > 0")        # 1 or 0; missing where returns(5) is missing
 qex("volume(1) >= volume(20)")
 ```
 
@@ -52,7 +52,11 @@ qex("volume(1) >= volume(20)")
 ```python
 qex("(returns(5) > 0) & (volume(1) > volume(20))")  # AND
 qex("(returns(5) > 0.1) | (returns(5) < -0.1)")  # OR
+qex("~(returns(5) > 0)")  # NOT
 ```
+
+`&`, `|` and `~` are three-valued: false & missing is false, true | missing is true, and anything else with a
+missing side is missing (see the operations reference).
 
 ### Nested Expressions
 

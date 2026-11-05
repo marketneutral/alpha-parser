@@ -279,7 +279,8 @@ This is useful when factors don't apply to certain sectors (e.g., value metrics 
 
 | Operation | Description |
 |-----------|-------------|
-| `where(cond, if_true, if_false)` | Ternary conditional |
+| `where(cond, if_true, if_false)` | Ternary conditional: `if_true` where `cond` is nonzero, `if_false` where it is 0, missing where it is missing |
+| `coalesce(x, y)` | `x` where it has a value, else `y` (a number or a signal): `coalesce(close() > 8, 0)` |
 | `is_valid(x)` | Returns 1 where not NaN, else 0 |
 | `None` | No value here, on purpose: `where(cond, x, None)`. Missing like NaN, but reported as excluded by `explain_missing` |
 | `fill_forward(x, limit)` | Forward fill NaN for up to N periods |
@@ -340,13 +341,35 @@ Standard Python operators work:
 |----------|-------------|
 | `+`, `-`, `*`, `/` | Basic arithmetic |
 | `**` | Power |
-| `>`, `<`, `>=`, `<=`, `==`, `!=` | Comparison (returns 0/1) |
-| `&`, `\|` | Logical AND/OR |
+| `>`, `<`, `>=`, `<=`, `==`, `!=` | Comparison: 1 or 0, and missing where either side is missing |
+| `&`, `\|`, `~` | Logical AND, OR, NOT, three-valued (below) |
 
 ```python
 qex("returns(20) / volatility(60)")
 qex("(returns(5) > 0) & (volume(1) > volume(20))")
 ```
+
+### Comparisons and logic with missing values
+
+A comparison with a missing side is missing, not 0: `close() > 8` on a day with no price is not known, and a 0
+would be a confident "no" that every operator downstream acts on (`where(close() > 8, 1, -1)` would short a stock
+with no price). `&`, `|` and `~` follow Kleene's three-valued logic, as pandas' `NA` does, and `where` with a missing
+condition is missing:
+
+| `a` | `b` | `a & b` | `a \| b` | `~a` |
+|-----|-----|---------|-----------|------|
+| 1 | missing | missing | 1 | 0 |
+| 0 | missing | 0 | missing | 1 |
+| missing | missing | missing | missing | missing |
+
+So a known answer survives: `is_valid(x) & (x > k)` is 0 where `x` is missing, because one side is known false.
+To say that missing counts as false, write it: `coalesce(close() > 8, 0)` is the comparison where it is known and
+0 where it is not. (`where(close() > 8, 1, 0)` stays missing where the price is: the condition picks no branch.)
+Where a condition reads a different field from the value it gates, the difference shows: in
+`returns(1) * (field('volume') > 60)`, a day with a return but no volume is missing, where before it was 0 (and a
+book demeans a 0 into a position).
+
+(Before qex 0.7.0 a comparison with a missing side gave 0, and `where` read a missing condition as true.)
 
 ## Variable Bindings
 

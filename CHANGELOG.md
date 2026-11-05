@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.7.0
+
+Comparisons and logic become three-valued. **Numbers change** wherever a comparison meets a missing value.
+
+### A comparison with a missing side is missing
+
+`>`, `<`, `>=`, `<=`, `==` and `!=` give 1 or 0 as before, and NaN where either side is missing (before, 0). A 0
+there was a confident "no": `where(close() > 8, 1, -1)` shorted a stock with no price, and `~(close() > 8)` said
+the same stock was not above 8. `group('sector') == 'Financials'` is missing for a name with no sector.
+
+### `&`, `|` and `~` follow Kleene's logic
+
+As pandas' `NA` does: false & missing is false, true | missing is true, and every other combination with a missing
+side is missing; `~` keeps missing missing. So guards keep their answer: `is_valid(x) & (x > k)` is 0 where `x` is
+missing.
+
+### `where` with a missing condition is missing
+
+`where` read its condition with `astype(bool)`, so a missing condition counted as true and took `if_true`. Now it
+gives a missing value. `explain_missing` passes the condition's reason on.
+
+### `coalesce(x, y)`
+
+`x` where it has a value, else `y` (a number or a signal). It is how an expression says what a missing value should
+mean: `coalesce(close() > 8, 0)` is the comparison where it is known and 0 where it is not, which is what a
+comparison gave everywhere before this release. A new operator: nothing that does not use it changes.
+
+### What moves
+
+An expression whose comparisons only see values that are present is unchanged. One that compares a series still
+warming up (`where(ts_std(x, 21) > ts_std(x, 252), a, b)` in its first year) or a field that can be missing on
+days the gated value is not (`returns(1) * (field('volume') > 60)`) now has no value there, where before it took
+the "false" answer. In qexarena's regression over its sealed alphas, two of three were unchanged.
+
 ## 0.6.0
 
 Missing values get a literal and a reason. **No number changes**: both are additions, and expressions that do not
