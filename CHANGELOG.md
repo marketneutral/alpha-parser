@@ -32,6 +32,12 @@ with no P&L for the missing move (delisting returns are not modelled). Held weig
 rescaled, so gross can differ slightly from 1 on those days. `build_book` still returns the
 exact target book. New: `hold_untradable`.
 
+### Python 3.9 is no longer supported
+
+`requires-python` is now `>=3.10`. Python 3.9 reached end of life in October 2025, and
+GitHub's current `ubuntu-latest` runner no longer provides it. CI tests 3.10, 3.11 and 3.12,
+and one failing version no longer cancels the others (`fail-fast: false`).
+
 ### Other fixes
 
 - `QuantileAnalysis.ic_summary` raised `KeyError` when no day had at least 5 names; it now
