@@ -26,7 +26,7 @@ Backwards compatibility:
 
 # Context management
 from .context import compute_context, get_context, ComputeContext
-from .universe import cross_section_universe
+from .universe import cross_section_universe, universe_mask
 from .missing import explain_missing, MissingReport
 
 # Base class
@@ -61,7 +61,7 @@ from .timeseries import (
     TsCorr, TsCov, Ewma, EwmaVar, EwmaCov, TsBeta, TsBetaShrunk, TsBetaEwma,
     TsArgmax, TsArgmin, TsSkew, TsKurt, DecayLinear,
     TsMeanEvents, TsStdEvents, TsSumEvents, TsCountEvents,
-    ts_mean, ts_std, ts_sum, ts_max, ts_min, ts_var, delay, delta, ts_rank, fill_forward,
+    ts_mean, ts_std, ts_sum, ts_max, ts_min, ts_var, delay, delta, ts_rank, fill_forward, latch, Latch,
     ts_corr, ts_cov, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
@@ -234,6 +234,9 @@ __all__ = [
     'delta',
     'ts_rank',
     'fill_forward',
+    'latch',
+    'Latch',
+    'universe_mask',
     'ts_corr',
     'ts_cov',
     'ewma',

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.9.0
+
+Universes as qex expressions. Nothing that worked before changes: a mask or a field's name is a universe as before.
+
+### A universe can be an expression
+
+`cross_section_universe`, `BookSettings(universe=...)` and `explain_missing(universe=...)` take a mask, a data
+field's name (as before), or a universe expression: qex text or a parsed signal, nonzero for a member. It is
+evaluated over every stock with no universe active (it defines the cross-section), must give numbers, and is computed
+once per `compute_context`. `universe_mask(universe, data)` gives the membership itself. The data can stay raw, and
+the rule that makes a universe is code.
+
+### `latch(on, off)`
+
+1 from a day `on` is true until a day `off` is true, 0 before; a missing day changes nothing, and `off` wins a tie.
+Hysteresis is `latch(mcap >= 300e6, mcap < 240e6)`: on noise around one line, a hard cutoff changes state 9 times in
+twelve days where the band changes 3.
+
+### `fill_forward(x)` with no limit
+
+Carries each value until the next one; `fill_forward(x, n)` still stops after `n` days.
+
+### Docs
+
+A new guide, *Universes*: the three forms, how an expression is evaluated, hysteresis with `latch`, and
+reconstituting on a schedule.
+
 ## 0.8.0
 
 Groupings from any expression, sorts within groups, and crossed groupings. Nothing that worked before changes.

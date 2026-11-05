@@ -237,7 +237,12 @@ finished signal, as in qex before 0.5.
 from qex import cross_section_universe
 with cross_section_universe(data['member'].notna()):
     r = qex("rank(returns(5))").evaluate(data)   # ranked among members
+with cross_section_universe("field('mcap') >= 300e6", data):
+    r = qex("rank(returns(5))").evaluate(data)   # a universe expression: nonzero is a member
 ```
+
+A universe is a mask, a data field's name, or a **universe expression**, evaluated over every stock with no universe
+active; `latch(on, off)` gives it hysteresis. The [Universes guide](../guides/universes.md) works through it.
 
 !!! warning "rank() is Ascending"
     Higher values get higher ranks.
@@ -294,7 +299,8 @@ This is useful when factors don't apply to certain sectors (e.g., value metrics 
 | `coalesce(x, y)` | `x` where it has a value, else `y` (a number or a signal): `coalesce(close() > 8, 0)` |
 | `is_valid(x)` | Returns 1 where not NaN, else 0 |
 | `None` | No value here, on purpose: `where(cond, x, None)`. Missing like NaN, but reported as excluded by `explain_missing` |
-| `fill_forward(x, limit)` | Forward fill NaN for up to N periods |
+| `fill_forward(x, limit)` | Forward fill NaN for up to `limit` periods; `fill_forward(x)` with no limit fills until the next value |
+| `latch(on, off)` | 1 from a day `on` is true until a day `off` is (off wins a tie), 0 before; missing days change nothing. Hysteresis: `latch(mcap >= 300e6, mcap < 240e6)` |
 
 ```python
 qex("where(volatility(20) > 0.3, None, returns(5))")  # Leave out high-vol

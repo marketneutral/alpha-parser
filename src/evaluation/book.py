@@ -22,7 +22,7 @@ from qex.signal import Signal
 from qex.context import compute_context
 from qex.data import LazyData, close, field, panel, resolve_data
 from qex.primitives import MAX_PRICE_GAP
-from qex.universe import cross_section_universe
+from qex.universe import cross_section_universe, universe_mask
 from qex.groups import _get_group_data, _group_codes
 
 
@@ -38,7 +38,9 @@ class BookSettings:
             close on what was known at day t-1's close; delay 0 trades at the same close
             the signal saw.
         universe: Name of a data field that is 1 (or any finite value) for names in the
-            universe that day and NaN otherwise. None means every name with a price.
+            universe that day and NaN otherwise, or a universe expression (qex text or a Signal)
+            that is nonzero for a member, evaluated over every name (see qex.universe). None means
+            every name with a price.
         neutralize: "market" demeans across all names each day, a group field name
             (e.g. "sector") demeans within each group, None leaves the book unneutralized.
         truncation: Largest absolute weight of any one name, as a fraction of the book.
@@ -58,7 +60,7 @@ class BookSettings:
     """
 
     delay: int = 1
-    universe: Optional[str] = None
+    universe: Optional[Union[str, Signal]] = None
     neutralize: Optional[str] = "market"
     truncation: Optional[float] = 0.05
     rounds: int = 1000
@@ -142,13 +144,21 @@ def build_book(
         DataFrame of weights, dates by names.
     """
     masked = signal + 0 * close()
-    universe = None
-    if settings.universe is not None:
-        masked = masked + 0 * field(settings.universe)
+    universe, members = None, None
+    u = settings.universe
+    if isinstance(u, str) and u in resolve_data(data):           # a field: 1 in, NaN out, as before
+        masked = masked + 0 * field(u)
         if settings.mask_cross_section:
-            universe = panel(data, settings.universe).notna()
-    with compute_context(), cross_section_universe(universe):
-        raw = masked.evaluate(data)
+            universe = panel(data, u).notna()
+    with compute_context():
+        if u is not None and universe is None and not (isinstance(u, str) and u in resolve_data(data)):
+            members = universe_mask(u, data)                    # a universe expression: nonzero is a member
+            if settings.mask_cross_section:
+                universe = members
+        with cross_section_universe(universe):
+            raw = masked.evaluate(data)
+    if members is not None:
+        raw = raw.where(members.reindex(index=raw.index, columns=raw.columns, fill_value=False))
     if settings.delay:
         raw = raw.shift(settings.delay)
     raw = raw.where(resolve_data(data)["close"].reindex_like(raw).notna())

@@ -155,7 +155,7 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
     """The reason for every missing cell of signal's value on data (see the module's docstring). Evaluate it in the
     cross-sectional universe the signal is used in: pass universe, or call it inside cross_section_universe."""
     if universe is not None:
-        with _uni.cross_section_universe(universe):
+        with _uni.cross_section_universe(universe, data):        # a mask, a field's name or a universe expression
             return explain_missing(signal, data)
     if get_context() is None:
         with compute_context():
