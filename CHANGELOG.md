@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.8.0
+
+Groupings from any expression, sorts within groups, and crossed groupings. Nothing that worked before changes.
+
+### Group operators take a labels expression
+
+`groups` in `group_rank`, `group_demean`, `group_sum`, `group_std` and `group_count_valid` is a group's name, as
+before, or any expression that gives each stock a label on each day: `group_demean(x, quantile(field('mcap'), 5))`
+is size-neutral, `group_demean(x, coalesce(group('sector'), 'Other'))` gives unlabelled stocks a group, and a named
+`let` binding works too. A stock with no label is in no group and gets no value, with the reason `no group`, or the
+label's own reason (`no data, at field('mcap')`). Anything else is refused with a message saying what `groups` can be
+(before, an expression failed with `unhashable type`).
+
+### `group_quantile(x, groups, n)`
+
+Quantile buckets within each group, 1 to n, as `quantile` within each group. `group_quantile(value, quantile(size,
+3), 3)` is a dependent double sort, which before had to be written as one `where` branch per bucket.
+
+### `group_cross(a, b, ...)`
+
+One grouping from several: each stock's label is its labels joined with `|` (`'Technology|3'`), and missing where any
+part is. `group_demean(x, group_cross('sector', quantile(field('mcap'), 3)))` is sector- and size-neutral. A label
+containing `|` is refused, since two different pairs could join to the same label.
+
+### Fixes
+
+- `explain_missing` failed on any expression with `group(...)` in it, such as
+  `where(group('sector') == 'Financials', None, x)`: it read the labels as numbers. It now reads a label node as
+  present or missing.
+- The graph view (`SignalGraph`) shows a grouping expression as an input of its group operator.
+
+### Docs
+
+Two new guides: *Missing Values* (`None`, why a value is missing, three-valued logic, `coalesce`) and *Group
+Operations* (every operator, labels from expressions, missing labels, double sorts, crossed groupings).
+
 ## 0.7.1
 
 Two bug fixes. Nothing changes for a daily book (`holding_period=1`, the default) or for code that evaluates each

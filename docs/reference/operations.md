@@ -245,20 +245,26 @@ with cross_section_universe(data['member'].notna()):
 
 ## Group Operations
 
-Like cross-sectional, but within groups.
+Like cross-sectional, but within groups. `groups` is a group's name (`'sector'`) or any expression that gives each
+stock a label (`quantile(field('mcap'), 5)`, `coalesce(group('sector'), 'Other')`, `group_cross(...)`). A stock with
+no label is in no group and gets no value. The [Group Operations guide](../guides/groups.md) works through each one.
 
 | Operation | Description |
 |-----------|-------------|
-| `group('group')` | Access group data for filtering |
-| `group_rank(x, 'group')` | Rank within each group |
-| `group_demean(x, 'group')` | Demean within each group |
-| `group_std(x, 'group', period)` | Rolling std within group |
-| `group_sum(x, 'group')` | Sum within group |
-| `group_count_valid(x, 'group', period)` | Count non-NaN within group |
+| `group(name)` | The labels themselves, for filtering or as a grouping: `group('sector')` |
+| `group_rank(x, groups)` | Rank within each group, in (0, 1] |
+| `group_demean(x, groups)` | Demean within each group |
+| `group_quantile(x, groups, n)` | Quantile buckets within each group, 1 to n: a dependent double sort |
+| `group_std(x, groups, period)` | Rolling std within group |
+| `group_sum(x, groups)` | Sum within group |
+| `group_count_valid(x, groups, period)` | Count non-NaN within group |
+| `group_cross(a, b, ...)` | One grouping from several: labels joined with `\|`, `'Technology\|3'` |
 
 ```python
-qex("group_demean(returns(20), 'sector')")  # Sector-neutral returns
-qex("group_rank(returns(20), 'industry')")  # Rank within industry
+qex("group_demean(returns(20), 'sector')")                          # sector-neutral returns
+qex("group_demean(returns(20), quantile(field('mcap'), 5))")        # size-neutral returns
+qex("group_quantile(field('value'), quantile(field('mcap'), 3), 3)")  # value terciles within size terciles
+qex("group_demean(returns(20), group_cross('sector', quantile(field('mcap'), 3)))")  # sector and size
 ```
 
 ### Sector Filtering
@@ -291,6 +297,8 @@ qex("fill_forward(field('earnings'), 60)")  # Hold earnings for quarter
 ```
 
 ### None, and why a value is missing
+
+The [Missing Values guide](../guides/missing-values.md) works through all of this with examples.
 
 `None` and `0` are different answers. `0` is a value: a book demeans its signal, so a `0` above or below the day's
 average is a position, and a cross-section counts it. `None` is no value: cross-sections and the book leave it out,

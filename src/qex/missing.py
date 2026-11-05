@@ -52,7 +52,7 @@ REASONS = {
 }
 _CROSS = tuple(c for c in vars(_cs).values() if isinstance(c, type) and issubclass(c, Signal) and c.__module__ == _cs.__name__)
 _GROUP_OPS = tuple(c for c in vars(_gr).values() if isinstance(c, type) and issubclass(c, Signal)
-                   and c.__module__ == _gr.__name__ and c is not _gr.Group)
+                   and c.__module__ == _gr.__name__ and c not in (_gr.Group, _gr.GroupCross))
 _TIME = tuple(c for c in vars(_ts).values() if isinstance(c, type) and issubclass(c, Signal) and c.__module__ == _ts.__name__)
 _PRIMITIVE_FIELDS = {_pr.Returns: lambda s: [s.price_field], _pr.Volatility: lambda s: [s.price_field],
                      _pr.Volume: lambda s: ["volume"], _pr.Adv: lambda s: [s.price_field, "volume"]}
@@ -172,7 +172,10 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
     def frame(v):
         """A node's value as an array of the root's shape: a constant broadcast, a series (the market) per column."""
         if isinstance(v, pd.DataFrame):
-            return v.reindex(index=index, columns=columns).to_numpy(dtype=float, na_value=np.nan)
+            v = v.reindex(index=index, columns=columns)
+            if not all(pd.api.types.is_numeric_dtype(t) for t in v.dtypes):       # labels: present (0) or missing
+                return np.where(v.isna().to_numpy(), np.nan, 0.0)
+            return v.to_numpy(dtype=float, na_value=np.nan)
         if isinstance(v, pd.Series):
             a = v.reindex(index).to_numpy(dtype=float, na_value=np.nan)
             return np.repeat(a[:, None], shape[1], axis=1)
@@ -226,6 +229,10 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
         elif isinstance(s, _dt.Field) or isinstance(s, (_dt.DayOfWeek, _dt.DayOfMonth, _dt.MonthOfYear)):
             own(missing, NO_DATA)
         elif isinstance(s, _gr.Group):
+            own(missing, NO_GROUP)
+        elif isinstance(s, _gr.GroupCross):
+            for res in got:
+                inherit(missing, res)                                        # the part with no label, and why
             own(missing, NO_GROUP)
         elif isinstance(s, tuple(_PRIMITIVE_FIELDS)):
             base = np.zeros(shape, bool)

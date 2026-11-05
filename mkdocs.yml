@@ -79,6 +79,8 @@ nav:
     - Event-Driven: guides/event-driven.md
     - Backtesting: guides/backtesting.md
     - Market Beta: guides/market-beta.md
+    - Missing Values: guides/missing-values.md
+    - Group Operations: guides/groups.md
   - Reference:
     - All Operations: reference/operations.md
     - Parser & Syntax: reference/parser.md
