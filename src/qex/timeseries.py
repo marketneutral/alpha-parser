@@ -646,81 +646,68 @@ def decay_linear(signal: Signal, period: int) -> DecayLinear:
 
 # Event-based rolling operations (roll over N non-NaN values, not N rows)
 
-def _apply_event_rolling(values: pd.DataFrame, n_events: int, func) -> pd.DataFrame:
-    """Apply a function over the past N non-NaN values for each column."""
-    result = pd.DataFrame(index=values.index, columns=values.columns, dtype=float)
+def _event_minimum(n_events, min_events):
+    """The fewest events a window needs: all n_events unless min_events says fewer."""
+    if isinstance(n_events, bool) or not isinstance(n_events, int) or n_events < 1:
+        raise ValueError(f"the number of events is a whole number, at least 1 (got {n_events!r})")
+    if min_events is None:
+        return n_events
+    if isinstance(min_events, bool) or not isinstance(min_events, int) or not 1 <= min_events <= n_events:
+        raise ValueError(f"the minimum number of events is a whole number from 1 to {n_events} (got {min_events!r})")
+    return min_events
 
+
+def _apply_event_rolling(values: pd.DataFrame, n_events: int, how: str, min_events: Optional[int] = None) -> pd.DataFrame:
+    """how ('mean', 'std' or 'sum') over each column's past n_events non-NaN values, once it has min_events of them
+    (default n_events). A day without an event carries the window as of the last event."""
+    m = _event_minimum(n_events, min_events)
+    out = {}
     for col in values.columns:
-        series = values[col].values
-        col_result = np.full(len(series), np.nan)
-        valid_values = []
-
-        for i, val in enumerate(series):
-            if not np.isnan(val):
-                valid_values.append(val)
-
-            if len(valid_values) >= n_events:
-                col_result[i] = func(valid_values[-n_events:])
-
-        result[col] = col_result
-
-    return result
+        s = values[col].dropna()
+        r = getattr(s.rolling(n_events, min_periods=m), how)()
+        out[col] = r.reindex(values.index).ffill()
+    return pd.DataFrame(out, index=values.index, columns=values.columns, dtype=float)
 
 
-class TsMeanEvents(Signal):
+class _EventWindow(Signal):
+    """A statistic over the past n_events non-NaN values (events), once there are min_events (default all)."""
+    _how = None
+
+    def __init__(self, signal: Signal, n_events: int, min_events: Optional[int] = None):
+        _event_minimum(n_events, min_events)
+        self.signal = signal
+        self.n_events = n_events
+        self.min_events = min_events
+
+    def _compute(self, data):
+        return _apply_event_rolling(self.signal.evaluate(data), self.n_events, self._how, self.min_events)
+
+    def _cache_key(self):
+        key = (type(self).__name__, self.signal._cache_key(), self.n_events)
+        return key if self.min_events is None else key + (self.min_events,)
+
+
+class TsMeanEvents(_EventWindow):
     """Rolling mean over past N non-NaN values (events).
 
     Useful for sparse data like quarterly earnings where you want
     the mean of the past N announcements, not the past N days.
     """
-
-    def __init__(self, signal: Signal, n_events: int):
-        self.signal = signal
-        self.n_events = n_events
-
-    def _compute(self, data):
-        values = self.signal.evaluate(data)
-        return _apply_event_rolling(values, self.n_events, np.mean)
-
-    def _cache_key(self):
-        return ('TsMeanEvents', self.signal._cache_key(), self.n_events)
+    _how = "mean"
 
 
-class TsStdEvents(Signal):
-    """Rolling standard deviation over past N non-NaN values (events).
+class TsStdEvents(_EventWindow):
+    """Rolling standard deviation (ddof 1) over past N non-NaN values (events).
 
     Useful for computing volatility of sparse data like earnings surprises
     where you want the std of the past N announcements, not the past N days.
     """
-
-    def __init__(self, signal: Signal, n_events: int):
-        self.signal = signal
-        self.n_events = n_events
-
-    def _compute(self, data):
-        values = self.signal.evaluate(data)
-        return _apply_event_rolling(
-            values, self.n_events,
-            lambda x: np.std(x, ddof=1) if len(x) > 1 else np.nan
-        )
-
-    def _cache_key(self):
-        return ('TsStdEvents', self.signal._cache_key(), self.n_events)
+    _how = "std"
 
 
-class TsSumEvents(Signal):
+class TsSumEvents(_EventWindow):
     """Rolling sum over past N non-NaN values (events)."""
-
-    def __init__(self, signal: Signal, n_events: int):
-        self.signal = signal
-        self.n_events = n_events
-
-    def _compute(self, data):
-        values = self.signal.evaluate(data)
-        return _apply_event_rolling(values, self.n_events, np.sum)
-
-    def _cache_key(self):
-        return ('TsSumEvents', self.signal._cache_key(), self.n_events)
+    _how = "sum"
 
 
 class TsCountEvents(Signal):
@@ -746,19 +733,19 @@ class TsCountEvents(Signal):
 
 # Factory functions for event-based operations
 
-def ts_mean_events(signal: Signal, n_events: int) -> TsMeanEvents:
-    """Create a TsMeanEvents signal (mean over past N non-NaN values)."""
-    return TsMeanEvents(signal, n_events)
+def ts_mean_events(signal: Signal, n_events: int, min_events: Optional[int] = None) -> TsMeanEvents:
+    """The mean of the past n_events non-NaN values, once there are min_events of them (default n_events)."""
+    return TsMeanEvents(signal, n_events, min_events)
 
 
-def ts_std_events(signal: Signal, n_events: int) -> TsStdEvents:
-    """Create a TsStdEvents signal (std over past N non-NaN values)."""
-    return TsStdEvents(signal, n_events)
+def ts_std_events(signal: Signal, n_events: int, min_events: Optional[int] = None) -> TsStdEvents:
+    """The std of the past n_events non-NaN values, once there are min_events of them (default n_events)."""
+    return TsStdEvents(signal, n_events, min_events)
 
 
-def ts_sum_events(signal: Signal, n_events: int) -> TsSumEvents:
-    """Create a TsSumEvents signal (sum over past N non-NaN values)."""
-    return TsSumEvents(signal, n_events)
+def ts_sum_events(signal: Signal, n_events: int, min_events: Optional[int] = None) -> TsSumEvents:
+    """The sum of the past n_events non-NaN values, once there are min_events of them (default n_events)."""
+    return TsSumEvents(signal, n_events, min_events)
 
 
 def ts_count_events(signal: Signal, period: int) -> TsCountEvents:

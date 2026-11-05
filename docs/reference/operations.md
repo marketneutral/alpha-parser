@@ -172,9 +172,9 @@ qex("ts_argmax(close(), 252)")  # Days since 52-week high
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_mean_events(x, n)` | Mean over past N non-NaN values |
-| `ts_std_events(x, n)` | Std over past N non-NaN values |
-| `ts_sum_events(x, n)` | Sum over past N non-NaN values |
+| `ts_mean_events(x, n, min_n)` | Mean over past N non-NaN values, once there are `min_n` (default all N) |
+| `ts_std_events(x, n, min_n)` | Std over past N non-NaN values, once there are `min_n` (default all N) |
+| `ts_sum_events(x, n, min_n)` | Sum over past N non-NaN values, once there are `min_n` (default all N) |
 | `ts_count_events(x, period)` | Count of non-NaN in rolling window |
 
 ```python

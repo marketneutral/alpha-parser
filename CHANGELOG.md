@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.0
+
+### A minimum number of events
+
+`ts_mean_events(x, n, min_n)`, `ts_std_events` and `ts_sum_events` take an optional minimum: the window gives a value
+once it has `min_n` events, not only all `n` (the default, unchanged). A dollar-volume average over the last 20
+sessions that needs only 10 is `ts_sum_events(price * vol, 20, 1) / ts_sum_events(vol > 0, 20, 1)`, guarded by
+`ts_sum_events(vol > 0, 20, 1) >= 10`; with it, qexarena's universe written in qex reproduces its old membership file
+exactly. A count outside 1 to `n` is refused.
+
+### Faster event windows
+
+The event windows were a Python loop over every cell; they are now pandas rolling windows over each stock's events,
+with identical results (tested against the old loop): about five times faster on a full panel.
+
 ## 0.9.0
 
 Universes as qex expressions. Nothing that worked before changes: a mask or a field's name is a universe as before.

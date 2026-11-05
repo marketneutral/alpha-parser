@@ -63,6 +63,23 @@ The hard line changes state 9 times in twelve days; the band 3, and only for the
 Because a missing day changes nothing, a stock that stops trading stays latched in. Say when it leaves: put the
 hard exits (no price for ten days, a price under $2) in `off`.
 
+qexarena's universe until now, written as an expression, reproduces its old membership file exactly (13,138,466
+member-days, no difference). Dollar volume is averaged over the last 20 *sessions* (days the stock was quoted, traded
+or not), counting only the sessions with trades, once there are 10 of them:
+
+```python
+TODAY = """
+let price  = field('price'),                              # as-traded close, on every quoted session
+    vol    = field('volume_raw'),                         # as-traded volume, 0 on a session with no trades
+    traded = ts_sum_events(vol > 0, 20, 1),               # sessions with trades among the last 20
+    dvol   = ts_sum_events(price * vol, 20, 1) / traded,
+    mcap   = price * field('shares')
+in is_valid(close()) & (price >= 2) & (traded >= 10) & (dvol >= 5e6) & (mcap >= 300e6)
+"""
+```
+
+With a band, and the hard exits in `off`:
+
 ```python
 STANDARD = """
 let price = field('price'),
