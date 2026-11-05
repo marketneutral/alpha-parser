@@ -4,9 +4,11 @@ from .signal import Signal
 
 
 def _ensure_signal(x):
-    """Convert constants to Constant signals."""
+    """Convert constants to Constant signals, and None to the None literal."""
     if isinstance(x, Signal):
         return x
+    if x is None:
+        return NoneValue()
     return Constant(x)
 
 
@@ -21,6 +23,21 @@ class Constant(Signal):
 
     def _cache_key(self):
         return ('Constant', self.value)
+
+
+class NoneValue(Signal):
+    """The None literal: no value here, on purpose, as in where(cond, x, None).
+
+    It is missing like any NaN (cross-sections and the book leave it out, and arithmetic with it
+    stays missing), but its origin is known: explain_missing reports a cell that is missing
+    because of it as excluded on purpose, not as a calculation that failed.
+    """
+
+    def _compute(self, data):
+        return float('nan')
+
+    def _cache_key(self):
+        return ('None',)
 
 
 class BinaryOp(Signal):

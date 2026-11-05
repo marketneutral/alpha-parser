@@ -27,13 +27,14 @@ Backwards compatibility:
 # Context management
 from .context import compute_context, get_context, ComputeContext
 from .universe import cross_section_universe
+from .missing import explain_missing, MissingReport
 
 # Base class
 from .signal import Signal
 
 # Operators
 from .operators import (
-    Constant, BinaryOp,
+    Constant, NoneValue, BinaryOp,
     Add, Sub, Mul, Div, Neg,
     Greater, Less, GreaterEqual, LessEqual, Equal, NotEqual,
     And, Or, Not,
@@ -125,12 +126,14 @@ __all__ = [
     'get_context',
     'ComputeContext',
     'cross_section_universe',
+    'explain_missing',
+    'MissingReport',
 
     # Base
     'Signal',
 
     # Operators
-    'Constant',
+    'Constant', 'NoneValue',
     'BinaryOp',
     'Add',
     'Sub',

@@ -44,6 +44,7 @@ PYTHONPATH=src pytest tests/ -v
 - Use `LazyData(data, descriptions={...})` for self-documenting data - call `data.describe()` to inspect
 - Never call `pct_change` on prices: use `price_returns`/`forward_returns` (NaN on days with no price, bridged from the last valid price up to `MAX_PRICE_GAP` rows; identical on pandas 2 and 3). `Backtest` holds untradable names' weights via `hold_untradable`
 - Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
+- `None` is the literal for "no value here, on purpose" (`where(cond, x, None)`); `0` is a value, and a position once a book demeans the signal. `explain_missing(signal, data, universe=...)` (`missing.py`) traces each missing cell to its reason and the node where it began
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 
 ## Available Operations
@@ -70,11 +71,11 @@ PYTHONPATH=src pytest tests/ -v
 Use `group()` with `where()` to filter signals by sector membership:
 
 ```python
-# Price-to-book isn't meaningful for Financials - zero them out
-qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
+# Price-to-book isn't meaningful for Financials - leave them out (None: no value, no position)
+qex("where(group('sector')=='Financials', None, field('price_to_book'))")
 
-# Only trade Technology stocks (long-only)
-qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
+# Only trade Technology stocks
+qex("where(group('sector')=='Technology', rank(returns(20)), None)")
 ```
 
 ### Calendar
