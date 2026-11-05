@@ -111,6 +111,12 @@ with compute_context() as ctx:
     print(f"Cached results: {len(ctx.cache)}")   # 3: returns(20), the rank, the z-score
 ```
 
+The cache is for one set of data, known by identity: the frames a dict holds (a new dict around the same frames is
+the same data), or the object itself for a `LazyData`. Evaluating on other frames, even with the same shape and
+dates, starts a fresh cache. A value changed in place inside a frame the context has seen is not detected (checking
+values would read the whole panel at every node): after changing data in place, call `ctx.clear()` or open a new
+context.
+
 ## Variable Bindings
 
 Use `let ... in` to avoid repetition:

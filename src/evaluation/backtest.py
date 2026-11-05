@@ -105,7 +105,14 @@ class Backtest:
     - Weights derived from signal.to_weights(), or, with settings, from
       build_book(): delay, universe, neutralization, constant book size and
       truncation, the standard simulation settings of Finding Alphas
-    - PnL = sum(weights * forward_returns)
+    - PnL = sum(weights * next day's returns)
+
+    With holding_period=h > 1, each day's target book is held for h days, as h overlapping
+    books (Jegadeesh and Titman, 1993): the book held on a day is the average of the last h
+    days' targets, so 1/h of it is replaced each day. P&L is that book times one-day returns,
+    and turnover is that book's change, so every number reads as for a daily book. In the
+    first h - 1 days fewer than h targets exist and the book is partly in cash (k/h of it
+    after k days); returns are measured on the gross held, so they are not diluted.
 
     Example:
         >>> signal = alpha("rank(returns(20)) - 0.5")
@@ -129,7 +136,8 @@ class Backtest:
 
         Args:
             signal: Alpha signal to backtest
-            holding_period: Days to hold positions before rebalancing (default 1)
+            holding_period: Days each day's target book is held (default 1, a daily book);
+                see the class docstring
             transaction_cost: One-way transaction cost as decimal (default 0)
             settings: Book settings (delay, universe, neutralization, truncation).
                 None (default) uses signal.to_weights() at delay 0, as before.
@@ -163,14 +171,23 @@ class Backtest:
         else:
             weights = build_book(self.signal, data, self.settings)
 
+        # Hold each day's target for holding_period days: the held book is the average of the
+        # last h targets (h overlapping books, each a 1/h slice)
+        h = self.holding_period
+        if h < 1:
+            raise ValueError(f"holding_period must be at least 1 (got {h})")
+        has_weights = weights.notna().any(axis=1)
+        if h > 1:
+            weights = weights.fillna(0).rolling(h, min_periods=1).sum() / h
+            has_weights = has_weights.astype(float).rolling(h, min_periods=1).max().astype(bool)
+
         # A name with no close can't be traded: hold its previous weight until it trades again
         close = data["close"]
-        has_weights = weights.notna().any(axis=1)
         weights = hold_untradable(weights, close)
         has_weights = has_weights | (weights != 0).any(axis=1)
 
-        # Calculate forward returns
-        forward_returns = forward_price_returns(close, self.holding_period)
+        # Next-day returns: P&L is booked daily whatever the holding period
+        forward_returns = forward_price_returns(close, 1)
 
         # Align dates
         common_idx = weights.index.intersection(forward_returns.index)

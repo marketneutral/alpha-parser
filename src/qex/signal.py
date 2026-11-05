@@ -36,13 +36,7 @@ class Signal(ABC):
         if ctx is None:
             return self._compute(data)
 
-        # Validate data hasn't changed
-        data_hash = ctx.get_data_hash(data)
-        if ctx.data_hash is None:
-            ctx.data_hash = data_hash
-        elif ctx.data_hash != data_hash:
-            ctx.cache = {}
-            ctx.data_hash = data_hash
+        ctx.check(data)                      # different data (not the same frames): start a fresh cache
 
         # Check cache (keyed by the cross-sectional universe too, which changes the result)
         cache_key = self._cache_key()

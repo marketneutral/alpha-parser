@@ -294,9 +294,10 @@ def test_backtest_holds_delisted_position_then_drops_it():
 def test_backtest_multi_day_holding_period_bridges_halt():
     data = _sig_data(HALT, {"A": [1] * 8, "B": [-1] * 8})
     r = Backtest(qex("field('sig')"), holding_period=2).run(data)
-    np.testing.assert_allclose(r.weights["A"], 0.5)
-    pd.testing.assert_series_equal(r.pnl, _pnl(r.weights, HALT, 2), check_names=False)
-    assert r.pnl.loc[HALT.index[2]] == pytest.approx(0.5 * (104 / 101 - 1) - 0.5 * (54 / 52 - 1))
+    np.testing.assert_allclose(r.weights["A"], [0.25] + [0.5] * 6)   # half the book on day one, then all of it
+    pd.testing.assert_series_equal(r.pnl, _pnl(r.weights, HALT), check_names=False)
+    # A is held through its halt and the day before it reopens books the whole move, once
+    assert r.pnl.loc[HALT.index[3]] == pytest.approx(0.5 * (104 / 101 - 1) - 0.5 * (54 / 53 - 1))
 
 
 def test_backtest_without_missing_prices_is_unchanged():

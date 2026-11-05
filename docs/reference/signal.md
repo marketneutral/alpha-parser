@@ -65,6 +65,12 @@ with compute_context() as ctx:
     print(f"Cached keys: {list(ctx.cache.keys())}")
 ```
 
+The cache is for one set of data, known by identity: the frames a dict holds (a new dict around the same frames is
+the same data), or the object itself for a `LazyData`. Evaluating on other frames, even with the same shape and
+dates, starts a fresh cache. A value changed in place inside a frame the context has seen is not detected (checking
+values would read the whole panel at every node): after changing data in place, call `ctx.clear()` or open a new
+context.
+
 ## Creating Custom Signals
 
 Subclass `Signal` and implement `_compute()` and `_cache_key()`:

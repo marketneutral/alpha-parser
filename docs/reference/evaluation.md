@@ -23,7 +23,7 @@ print(result.summary())
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `signal` | Signal | required | Signal to backtest |
-| `holding_period` | int | `1` | Days of forward return each day's weights earn |
+| `holding_period` | int | `1` | Days each day's target book is held: the book held is the average of the last `holding_period` targets (below) |
 | `transaction_cost` | float | `0.0` | Cost per dollar traded (0.001 = 10 bps), charged on daily turnover |
 | `settings` | BookSettings | `None` | Build the book with [book settings](#book-settings); `None` uses `signal.to_weights()` at delay 0 |
 
@@ -110,8 +110,27 @@ held = hold_untradable(w, data['close'])                 # what Backtest holds
 pnl = (held * forward_returns(data['close']).reindex_like(held).fillna(0)).sum(axis=1)
 ```
 
-Forward returns in `Backtest` and `QuantileAnalysis` are `forward_returns(close, holding_period)`:
-NaN when the end price is missing, measured from the last valid price when the start price is.
+`Backtest` books P&L daily, on `forward_returns(close, 1)`. `QuantileAnalysis` measures
+`forward_returns(close, holding_period)`. Both are NaN when the end price is missing, and measured from the last
+valid price when the start price is.
+
+### Holding period
+
+With `holding_period=h > 1`, `Backtest` holds each day's target book for h days, as h overlapping books
+(Jegadeesh and Titman, 1993): the book held on a day is the average of the last h days' targets, so 1/h of it is
+replaced each day. P&L is that book times one-day returns and turnover is its change, so every statistic reads as
+for a daily book, and a longer holding period trades less. In the first h - 1 days the book is partly in cash
+(k/h after k days); `returns` are measured on the gross held, so they are not diluted.
+
+```python
+held = Backtest(signal, holding_period=5).run(data)       # 5 books, each a fifth, each held a week
+```
+
+(Before qex 0.7.1, `holding_period=h` rebalanced daily on h-day forward returns and summed them as daily P&L, which
+counted each day's move up to h times.)
+
+`QuantileAnalysis(holding_period=h)` is unchanged: its IC on h-day forward returns is the standard measure, and its
+quantile return series overlap (a day's move is in h consecutive values), so read them as h-day returns, not as P&L.
 
 ### Book statistics
 

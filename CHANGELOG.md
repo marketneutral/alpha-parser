@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.1
+
+Two bug fixes. Nothing changes for a daily book (`holding_period=1`, the default) or for code that evaluates each
+panel in its own context.
+
+### `Backtest(holding_period=h)` holds overlapping books (#24)
+
+`holding_period=h > 1` rebalanced every day on h-day forward returns and summed those as daily P&L, so each day's
+move was counted up to h times: total and annual return about h times too big, volatility inflated, a strongly
+autocorrelated P&L, and turnover charged as for a daily book. Now each day's target is held for h days, as h
+overlapping books (Jegadeesh and Titman, 1993): the book held is the average of the last h targets, P&L is that book
+times one-day returns, and turnover is its change. `QuantileAnalysis(holding_period=h)` is unchanged.
+
+### `compute_context` knows its data by identity
+
+The context checked its cache against the data's shape and the ends of its index only, so evaluating a second panel
+with the same shape and dates in one context returned the first panel's results. It now compares the data's frames by
+identity (a dict's values; a `LazyData` itself), and holds them so an id cannot be reused. A new dict around the same
+frames keeps the cache. A value changed in place is still not detected (checking values would cost about a second per
+node on a real panel); call `ctx.clear()`. The old check also read every field, so under a context a `LazyData`
+loaded all its fields; it now loads only the ones an expression uses.
+
 ## 0.7.0
 
 Comparisons and logic become three-valued. **Numbers change** wherever a comparison meets a missing value.
