@@ -126,10 +126,10 @@ Robust signals handle edge cases explicitly:
 
 ```python
 let raw = returns(5) / volatility(20) in
-where(adv(20) > 500000, rank(raw) - 0.5, 0)
+where(adv(20) > 500000, rank(raw) - 0.5, None)
 ```
 
-This says: rank risk-adjusted momentum, and hold no position in illiquid stocks. (Zeroing *before* the rank, `rank(where(..., raw, 0))`, would not do it: the illiquid stocks would all share the rank of 0 and still get a weight.)
+This says: rank risk-adjusted momentum, and hold no position in illiquid stocks. `None` is no value, so a book leaves those stocks out; a `0` would not, since a book demeans its signal and a `0` below or above the average is a position. (`None` before the rank, `rank(where(..., raw, None))`, works too; a `0` there would give every illiquid stock the same rank and still a weight.)
 
 ### Consider what you're betting against
 

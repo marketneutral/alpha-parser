@@ -50,7 +50,7 @@ from qex import qex
 signal = qex("group_demean(returns(60) / volatility(60), 'sector')")
 
 # Mean reversion with volatility filter
-signal = qex("where(volatility(20) > 0.3, -returns(5), 0)")
+signal = qex("where(volatility(20) > 0.3, -returns(5), None)")
 
 # Multi-factor composite with variable bindings
 signal = qex("""

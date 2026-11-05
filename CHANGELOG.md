@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0
+
+Missing values get a literal and a reason. **No number changes**: both are additions, and expressions that do not
+write `None` evaluate exactly as before.
+
+### `None`: no value here, on purpose
+
+`where(cond, x, None)` leaves `x` out where `cond` is false. `None` is missing like any NaN (cross-sections and a
+book leave it out, arithmetic with it stays missing, `is_valid` is 0), which is what a `0` was often wrongly written
+for: a book demeans its signal, so a `0` is a position. It replaces the `x * 0 / 0` trick. The documentation's
+examples that wrote `0` to mean "not this stock" now write `None`.
+
+### `explain_missing`: why a value is missing, and where it began
+
+`explain_missing(signal, data, universe=...)` traces every missing cell of a signal through its graph and reports a
+reason (no data, outside the universe, short history, excluded on purpose, no group, calculation error, infinite
+value) and the node where it began. A short history says why the earlier days were missing, so a new member's
+`ts_mean(rank(x), 10)` reads "short history: outside the universe on earlier days". `report.summary(within=...)`
+gives each reason's share, and `report.on(date)` each missing name's reason that day. It reads the values the
+signal's own evaluation produced and changes none of them.
+
 ## 0.5.2
 
 Bug fixes, from the reports in qexarena's `IDEAS.md`. **Numbers change** for `ts_beta` and

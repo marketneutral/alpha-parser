@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 from .signal import Signal
-from .operators import Constant, is_valid
+from .operators import Constant, NoneValue, is_valid
 from .data import close, open, high, low, field, market, day_of_week, day_of_month, month_of_year
 from .primitives import returns, volatility, volume, adv
 from .timeseries import (
@@ -315,6 +315,8 @@ class QexParser:
 
         elif isinstance(node, (ast.Constant, ast.Num)):
             value = node.value if isinstance(node, ast.Constant) else node.n
+            if value is None:
+                return NoneValue()
             return Constant(value)
 
         elif isinstance(node, ast.Str):
@@ -334,6 +336,8 @@ class QexParser:
         """Visit argument node - could be Signal, variable, or literal."""
         if isinstance(node, ast.Call):
             return self._visit(node)
+        elif isinstance(node, ast.Constant) and node.value is None:
+            return NoneValue()                         # None as an argument is the literal, a signal
         elif isinstance(node, (ast.Constant, ast.Num)):
             return node.value if isinstance(node, ast.Constant) else node.n
         elif (isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd))

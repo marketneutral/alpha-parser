@@ -267,10 +267,10 @@ Use `group()` with `where()` to filter signals by sector membership:
 
 ```python
 # Price-to-book isn't meaningful for Financials - zero them out
-qex("where(group('sector')=='Financials', 0, field('price_to_book'))")
+qex("where(group('sector')=='Financials', None, field('price_to_book'))")
 
-# A signal for Technology stocks only (0 elsewhere)
-qex("where(group('sector')=='Technology', rank(returns(20)), 0)")
+# A signal for Technology stocks only (no value elsewhere, so no position)
+qex("where(group('sector')=='Technology', rank(returns(20)), None)")
 ```
 
 This is useful when factors don't apply to certain sectors (e.g., value metrics for financials, inventory for services).
@@ -281,12 +281,43 @@ This is useful when factors don't apply to certain sectors (e.g., value metrics 
 |-----------|-------------|
 | `where(cond, if_true, if_false)` | Ternary conditional |
 | `is_valid(x)` | Returns 1 where not NaN, else 0 |
+| `None` | No value here, on purpose: `where(cond, x, None)`. Missing like NaN, but reported as excluded by `explain_missing` |
 | `fill_forward(x, limit)` | Forward fill NaN for up to N periods |
 
 ```python
-qex("where(volatility(20) > 0.3, 0, returns(5))")  # Zero out high-vol
+qex("where(volatility(20) > 0.3, None, returns(5))")  # Leave out high-vol
 qex("fill_forward(field('earnings'), 60)")  # Hold earnings for quarter
 ```
+
+### None, and why a value is missing
+
+`None` and `0` are different answers. `0` is a value: a book demeans its signal, so a `0` above or below the day's
+average is a position, and a cross-section counts it. `None` is no value: cross-sections and the book leave it out,
+and arithmetic with it stays missing. Write `0` for "this stock counts, at zero" (an indicator, a neutral bucket, a
+non-event in a sum), and `None` for "this signal does not apply to this stock".
+
+qex has one missing value, so `None` behaves like any NaN. What differs is the reason, which `explain_missing` traces
+through the expression's graph to where each missing cell began:
+
+```python
+from qex import explain_missing, cross_section_universe
+report = explain_missing(qex("ts_mean(rank(returns(1)), 10)"), data, universe=data['member'].notna())
+report.summary(within=data['member'].notna())   # each reason's share of the missing member-days
+report.on('2003-06-02')                          # each missing name that day, its reason, and the node
+```
+
+| Reason | Means |
+|--------|-------|
+| no data | a field has no value that day: before a listing, during a halt, after a delisting |
+| outside the universe | a cross-sectional operator leaves out a name not in the universe that day |
+| short history | a window has too few values yet; when its earlier days were missing, it says why (`short history: outside the universe on earlier days` is a new member) |
+| excluded on purpose | `None`, chosen by a `where` |
+| no group | a group operator, for a name with no group that day |
+| calculation error | NaN from finite inputs: `0 / 0`, `log` or `sqrt` of a negative, a z-score with no spread |
+| infinite value | a division by zero |
+
+A missing input passes on its reason; a node gives its own only where every input had a value. Explaining changes
+nothing: it reads the values the expression's own evaluation produced.
 
 ## Calendar Operations
 
@@ -297,7 +328,7 @@ qex("fill_forward(field('earnings'), 60)")  # Hold earnings for quarter
 | `month_of_year()` | 1-12 |
 
 ```python
-qex("where(day_of_week() == 4, returns(5), 0)")  # Friday only
+qex("where(day_of_week() == 4, returns(5), None)")  # Friday only
 qex("where(month_of_year() == 1, 1, 0)")  # January indicator
 ```
 
