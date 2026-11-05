@@ -249,6 +249,11 @@ Like cross-sectional, but within groups. `groups` is a group's name (`'sector'`)
 stock a label (`quantile(field('mcap'), 5)`, `coalesce(group('sector'), 'Other')`, `group_cross(...)`). A stock with
 no label is in no group and gets no value. The [Group Operations guide](../guides/groups.md) works through each one.
 
+`group(...)` and `group_cross(...)` give **labels**, not numbers. Labels can be compared (`==`, `!=`), used to group,
+and passed through `coalesce` and `where`; anything else (`rank(group('sector'))`, `group('sector') + 1`) is refused
+when the expression is parsed, with a message saying what to write instead
+([Numbers and labels](../guides/groups.md#numbers-and-labels)).
+
 | Operation | Description |
 |-----------|-------------|
 | `group(name)` | The labels themselves, for filtering or as a grouping: `group('sector')` |

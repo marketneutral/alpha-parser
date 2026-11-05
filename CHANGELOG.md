@@ -24,6 +24,16 @@ One grouping from several: each stock's label is its labels joined with `|` (`'T
 part is. `group_demean(x, group_cross('sector', quantile(field('mcap'), 3)))` is sector- and size-neutral. A label
 containing `|` is refused, since two different pairs could join to the same label.
 
+### Numbers and labels, checked when parsed
+
+Every expression gives numbers or labels (`group(...)`, `group_cross(...)`, a string, and `coalesce` or `where` of
+labels). Labels can be compared with `==` and `!=`, used to group, and passed through `coalesce` and `where`; an
+expression that hands labels to an operator needing numbers is now refused when it is parsed, naming the part and
+saying what to write instead. Before, `rank(group('sector'))` silently ranked the sector names alphabetically, and
+`group('sector') + 1` failed with a pandas error. `qex.kinds.kind(signal)` says which an expression gives, and
+`qex.kinds.numbers_only(signal)` why one cannot be an alpha. Every one of qexarena's 1,258 saved expressions (alphas,
+sealed alphas, notebooks, examples and lectures) still parses.
+
 ### Fixes
 
 - `explain_missing` failed on any expression with `group(...)` in it, such as

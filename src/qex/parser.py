@@ -380,8 +380,9 @@ def qex(expression: str) -> Signal:
     Example:
         signal = qex("rank(-returns(20) / volatility(60))")
     """
+    from .kinds import check                          # labels only where labels belong, before anything runs
     parser = QexParser()
-    return parser.parse(expression)
+    return check(parser.parse(expression))
 
 
 # Backwards compatibility alias

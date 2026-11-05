@@ -167,6 +167,31 @@ one: here C and E are alone in their cells, so they demean to 0 and take no posi
 before trusting a cross on a real universe (`group_count_valid(x, groups, 1)` gives each stock its cell's count).
 A label containing `|` is refused, since `'a|b'` with `'c'` and `'a'` with `'b|c'` would join to the same label.
 
+## Numbers and labels
+
+Every qex expression gives a value per date and stock. Most give **numbers**. A few give **labels**:
+`group('sector')`, `group_cross(...)`, a string such as `'Other'`, and `coalesce` or `where` whose branches are labels.
+Labels can be:
+
+- compared, with `==` and `!=`: `group('sector') == 'Technology'` is 1, 0, or missing;
+- used to group: the `groups` of any group operator, and the parts of `group_cross`;
+- passed through `coalesce` and `where`, as long as both sides are labels (or one is `None`).
+
+Anywhere else needs numbers, and qex refuses the expression when it is parsed, before anything runs:
+
+```python
+qex("rank(group('sector'))")
+# ValueError: group('sector') gives labels, not numbers, and rank() needs numbers. Compare labels
+# (group('sector') == 'Technology') or group by them (group_demean(x, group('sector'))).
+
+qex("coalesce(group('sector'), 0)")
+# ValueError: coalesce(group('sector'), 0) mixes labels and numbers: both sides must give the same kind
+```
+
+Numbers can serve as labels (a `quantile` bucket is a number), so a group operator accepts either. A field read with
+`field('name')` is taken to be numbers; read a field of labels with `group('name')`. An alpha must give numbers:
+`qex.kinds.numbers_only(signal)` says why one cannot.
+
 ## Inside the cross-sectional universe
 
 Like every cross-sectional operator, a group operator compares only the members of the cross-sectional universe
