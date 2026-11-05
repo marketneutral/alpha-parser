@@ -114,6 +114,52 @@ PRICE_ONLY_FACTORS = [
 ]
 
 
+def _weighted_covariance(frame: pd.DataFrame, weights: np.ndarray) -> pd.DataFrame:
+    """Covariance of the columns of ``frame`` with observation weights (rows), NaN-aware.
+
+    For each pair of columns, over the rows where both are present, with the weights
+    renormalized to sum to one there:
+
+        cov = sum w (a - mean_w(a)) (b - mean_w(b)) / (1 - sum w^2)
+
+    The denominator is the usual small-sample correction for weighted data; with equal weights
+    the result is exactly ``frame.cov()``.
+    """
+    w = pd.Series(np.asarray(weights, dtype=float), index=frame.index)
+    cols = frame.columns
+    out = pd.DataFrame(np.nan, index=cols, columns=cols)
+    for i, a in enumerate(cols):
+        for b in cols[i:]:
+            ok = frame[a].notna() & frame[b].notna()
+            wk = w[ok]
+            total = wk.sum()
+            if ok.sum() < 2 or total <= 0:
+                continue
+            wk = wk / total
+            xa, xb = frame.loc[ok, a], frame.loc[ok, b]
+            ma, mb = (wk * xa).sum(), (wk * xb).sum()
+            denom = 1 - (wk ** 2).sum()
+            if denom <= 0:
+                continue
+            out.loc[a, b] = out.loc[b, a] = (wk * (xa - ma) * (xb - mb)).sum() / denom
+    return out
+
+
+def _weighted_variance(frame: pd.DataFrame, weights: np.ndarray) -> pd.Series:
+    """The diagonal of ``_weighted_covariance(frame, weights)``, computed for all columns at once."""
+    present = frame.notna().to_numpy()
+    w = np.where(present, np.asarray(weights, dtype=float)[:, None], 0.0)
+    total = w.sum(axis=0)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        w = w / np.where(total > 0, total, np.nan)
+        x = np.nan_to_num(frame.to_numpy(dtype=float))
+        mean = (w * x).sum(axis=0)
+        denom = 1 - (w ** 2).sum(axis=0)
+        var = (w * (x - mean) ** 2).sum(axis=0) / np.where(denom > 0, denom, np.nan)
+    var[present.sum(axis=0) < 2] = np.nan
+    return pd.Series(var, index=frame.columns)
+
+
 @dataclass
 class RiskModelResults:
     """Results from fitting the risk model."""
@@ -239,31 +285,31 @@ class FactorRiskModel:
             self (fitted model)
         """
         print("Computing returns...")
-        returns = self._compute_returns(data)
+        full_returns = self._compute_returns(data)
 
         # Trim to lookback period
-        returns = returns.iloc[-lookback:]
+        returns = full_returns.iloc[-lookback:]
         dates = returns.index
 
         print(f"Computing style factor exposures...")
         style_exposures = self._compute_style_exposures(data, self.style_factors)
-
-        # Align style exposures to returns dates
-        for name, exp_df in style_exposures.items():
-            style_exposures[name] = exp_df.reindex(index=dates)
 
         # Industry exposures
         industry_exposures = {}
         if self.include_industries:
             print("Computing industry exposures...")
             industry_exposures, self._industries = self._compute_industry_exposures(
-                data, returns
+                data, full_returns
             )
-            for name, exp_df in industry_exposures.items():
-                industry_exposures[name] = exp_df.reindex(index=dates)
 
-        # Combine all exposures
-        all_exposures = {**style_exposures, **industry_exposures}
+        # Combine all exposures. Day t's return is regressed on the exposures known at the
+        # close of day t-1: an exposure built from day t's own return (short-term reversal,
+        # volatility) would otherwise explain it with hindsight.
+        current_exposures = {**style_exposures, **industry_exposures}
+        all_exposures = {
+            name: exp_df.reindex(index=full_returns.index).shift(1).reindex(index=dates)
+            for name, exp_df in current_exposures.items()
+        }
         factor_names = list(all_exposures.keys())
 
         print(f"Running cross-sectional regressions for {len(dates)} dates...")
@@ -331,10 +377,9 @@ class FactorRiskModel:
         # Compute factor covariance with exponential weighting
         print("Estimating factor covariance...")
         weights = self._exponential_weights(len(factor_returns))
-        weighted_returns = factor_returns.mul(np.sqrt(weights), axis=0)
 
         # Annualize covariance (252 trading days)
-        factor_cov = weighted_returns.cov() * 252
+        factor_cov = _weighted_covariance(factor_returns, weights) * 252
 
         # Estimate specific variance
         print("Estimating specific risk...")
@@ -342,12 +387,14 @@ class FactorRiskModel:
             returns, all_exposures, factor_returns, dates
         )
 
-        # Get last available exposures
+        # Exposures for forecasting from the last date on: those known at its close, plus the
+        # market factor (every stock has exposure 1 to the regression's intercept)
         last_date = dates[-1]
         last_exposures = pd.DataFrame({
-            name: all_exposures[name].loc[last_date]
+            name: current_exposures[name].reindex(index=full_returns.index).loc[last_date]
             for name in factor_names
         })
+        last_exposures['market'] = 1.0
 
         self.results_ = RiskModelResults(
             factor_returns=factor_returns,
@@ -393,10 +440,9 @@ class FactorRiskModel:
 
         # Compute variance with exponential weighting
         weights = self._exponential_weights(len(residuals_df))
-        weighted_residuals = residuals_df.mul(np.sqrt(weights), axis=0)
 
         # Annualized specific variance
-        specific_var = weighted_residuals.var() * 252
+        specific_var = _weighted_variance(residuals_df, weights) * 252
 
         return specific_var
 
@@ -437,6 +483,8 @@ class FactorRiskModel:
                 if date in exp_df.index:
                     result[name] = exp_df.loc[date]
 
+        # Every stock has exposure 1 to the market factor (the regression's intercept)
+        result['market'] = 1.0
         return result
 
     def portfolio_risk(

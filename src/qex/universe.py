@@ -21,6 +21,7 @@ import itertools
 from contextlib import contextmanager
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 _mask: Optional[pd.DataFrame] = None
@@ -51,6 +52,18 @@ def in_universe(values: pd.DataFrame) -> pd.DataFrame:
     if _mask is None:
         return values
     return values.where(_mask.reindex(index=values.index, columns=values.columns, fill_value=False))
+
+
+def finite_in_universe(values: pd.DataFrame) -> pd.DataFrame:
+    """in_universe(values) with infinities also set to NaN.
+
+    For the operators that average, scale or regress across a cross-section (zscore, demean,
+    winsorize, scale, regression_neut, group_demean, group_std, group_sum): one infinite value would otherwise make the day's mean or sum infinite and
+    empty the whole cross-section. The infinite name itself gets NaN. Rank-based operators
+    (rank, quantile, group_rank) don't need this: an infinity simply ranks first or last.
+    """
+    values = in_universe(values)
+    return values.where(~values.isin([np.inf, -np.inf]))
 
 
 def universe_token() -> Optional[int]:

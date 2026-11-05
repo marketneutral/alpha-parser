@@ -1,7 +1,7 @@
 """Cross-sectional operations for signals."""
 
 from .signal import Signal
-from .universe import in_universe
+from .universe import in_universe, finite_in_universe
 
 
 class Rank(Signal):
@@ -25,7 +25,7 @@ class ZScore(Signal):
         self.signal = signal
 
     def _compute(self, data):
-        values = in_universe(self.signal.evaluate(data))
+        values = finite_in_universe(self.signal.evaluate(data))
         mean = values.mean(axis=1)
         std = values.std(axis=1)
         # Handle division by zero - replace 0 std with NaN
@@ -43,7 +43,7 @@ class Demean(Signal):
         self.signal = signal
 
     def _compute(self, data):
-        values = in_universe(self.signal.evaluate(data))
+        values = finite_in_universe(self.signal.evaluate(data))
         mean = values.mean(axis=1)
         return values.sub(mean, axis=0)
 
@@ -100,7 +100,7 @@ class Winsorize(Signal):
         self.limit = limit  # e.g., 0.05 caps at 5th and 95th percentiles
 
     def _compute(self, data):
-        values = in_universe(self.signal.evaluate(data))
+        values = finite_in_universe(self.signal.evaluate(data))
         # Compute percentiles for each row (cross-section)
         lower = values.quantile(self.limit, axis=1)
         upper = values.quantile(1 - self.limit, axis=1)
@@ -124,7 +124,7 @@ class Scale(Signal):
         self.signal = signal
 
     def _compute(self, data):
-        values = in_universe(self.signal.evaluate(data))
+        values = finite_in_universe(self.signal.evaluate(data))
         abs_sum = values.abs().sum(axis=1)
         abs_sum = abs_sum.replace(0, float('nan'))
         return values.div(abs_sum, axis=0)
@@ -175,8 +175,8 @@ class RegressionNeut(Signal):
         self.x = x
 
     def _compute(self, data):
-        y = in_universe(self.y.evaluate(data))
-        x = in_universe(self.x.evaluate(data).reindex_like(y))
+        y = finite_in_universe(self.y.evaluate(data))
+        x = finite_in_universe(self.x.evaluate(data).reindex_like(y))
         valid = y.notna() & x.notna()
         y, x = y.where(valid), x.where(valid)
         yc = y.sub(y.mean(axis=1), axis=0)

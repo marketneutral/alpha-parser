@@ -5,7 +5,7 @@ import pandas as pd
 
 from .signal import Signal
 from .data import resolve_data
-from .universe import in_universe
+from .universe import in_universe, finite_in_universe
 
 
 def _get_group_data(data, groups: str) -> pd.DataFrame:
@@ -124,7 +124,7 @@ class GroupDemean(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        values = in_universe(self.signal.evaluate(data))
+        values = finite_in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         codes, n_groups = _group_codes(values, group_df)
@@ -215,7 +215,7 @@ class GroupStd(Signal):
         self.window = window
 
     def _compute(self, data):
-        values = in_universe(self.signal.evaluate(data))
+        values = finite_in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         result = pd.DataFrame(
@@ -282,7 +282,7 @@ class GroupSum(Signal):
         self.groups = groups
 
     def _compute(self, data):
-        values = in_universe(self.signal.evaluate(data))
+        values = finite_in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
         codes, n_groups = _group_codes(values, group_df)
