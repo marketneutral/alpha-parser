@@ -65,16 +65,26 @@ jobs:
           path: data/fmp
           key: fmp-data-v2-pairs-${{ hashFiles('data/fetch_fmp.py') }}
 
+      # Without FMP data (no key, or the fetch fails, e.g. 403 from an expired subscription) the
+      # integration tests skip themselves; this step warns instead of failing the job.
       - name: Fetch FMP data
         if: steps.cache-fmp.outputs.cache-hit != 'true'
         env:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
         run: |
           source .venv/bin/activate
+          if [ -z "$FMP_API_KEY" ]; then
+            echo "::warning title=Integration tests skipped::FMP_API_KEY is not set, so there is no FMP data and the integration tests are skipped."
+            exit 0
+          fi
           echo "FMP_API_KEY=$FMP_API_KEY" > data/.env
-          python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN JPM BAC KO PEP XOM CVX HD LOW V MA --start 2022-01-01 --skip-fundamentals
+          if ! python data/fetch_fmp.py --tickers AAPL MSFT GOOG AMZN JPM BAC KO PEP XOM CVX HD LOW V MA --start 2022-01-01 --skip-fundamentals; then
+            # Remove any partial download so it is neither tested nor cached
+            rm -rf data/fmp
+            echo "::warning title=Integration tests skipped::Fetching FMP data failed (see the log above), so the integration tests are skipped."
+          fi
 
       - name: Run integration tests
         run: |
           source .venv/bin/activate
-          pytest -m integration -v
+          pytest -m integration -v -rs
