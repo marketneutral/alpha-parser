@@ -235,9 +235,10 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
             earlier = rolling_any(base, s.period + 1)
             own(missing, HISTORY, np.where(earlier, NO_DATA, PRESENT).astype(np.int8))
         elif isinstance(s, _cond.Where):
-            chosen = frame(s.condition.evaluate(data))
-            chosen = np.where(np.isnan(chosen), True, chosen != 0)          # as Where reads its condition
-            for branch, res, pick in ((s.if_true, got[1], chosen), (s.if_false, got[2], ~chosen)):
+            c = frame(s.condition.evaluate(data))
+            inherit(missing & np.isnan(c), got[0])                            # a missing condition: its reason
+            chosen = c != 0
+            for branch, res, pick in ((s.if_true, got[1], chosen & ~np.isnan(c)), (s.if_false, got[2], c == 0)):
                 mask = missing & pick
                 if isinstance(branch, NoneValue):
                     own(mask, EXCLUDED)                                     # the where that chose None

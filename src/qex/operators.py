@@ -1,6 +1,51 @@
-"""Arithmetic, comparison, and logical operators for signals."""
+"""Arithmetic, comparison, and logical operators for signals.
+
+Comparisons and logic are three-valued: a comparison with a missing side is missing (not 0, which would be a
+confident "no"), and & | ~ follow Kleene's rules, as pandas' NA does: false & missing is false, true | missing is
+true, and every other combination with a missing side is missing.
+"""
+
+import operator as _op
+
+import numpy as np
+import pandas as pd
 
 from .signal import Signal
+
+
+def _missing(x):
+    """Where x has no value: NaN, or None, cell by cell for a frame; one bool for a scalar."""
+    if isinstance(x, (pd.DataFrame, pd.Series)):
+        return x.isna()
+    return x is None or (isinstance(x, float) and np.isnan(x))
+
+
+def _compare(op, left, right):
+    """op(left, right) as 1.0 or 0.0, and NaN where either side is missing."""
+    if not isinstance(left, (pd.DataFrame, pd.Series)) and not isinstance(right, (pd.DataFrame, pd.Series)):
+        return np.nan if _missing(left) or _missing(right) else float(op(left, right))
+    result = op(left, right).astype(float)
+    missing = _missing(left) | _missing(right)
+    return result.where(~missing)
+
+
+def _truth(x):
+    """(known true, known false) for a value read as a condition: nonzero is true, 0 is false, missing is neither."""
+    if isinstance(x, (pd.DataFrame, pd.Series)):
+        known = x.notna()
+        return (x != 0) & known, (x == 0) & known
+    if _missing(x):
+        return False, False
+    return bool(x != 0), bool(x == 0)
+
+
+def _logic(true, false):
+    """1.0 where known true, 0.0 where known false, NaN where unknown."""
+    if isinstance(true, (pd.DataFrame, pd.Series)) or isinstance(false, (pd.DataFrame, pd.Series)):
+        frame = true if isinstance(true, (pd.DataFrame, pd.Series)) else false
+        true = true if isinstance(true, (pd.DataFrame, pd.Series)) else pd.DataFrame(true, index=frame.index, columns=frame.columns) if isinstance(frame, pd.DataFrame) else pd.Series(true, index=frame.index)
+        return true.astype(float).where(true | false)
+    return 1.0 if true else 0.0 if false else np.nan
 
 
 def _ensure_signal(x):
@@ -100,42 +145,42 @@ class Greater(BinaryOp):
     """Greater than comparison."""
 
     def _compute(self, data):
-        return (self.left.evaluate(data) > self.right.evaluate(data)).astype(float)
+        return _compare(_op.gt, self.left.evaluate(data), self.right.evaluate(data))
 
 
 class Less(BinaryOp):
     """Less than comparison."""
 
     def _compute(self, data):
-        return (self.left.evaluate(data) < self.right.evaluate(data)).astype(float)
+        return _compare(_op.lt, self.left.evaluate(data), self.right.evaluate(data))
 
 
 class GreaterEqual(BinaryOp):
     """Greater than or equal comparison."""
 
     def _compute(self, data):
-        return (self.left.evaluate(data) >= self.right.evaluate(data)).astype(float)
+        return _compare(_op.ge, self.left.evaluate(data), self.right.evaluate(data))
 
 
 class LessEqual(BinaryOp):
     """Less than or equal comparison."""
 
     def _compute(self, data):
-        return (self.left.evaluate(data) <= self.right.evaluate(data)).astype(float)
+        return _compare(_op.le, self.left.evaluate(data), self.right.evaluate(data))
 
 
 class Equal(BinaryOp):
     """Equality comparison."""
 
     def _compute(self, data):
-        return (self.left.evaluate(data) == self.right.evaluate(data)).astype(float)
+        return _compare(_op.eq, self.left.evaluate(data), self.right.evaluate(data))
 
 
 class NotEqual(BinaryOp):
     """Not equal comparison."""
 
     def _compute(self, data):
-        return (self.left.evaluate(data) != self.right.evaluate(data)).astype(float)
+        return _compare(_op.ne, self.left.evaluate(data), self.right.evaluate(data))
 
 
 # Logical Operations
@@ -144,18 +189,16 @@ class And(BinaryOp):
     """Logical AND of two signals."""
 
     def _compute(self, data):
-        left = self.left.evaluate(data).astype(bool)
-        right = self.right.evaluate(data).astype(bool)
-        return (left & right).astype(float)
+        (lt, lf), (rt, rf) = _truth(self.left.evaluate(data)), _truth(self.right.evaluate(data))
+        return _logic(lt & rt, lf | rf)                     # false if either is false; true if both are true
 
 
 class Or(BinaryOp):
     """Logical OR of two signals."""
 
     def _compute(self, data):
-        left = self.left.evaluate(data).astype(bool)
-        right = self.right.evaluate(data).astype(bool)
-        return (left | right).astype(float)
+        (lt, lf), (rt, rf) = _truth(self.left.evaluate(data)), _truth(self.right.evaluate(data))
+        return _logic(lt | rt, lf & rf)                     # true if either is true; false if both are false
 
 
 class Not(Signal):
@@ -165,7 +208,8 @@ class Not(Signal):
         self.signal = signal
 
     def _compute(self, data):
-        return (~self.signal.evaluate(data).astype(bool)).astype(float)
+        true, false = _truth(self.signal.evaluate(data))
+        return _logic(false, true)                          # missing stays missing
 
     def _cache_key(self):
         return ('Not', self.signal._cache_key())

@@ -44,6 +44,7 @@ PYTHONPATH=src pytest tests/ -v
 - Use `LazyData(data, descriptions={...})` for self-documenting data - call `data.describe()` to inspect
 - Never call `pct_change` on prices: use `price_returns`/`forward_returns` (NaN on days with no price, bridged from the last valid price up to `MAX_PRICE_GAP` rows; identical on pandas 2 and 3). `Backtest` holds untradable names' weights via `hold_untradable`
 - Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
+- Comparisons and logic are three-valued (since 0.7.0): a comparison with a missing side is missing, `&` `|` `~` follow Kleene (false & missing = 0, true | missing = 1), and `where` with a missing condition is missing; `coalesce(x, y)` (x where it has a value, else y) says what missing should mean, as `coalesce(close() > 8, 0)`
 - `None` is the literal for "no value here, on purpose" (`where(cond, x, None)`); `0` is a value, and a position once a book demeans the signal. `explain_missing(signal, data, universe=...)` (`missing.py`) traces each missing cell to its reason and the node where it began
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 

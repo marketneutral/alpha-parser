@@ -521,7 +521,8 @@ qex/
 - `month_of_year()` - Month of year (1-12). Useful for seasonal effects (January effect, etc.)
 
 ### Conditional
-- `where(condition, if_true, if_false)` - Ternary operator
+- `where(condition, if_true, if_false)` - Ternary operator; missing where the condition is missing (comparisons with a missing side are missing, and `&` `|` `~` are three-valued)
+- `coalesce(x, y)` - `x` where it has a value, else `y`: `coalesce(close() > 8, 0)` treats a missing comparison as false
 
 ### Group Operations
 - `group('group_name')` - Access group data for filtering (use with `where()`)

@@ -18,7 +18,7 @@ from .timeseries import (
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut
-from .conditional import where
+from .conditional import where, coalesce
 from .groups import group, group_rank, group_demean, group_count_valid, group_std, group_sum
 from .operators import log, abs_, sign, sqrt, power, max_, min_
 
@@ -101,6 +101,7 @@ class QexParser:
 
             # Conditional
             'where': where,
+            'coalesce': coalesce,
 
             # Group ops
             'group': group,

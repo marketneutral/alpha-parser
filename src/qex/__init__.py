@@ -74,7 +74,7 @@ from .crosssection import (
 )
 
 # Conditional operations
-from .conditional import Where, where
+from .conditional import Where, where, Coalesce, coalesce
 
 # Group operations
 from .groups import (
@@ -276,7 +276,7 @@ __all__ = [
 
     # Conditional
     'Where',
-    'where',
+    'where', 'coalesce', 'Coalesce',
 
     # Group
     'Group',
