@@ -215,13 +215,14 @@ The neutralization uses estimated betas; the book is exposed to realized ones. A
 the realized market exposure of the book itself:
 
 ```python
-from evaluation import BookSettings, build_book
+from qex import forward_returns
+from evaluation import BookSettings, build_book, hold_untradable
 
 settings = BookSettings(delay=1, universe='member', truncation=0.05)
-w = build_book(signal, data, settings)
-fwd = data['close'].pct_change(fill_method=None).shift(-1)
-pnl = (w * fwd.loc[w.index]).sum(axis=1)
-mkt = data['market'].pct_change().shift(-1).reindex(w.index)
+w = hold_untradable(build_book(signal, data, settings), data['close'])
+fwd = forward_returns(data['close'])
+pnl = (w * fwd.reindex_like(w).fillna(0)).sum(axis=1)
+mkt = forward_returns(data['market']).reindex(w.index)
 
 pnl.corr(mkt)                                  # realized correlation with the market
 pnl.cov(mkt) / mkt.var()                       # realized beta of the book

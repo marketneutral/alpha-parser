@@ -21,6 +21,7 @@ import pandas as pd
 from qex.signal import Signal
 from qex.context import compute_context
 from qex.data import LazyData, close, field, panel, resolve_data
+from qex.primitives import MAX_PRICE_GAP
 from qex.universe import cross_section_universe
 from qex.groups import _get_group_data, _group_codes
 
@@ -72,6 +73,46 @@ class BookSettings:
             raise ValueError(f"rounds must be >= 1 (got {self.rounds})")
 
 
+def hold_untradable(
+    weights: pd.DataFrame,
+    prices: pd.DataFrame,
+    max_gap: Optional[int] = None,
+) -> pd.DataFrame:
+    """Weights a book can actually hold: a name with no price that day keeps yesterday's weight.
+
+    A name with no price cannot be traded (it is halted, or has delisted), so the position
+    from the last day it had one is held, marked at its last price, until it trades again.
+    Without this, a missing signal on a halt day would silently close the position at a
+    price that doesn't exist, and the move across the halt would never reach PnL.
+
+    A position is held for at most ``max_gap`` days with no price (default
+    ``qex.primitives.MAX_PRICE_GAP``, the same limit ``price_returns`` uses to bridge a gap).
+    After that it is dropped with no PnL for the missing move, as for a delisting with no
+    delisting return. Names before their first price get no weight.
+
+    Days a name has a price are left as they are (NaN becomes 0). Because held weights are
+    not rescaled, a day with a held name can have gross weight slightly above or below 1.
+
+    Args:
+        weights: Target weights, dates x names.
+        prices: Prices ('close'); names and dates missing from it count as untradable.
+        max_gap: Most consecutive days with no price a position is held for.
+
+    Returns:
+        Held weights, with the shape of ``weights``.
+    """
+    if max_gap is None:
+        max_gap = MAX_PRICE_GAP
+    if max_gap < 0:
+        raise ValueError(f"max_gap must be >= 0 (got {max_gap})")
+    untradable = prices.reindex(index=weights.index, columns=weights.columns).isna()
+    target = weights.astype(float).fillna(0.0)
+    if max_gap == 0:
+        return target.where(~untradable, 0.0)
+    held = target.where(~untradable).ffill(limit=max_gap)
+    return target.where(~untradable, held).fillna(0.0)
+
+
 def build_book(
     signal: Signal,
     data: Union[Dict[str, pd.DataFrame], LazyData],
@@ -85,7 +126,9 @@ def build_book(
     absolute values sum to exactly one, and none exceeds the truncation. A day with no
     tradable names, or where the signal is flat, has all-zero weights. A name gets no
     weight on a day it has no close (it cannot be traded), is outside the universe as of
-    the signal's date, or has no group under group neutralization.
+    the signal's date, or has no group under group neutralization. This is the target book;
+    ``Backtest`` keeps a name's previous weight on days it has no close (see
+    ``hold_untradable``), since a halted position cannot be closed.
 
     Args:
         signal: The alpha signal.

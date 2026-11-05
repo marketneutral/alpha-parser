@@ -21,7 +21,8 @@ from .metrics import (
     margin_bps,
     Drawdown,
 )
-from .book import BookSettings, build_book
+from qex.primitives import forward_returns as forward_price_returns
+from .book import BookSettings, build_book, hold_untradable
 
 
 @dataclass
@@ -162,9 +163,14 @@ class Backtest:
         else:
             weights = build_book(self.signal, data, self.settings)
 
-        # Calculate forward returns
+        # A name with no close can't be traded: hold its previous weight until it trades again
         close = data["close"]
-        forward_returns = close.pct_change(self.holding_period).shift(-self.holding_period)
+        has_weights = weights.notna().any(axis=1)
+        weights = hold_untradable(weights, close)
+        has_weights = has_weights | (weights != 0).any(axis=1)
+
+        # Calculate forward returns
+        forward_returns = forward_price_returns(close, self.holding_period)
 
         # Align dates
         common_idx = weights.index.intersection(forward_returns.index)
@@ -177,7 +183,7 @@ class Backtest:
         forward_returns = forward_returns.loc[common_idx]
 
         # Drop rows where we don't have valid data
-        valid_mask = weights.notna().any(axis=1) & forward_returns.notna().any(axis=1)
+        valid_mask = has_weights.loc[common_idx] & forward_returns.notna().any(axis=1)
         weights = weights.loc[valid_mask]
         forward_returns = forward_returns.loc[valid_mask]
 

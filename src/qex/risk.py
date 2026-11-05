@@ -213,9 +213,8 @@ class FactorRiskModel:
         """Compute daily returns from close prices."""
         from .data import resolve_data
         data = resolve_data(data)
-        close = data['close']
-        returns = close.pct_change()
-        return returns
+        from .primitives import price_returns
+        return price_returns(data['close'])
 
     def _exponential_weights(self, n: int) -> np.ndarray:
         """Compute exponential decay weights."""

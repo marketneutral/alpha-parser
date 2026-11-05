@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from qex import qex, compute_context, LazyData, MARKET_FIELD
+from qex import qex, compute_context, LazyData, MARKET_FIELD, price_returns
 
 
 @pytest.fixture
@@ -73,8 +73,8 @@ def test_market_works_with_lazydata(mkt_data):
 def test_dataframe_fields_unchanged(mkt_data):
     data, _ = mkt_data
     assert qex("field('close')").evaluate(data) is data['close']
-    pd.testing.assert_frame_equal(qex("returns(5)").evaluate(data), data['close'].pct_change(5))
-    pd.testing.assert_frame_equal(qex("returns(5, 'close')").evaluate(data), data['close'].pct_change(5))
+    pd.testing.assert_frame_equal(qex("returns(5)").evaluate(data), price_returns(data['close'], 5))
+    pd.testing.assert_frame_equal(qex("returns(5, 'close')").evaluate(data), price_returns(data['close'], 5))
 
 
 def test_market_returns_and_volatility(mkt_data):

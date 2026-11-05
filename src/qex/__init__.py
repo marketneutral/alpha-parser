@@ -51,7 +51,8 @@ from .data import (
 )
 
 # Primitives
-from .primitives import Returns, Volatility, Volume, Adv, returns, volatility, volume, adv
+from .primitives import (Returns, Volatility, Volume, Adv, returns, volatility, volume, adv,
+                         price_returns, forward_returns, MAX_PRICE_GAP)
 
 # Time-series operations
 from .timeseries import (
@@ -97,7 +98,7 @@ except ImportError:
 # it here at load time made `import evaluation` (before qex) fail with a circular import.
 _EVALUATION_NAMES = (
     'Backtest', 'BacktestResult',
-    'BookSettings', 'build_book',
+    'BookSettings', 'build_book', 'hold_untradable',
     'QuantileAnalysis', 'QuantileResult',
     'sharpe_ratio', 'max_drawdown', 'top_drawdowns', 'return_on_gmv',
     'annualized_return', 'annualized_volatility', 'calmar_ratio', 'sortino_ratio',
@@ -189,6 +190,9 @@ __all__ = [
     'Volume',
     'Adv',
     'returns',
+    'price_returns',
+    'forward_returns',
+    'MAX_PRICE_GAP',
     'volatility',
     'volume',
     'adv',
@@ -304,6 +308,7 @@ __all__ = [
     'BacktestResult',
     'BookSettings',
     'build_book',
+    'hold_untradable',
     'QuantileAnalysis',
     'QuantileResult',
     'sharpe_ratio',
