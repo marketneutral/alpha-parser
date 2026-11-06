@@ -82,6 +82,7 @@ nav:
     - Missing Values: guides/missing-values.md
     - Group Operations: guides/groups.md
     - Universes: guides/universes.md
+    - Adjusted Data: guides/adjusted-data.md
   - Reference:
     - All Operations: reference/operations.md
     - Parser & Syntax: reference/parser.md
