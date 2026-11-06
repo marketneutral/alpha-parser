@@ -20,7 +20,8 @@ exponent through an expression:
 
 so close() / ts_max(close(), 252) is fine (0), close() * volume is dollars traded (0), and rank(close()) is not.
 
-It also checks units where the data declares them: adding a price to a share count is refused.
+It also checks units where the data declares them: adding a price to a share count is refused (a plain number, such
+as 0 * returns(1), adds to anything).
 
     check(signal, fields, mode="refuse")   raise on the first problem ('refuse'), return them ('warn'), or skip ('off')
 
@@ -146,7 +147,7 @@ def _walk(s, fields, seen, found, mode):
                     f"later splits and dividends and the other does not. Put both on the same footing, for example "
                     f"close() with close(), or field('price') with field('price').")
             return UNKNOWN
-        if a.unit is not None and b.unit is not None and a.unit != b.unit:
+        if a.unit and b.unit and a.unit != b.unit:       # a plain number mixes with anything; two units must agree
             problem("mixed units", part, f"{label(part)} {what} {_unit_text(a.unit)} with {_unit_text(b.unit)}.")
             return V(a.e, a.log, None)
         return V(a.e, a.log, a.unit if a.unit is not None else b.unit)

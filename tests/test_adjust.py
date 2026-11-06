@@ -61,6 +61,7 @@ FINE = [
     "rank(close() / delay(close(), 21) - 1)",
     "is_valid(close()) & (field('price') >= 2)",
     "rank(field('unknown_field'))",                       # an undeclared field is not checked
+    "delay(field('mcap'), 1) + 0 * returns(1)",            # a plain number adds to dollars
 ]
 
 
