@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.0
+
+### Adjusted data and look-ahead: `qex.adjust`
+
+`check(signal, fields, mode="refuse" | "warn" | "off")` finds expressions that use an adjusted level in a way that
+sees the future: comparing it across stocks (`rank(close())`), with a fixed number (`close() > 5`), or mixing it with
+data adjusted differently (`field('price') * volume(20)`). Each field declares an adjustment exponent (+1 an adjusted
+price, -1 adjusted volume, 0 as traded); the check follows it through the expression, so ratios over time
+(`close() / ts_max(close(), 252)`) and returns pass. It also refuses adding values in different units. `refuse` raises
+`LookAhead` with what to write instead; `warn` returns the problems. Nothing changes unless a caller passes field
+declarations. Guide: *Adjusted Data*.
+
 ## 0.10.0
 
 ### A minimum number of events
