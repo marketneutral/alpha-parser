@@ -50,21 +50,16 @@ C has the highest value among the financials, so its `group_rank` is 1, though i
 The Tech mean is 6.2 and the Fin mean is 3.33, so `group_demean` takes out the difference between the two sectors:
 a book built from it is long and short within each sector, with no net bet on Tech against Fin.
 
-```python
-qex("group_demean(returns(20), 'sector')")      # sector-neutral momentum
-qex("group_rank(-returns(5), 'sector')")        # reversal, ranked within each sector
-qex("volume(1) / group_sum(volume(1), 'sector')")  # each stock's share of its sector's volume
+```qex
+group_demean(returns(20), 'sector')      # sector-neutral momentum
+group_rank(-returns(5), 'sector')        # reversal, ranked within each sector
+volume(1) / group_sum(volume(1), 'sector')  # each stock's share of its sector's volume
 ```
 
 ## A stock with no label
 
 A stock with no label is in no group, so a group operator gives it **no value**, even when every other field is
-present. H above has none, and `explain_missing` (and **why missing?** in qexarena) says why:
-
-```python
-explain_missing(qex("group_demean(field('value'), 'sector')"), data).reason(day, "H")
-# 'no group, at group_demean(field('value'), 'sector')'
-```
+present. H above has none, and the reason recorded for its missing value is *no group*.
 
 The other stocks are not affected: H is in no group, so it moves no group's mean or ranks. A book takes no position
 in H. Two ways to keep it, when you want to:
@@ -89,10 +84,10 @@ comparison. The common case is a bucket:
 | `quantile(field('size'), 3)` | 1 | 1 | 1 | 2 | 2 | 2 | 3 | 3 | 3 |
 | `group_demean(field('value'), quantile(field('size'), 3))` | 4 | −4 | 0 | −2.33 | 3.67 | −1.33 | 1.33 | −1.67 | 0.33 |
 
-```python
-qex("group_demean(returns(20), quantile(field('mcap'), 5))")          # size-neutral momentum
-qex("group_rank(x, quantile(volatility(60), 3))")                       # rank within volatility terciles
-qex("let size = quantile(field('mcap'), 3) in group_demean(x, size)")  # a grouping can be named
+```qex
+group_demean(returns(20), quantile(field('mcap'), 5))          # size-neutral momentum
+group_rank(returns(20), quantile(volatility(60), 3))                       # rank within volatility terciles
+let size = quantile(field('mcap'), 3) in group_demean(returns(20), size)  # a grouping can be named
 ```
 
 A name and the expression that gives the same labels are the same grouping:
@@ -117,16 +112,16 @@ A **double sort** buckets stocks on two characteristics. There are two kinds, an
 
 **Independent**: bucket each characteristic over the whole market. Each stock's cell is the pair.
 
-```python
-qex("quantile(field('size'), 3)")     # size tercile
-qex("quantile(field('value'), 3)")    # value tercile, among all stocks
+```qex
+quantile(field('size'), 3)     # size tercile
+quantile(field('value'), 3)    # value tercile, among all stocks
 ```
 
 **Dependent** (conditional): bucket on the first, then on the second *within* each bucket of the first. Value is
 then measured against stocks of similar size:
 
-```python
-qex("group_quantile(field('value'), quantile(field('size'), 3), 3)")
+```qex
+group_quantile(field('value'), quantile(field('size'), 3), 3)
 ```
 
 | | A | B | C | D | E | F | G | H | I |
@@ -141,11 +136,9 @@ on value is not secretly a bet on size.
 
 A long-short book from the dependent sort, long the top value tercile and short the bottom within each size bucket:
 
-```python
-qex("""
-    let v = group_quantile(field('value'), quantile(field('size'), 3), 3)
-    in where(v == 3, 1, where(v == 1, -1, None))
-""")
+```qex
+let v = group_quantile(field('value'), quantile(field('size'), 3), 3)
+in where(v == 3, 1, where(v == 1, -1, None))
 ```
 
 The middle tercile gets `None`, so it takes no position.
@@ -165,9 +158,9 @@ Its arguments are names or label expressions.
 | `group_cross('sector', quantile(field('size'), 3))` | Tech\|1 | Tech\|1 | Fin\|1 | Fin\|2 | Tech\|2 | Fin\|2 | Tech\|3 | — | Tech\|3 |
 | `group_demean(field('value'), group_cross(...))` | 4 | −4 | 0 | −0.5 | 0 | 0.5 | 0.5 | — | −0.5 |
 
-```python
-qex("group_demean(returns(20), group_cross('sector', quantile(field('mcap'), 3)))")   # sector- and size-neutral
-qex("where(group_cross('sector', quantile(field('mcap'), 3)) == 'Technology|3', 1, None)")
+```qex
+group_demean(returns(20), group_cross('sector', quantile(field('mcap'), 3)))   # sector- and size-neutral
+where(group_cross('sector', quantile(field('mcap'), 3)) == 'Technology|3', 1, None)
 ```
 
 A stock missing any part has no label (H has no sector). Crossing multiplies the number of groups and shrinks each
@@ -185,28 +178,23 @@ Labels can be:
 - used to group: the `groups` of any group operator, and the parts of `group_cross`;
 - passed through `coalesce` and `where`, as long as both sides are labels (or one is `None`).
 
-Anywhere else needs numbers, and qex refuses the expression when it is parsed, before anything runs:
+Anywhere else needs numbers, and qex refuses the expression when it is read, before anything runs:
 
-```python
-qex("rank(group('sector'))")
-# ValueError: group('sector') gives labels, not numbers, and rank() needs numbers. Compare labels
-# (group('sector') == 'Technology') or group by them (group_demean(x, group('sector'))).
-
-qex("coalesce(group('sector'), 0)")
-# ValueError: coalesce(group('sector'), 0) mixes labels and numbers: both sides must give the same kind
-```
+| Written | Refused with |
+|---------|--------------|
+| `rank(group('sector'))` | group('sector') gives labels, not numbers, and rank() needs numbers. Compare labels (group('sector') == 'Technology') or group by them (group_demean(x, group('sector'))). |
+| `coalesce(group('sector'), 0)` | coalesce(group('sector'), 0) mixes labels and numbers: both sides must give the same kind |
 
 Numbers can serve as labels (a `quantile` bucket is a number), so a group operator accepts either. A field read with
-`field('name')` is taken to be numbers; read a field of labels with `group('name')`. An alpha must give numbers:
-`qex.kinds.numbers_only(signal)` says why one cannot.
+`field('name')` is taken to be numbers; read a field of labels with `group('name')`. An alpha must give numbers.
 
 ## Inside the cross-sectional universe
 
-Like every cross-sectional operator, a group operator compares only the members of the cross-sectional universe
-(`cross_section_universe`); a stock outside it gets no value. Labels from an expression are computed the same way, so
+Like every cross-sectional operator, a group operator compares only the stocks in the universe that day
+([Universes](universes.md)); a stock outside it gets no value. Labels from an expression are computed the same way, so
 `quantile(field('mcap'), 5)` buckets the members only.
 
 ## See also
 
-- [All operations](reference.md#group-operations), for the table of every operator.
+- [Operator Reference](reference.md#groups), for the table of every operator.
 - [Missing values](missing-values.md): `None`, why a value is missing, three-valued logic and `coalesce`.

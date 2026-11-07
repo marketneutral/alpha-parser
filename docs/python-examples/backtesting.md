@@ -55,7 +55,7 @@ With a universe set, the signal's cross-sectional operators (`rank`, `demean`, `
 `regression_neut`, the group operators, ...) compare only the names in the universe that
 day, as BRAIN does, and give NaN outside it. Time-series operators still see every name's
 full history, so a name that joined today has its past returns and beta. See
-[the cross-sectional universe](../language/reference.md#the-cross-sectional-universe).
+[the cross-sectional universe](../language/concepts.md#which-stocks-a-cross-section-compares).
 
 `BookSettings(mask_cross_section=False)` applies the universe only to the finished signal
 instead, so `rank(x)` ranks a member among every name with data. That reproduces books from

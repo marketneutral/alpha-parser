@@ -1,160 +1,92 @@
-# Concepts
+# How qex Evaluates
 
-Understanding qex's core abstractions.
+## Every value is a table of dates by stocks
 
-## Signals
+Every part of a qex expression stands for a **panel**: one value per date and per stock. `close()` is each stock's
+close on each day; `returns(5)` is each stock's five-day return on each day; `rank(returns(5))` is each stock's rank
+among that day's stocks. A number such as `0.5` is the same value on every date and stock.
 
-A **Signal** is a lazy computation tree. When you write:
+So an expression is not a calculation for one stock or one day. It is one formula applied to the whole panel at
+once, and its result is again a panel: a signal, ready to become a book.
 
-```python
-signal = qex("rank(returns(20))")
+An expression is a tree of operators, read from the inside out:
+
+```qex
+rank(-returns(5) / volatility(20))
 ```
 
-You're not computing anything yet. You're building a tree:
-
 ```
-Rank
- └── Returns(period=20)        reads data['close']
-```
-
-The computation happens when you call `.evaluate(data)`.
-
-## Operations
-
-Operations fall into categories by how they transform data:
-
-### Time-Series Operations
-
-Operate **along rows** (across time) for each column (ticker) independently.
-
-```python
-ts_mean(x, 20)   # 20-day rolling mean
-ts_std(x, 20)    # 20-day rolling std
-delay(x, 5)      # Lag by 5 days
-delta(x, 10)     # Change over 10 days
+rank
+ └── ÷
+      ├── − returns(5)        each stock's 5-day return, negated
+      └── volatility(20)      each stock's 20-day volatility
 ```
 
-!!! note "NaN Warmup"
-    Time-series operations produce NaN for the warmup period.
-    `ts_mean(x, 20)` has NaN for the first 19 rows.
+A part used twice, by name with `let` or written out twice, is the same part: qex recognizes it and computes it once.
 
-### Cross-Sectional Operations
+## Four kinds of operator
 
-Operate **across columns** (across tickers) for each row (day) independently.
+| Kind | Works | Examples | A stock's result depends on |
+|------|-------|----------|-----------------------------|
+| **Element-wise** | on each date and stock separately | `+`, `log`, `abs`, `where`, comparisons | its own values that day |
+| **Time-series** | down each stock's history | `ts_mean`, `delay`, `ts_rank`, `ewma`, `returns` | its own past |
+| **Cross-sectional** | across the stocks on each day | `rank`, `zscore`, `demean`, `regression_neut` | the other stocks that day |
+| **Group** | across the stocks *in its group* on each day | `group_demean`, `group_rank` | the stocks sharing its label |
 
-```python
-rank(x)                 # Percentile rank (0-1)
-zscore(x)               # Z-score across tickers
-demean(x)               # Subtract cross-sectional mean
-regression_neut(x, b)   # Remove x's cross-sectional fit on b (e.g. market beta)
-```
+Most signals mix all of them. In `rank(-returns(5) / volatility(20))`, `returns` and `volatility` look down each
+stock's history, `/` and `-` work element by element, and `rank` compares the stocks on each day.
 
-Which tickers they compare is the *cross-sectional universe*. In a book built with
-`BookSettings(universe='member')` it is the day's members, and names outside it get NaN;
-evaluated on its own, a signal compares every ticker with data. Time-series operations
-always see each ticker's full history. See
-[the cross-sectional universe](reference.md#the-cross-sectional-universe).
+## Which stocks a cross-section compares
 
-### Group Operations
+A cross-sectional or group operator compares the stocks in the **universe** that day, and gives every other stock no
+value. Time-series operators are not restricted: a stock that joined the universe today still has its past returns,
+volatility and beta. See [Universes](universes.md).
 
-Like cross-sectional, but within groups (sectors, industries, etc.).
+One consequence: a time-series operator applied to a cross-sectional result, such as `ts_mean(rank(x), 20)`, has no
+history for a stock from before it joined. Smooth first, then compare, where the meaning allows:
+`rank(ts_mean(x, 20))` has a value on a stock's first day in the universe.
 
-```python
-group_rank(x, 'sector')    # Rank within sector
-group_demean(x, 'sector')  # Demean within sector
-```
+## Windows and history
 
-## Data Format
+A time-series operator looks back over a window, and needs enough values in it. qex's operators follow three rules:
 
-Data is a dict of DataFrames, one per field:
+| Rule | Operators | Gives a value once | On a day its input is missing | After a gap |
+|------|-----------|--------------------|-------------------------------|-------------|
+| **Part of the window** | `ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `ts_quantile`, `ts_corr`, `ts_cov`, `ts_beta`, `ts_beta_shrunk`, `volatility`, `volume`, `adv` | the window has `min(20, period)` values, or the `min_periods` given to an operator that takes one | still gives a value, from the rest of the window | recovers at once |
+| **The whole window** | `ts_rank`, `ts_skew`, `ts_kurt`, `ts_argmax`, `ts_argmin`, `decay_linear` | every day of the window has a value | no value | no value until the gap has left the window |
+| **Exponential** | `ewma`, `ewma_var`, `ewma_cov`, `ts_beta_ewma` | its first value | still gives a value | carries straight on |
 
-```python
-data = {
-    'close': pd.DataFrame(...),   # DatetimeIndex, ticker columns
-    'volume': pd.DataFrame(...),
-    'sector': pd.DataFrame(...),  # For group operations
-    'market': pd.Series(...),     # A date-only field: broadcast to every ticker
-}
-```
+So `ts_mean(x, 252)` has a value 20 days after a listing, from 20 days; `ts_rank(x, 252)` waits a full year, and one
+missing day then hides it for a year. When a window's minimum matters, ask for it explicitly: `ts_corr`, `ts_cov`,
+`ts_beta`, `ts_beta_shrunk` and `ts_quantile` take it as an argument, and
+`where(ts_count_events(x, 252) >= 200, signal, None)` works for any operator.
 
-The DataFrames should share the same index and columns. A field with one value per day,
-such as a market index, can be a date-indexed `pd.Series`.
-See [Data Format](../data/format.md).
+`ts_count_events(x, period)` counts the values `x` has in its window, so it has an answer on every day once `period`
+days have passed. The other event operators (`ts_mean_events`, `ts_std_events`, `ts_sum_events`) look back over the
+last `n` values that exist, however far back, for data such as quarterly earnings. See the
+[operator reference](reference.md#events).
 
-## Evaluation
+## Point in time
 
-```python
-signal = qex("rank(returns(20))")
+A value on day t uses data up to and including day t, never later. There is no operator that looks forward: `delay`
+and `delta` take only non-negative periods. A book trades on the signal with a delay, normally of one day, so a
+signal computed from day t's close is first traded at day t+1's close.
 
-# Returns DataFrame with same shape as input
-result = signal.evaluate(data)
+Two things can still let the future in, and qex checks for both:
 
-# Or convert to portfolio weights
-weights = signal.to_weights(data, normalize=True, long_only=False)
-```
+- **Adjusted price levels** fold in later splits and dividends. Comparing them across stocks, or with a fixed
+  number, sees the future. See [Adjusted Data and Look-Ahead](adjusted-data.md).
+- **Labels**: a stock's group on a past day must be the label it had then. Labels given on fewer dates than the
+  prices hold from their date forward, never backward. See [Groups and Labels](groups.md).
 
-## Caching
+## Long and short
 
-Use `compute_context()` for efficiency:
+A signal's values become a book only after the book demeans and scales them (see the Python section). What the
+signal says is therefore relative: a stock is held long or short according to where its value sits against the
+day's other values.
 
-```python
-from qex import compute_context
+`rank(x)` gives values in (0, 1], so `rank(x)` and `rank(x) - 0.5` make the same book. A `0` is a value like any
+other, so a stock at 0 is held against the day's average; a missing value is left out of the book. That difference
+runs through the whole language: see [Missing Values](missing-values.md).
 
-with compute_context() as ctx:
-    # Shared sub-expressions computed once
-    s1 = qex("rank(returns(20))")
-    s2 = qex("zscore(returns(20))")
-
-    r1 = s1.evaluate(data)  # returns(20) computed
-    r2 = s2.evaluate(data)  # returns(20) reused from cache
-
-    print(f"Cached results: {len(ctx.cache)}")   # 3: returns(20), the rank, the z-score
-```
-
-The cache is for one set of data, known by identity: the frames a dict holds (a new dict around the same frames is
-the same data), or the object itself for a `LazyData`. Evaluating on other frames, even with the same shape and
-dates, starts a fresh cache. A value changed in place inside a frame the context has seen is not detected (checking
-values would read the whole panel at every node): after changing data in place, call `ctx.clear()` or open a new
-context.
-
-## Variable Bindings
-
-Use `let ... in` to avoid repetition:
-
-```python
-# Without let (signal expression repeated):
-qex("rank(delta(returns(5)/volatility(10), 20)) * (returns(5)/volatility(10))")
-
-# With let (define once, use multiple times):
-qex("let s = returns(5)/volatility(10) in rank(delta(s, 20)) * s")
-```
-
-Multiple bindings:
-
-```python
-qex("""
-    let mom = returns(60),
-        vol = volatility(60),
-        sharpe = mom / vol
-    in rank(sharpe) * sign(mom)
-""")
-```
-
-## Long/Short Portfolios
-
-`rank()` returns values in [0, 1]. For long/short:
-
-```python
-# Roughly centred (mean 1/(2n) over n names)
-signal = qex("rank(returns(20)) - 0.5")
-
-# Exactly centred: longs and shorts equal
-signal = qex("demean(rank(returns(20)))")
-```
-
-Then `.to_weights(data, normalize=True)` scales so absolute weights sum to 1. A book built
-with `build_book` is demeaned (or group-demeaned) for you; see
-[Backtesting](../python-examples/backtesting.md#book-settings-finding-alphas).
-
-Equal long and short dollars do not make a book market-neutral: see
-[Market Beta](../examples/market-beta.md).
+Equal long and short dollars don't make a book market-neutral; see [Market Beta](../examples/market-beta.md).

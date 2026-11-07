@@ -22,28 +22,20 @@ C, at 0, is short. D, missing, is out of the book. So never write 0 for "this do
 
 `None` is the literal for a value you leave out on purpose:
 
-```python
-qex("where(group('sector') == 'Financials', None, field('price_to_book'))")   # book value means little for banks
-qex("where(volatility(20) > 0.6, None, returns(5))")                          # leave out the most volatile names
+```qex
+where(group('sector') == 'Financials', None, field('price_to_book'))   # book value means little for banks
+where(volatility(20) > 0.6, None, returns(5))                          # leave out the most volatile names
 ```
 
 `None` behaves like any missing value: cross-sections and the book leave it out, and arithmetic with it stays
-missing. What differs is the reason `explain_missing` gives (below): *excluded on purpose*, not *no data*.
+missing. What differs is the reason qex records (below): *excluded on purpose*, not *no data*.
 
 Write `0` only for a real zero: an indicator (`1` on an event day, `0` otherwise), a non-event in a sum, a neutral
 bucket. (Older code wrote `x * 0 / 0` to make a missing value; write `None`.)
 
 ## Why a value is missing
 
-`explain_missing` traces each missing cell of an expression back to the node where it began, and gives a reason:
-
-```python
-from qex import explain_missing
-report = explain_missing(qex("ts_mean(rank(returns(1)), 10)"), data, universe=data['member'].notna())
-report.summary(within=data['member'].notna())   # each reason's share of the missing member-days
-report.on('2003-06-02')                          # that day's missing names, each with its reason and node
-report.reason('2003-06-02', 'AAI')               # one cell: 'short history: outside the universe on earlier days'
-```
+qex records why each missing value is missing, and the node of the expression where it began. The reasons:
 
 | Reason | Means |
 |--------|-------|
@@ -56,8 +48,9 @@ report.reason('2003-06-02', 'AAI')               # one cell: 'short history: out
 | infinite value | a division by zero |
 | too few names | a day with too few names for a cross-sectional fit: `regression_neut` with k regressors needs k + 2 |
 
-A missing input passes its reason on; a node gives its own reason only where all its inputs had values. In qexarena,
-**why missing?** under a qex cell shows the same report, and `x.missing` does in Python.
+A missing input passes its reason on; a node gives its own reason only where all its inputs had values. From Python,
+`explain_missing` gives the report ([Diagnostics](../python/diagnostics.md#why-a-value-is-missing-explain_missing));
+in qexarena, **why missing?** under a qex cell shows it.
 
 ## Comparisons and logic: three values
 
@@ -99,11 +92,11 @@ false.
 
 `coalesce(x, y)` is `x` where it has a value and `y` where it does not. `y` is a number or another expression.
 
-```python
-qex("coalesce(close() > 8, 0)")                    # the comparison, and 0 (false) where it is not known
-qex("coalesce(field('eps_estimate'), field('eps_trailing'))")   # a fallback field
-qex("coalesce(group('sector'), 'Other')")          # labels, with 'Other' where there is none
-qex("coalesce(group_demean(x, 'sector'), 0)")      # a stock with no sector sits at its sector's average
+```qex
+coalesce(close() > 8, 0)                    # the comparison, and 0 (false) where it is not known
+coalesce(field('eps_estimate'), field('eps_trailing'))   # a fallback field
+coalesce(group('sector'), 'Other')          # labels, with 'Other' where there is none
+coalesce(group_demean(returns(20), 'sector'), 0)      # a stock with no sector sits at its sector's average
 ```
 
 `coalesce` is the explicit way to get the pre-0.7.0 behaviour of a comparison, `coalesce(cond, 0)`, where you want
@@ -132,12 +125,12 @@ A group operator gives a stock with no label no value, with the reason *no group
 2. Leave cross-sectional signals missing rather than filling them; fill forward only slow fields, with a limit
    (`fill_forward(x, 5)`).
 3. When missing should count as false, write `coalesce(cond, 0)`; when it should count as true, `coalesce(cond, 1)`.
-4. When a signal has fewer values than you expect, ask why: `explain_missing`, or **why missing?** in qexarena.
+4. When a signal has fewer values than you expect, ask why (the reasons above).
 5. Smooth before the cross-section where the meaning allows: `group_demean(ts_mean(x, 5), 'sector')` has a value on a
    stock's first day in the universe; `ts_mean(group_demean(x, 'sector'), 5)` waits five member days.
 
 ## See also
 
-- [All operations](reference.md#none-and-why-a-value-is-missing): `None`, the reasons table, and the
-  comparison operators.
+- [Operator Reference](reference.md#conditions-and-missing-values): `where`, `coalesce`, `is_valid`, `is_finite`
+  and `None`.
 - [Group Operations](groups.md).

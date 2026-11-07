@@ -12,7 +12,7 @@ theme:
     primary: black
     accent: green
   font:
-    text: JetBrains Mono
+    text: Inter
     code: JetBrains Mono
   features:
     - navigation.instant
@@ -33,6 +33,9 @@ extra_css:
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
+      extend_pygments_lang:
+        - name: qex          # qex code blocks: highlighted with the Python lexer, written as plain qex
+          lang: python
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
@@ -64,12 +67,16 @@ plugins:
             separate_signature: true
             show_signature_annotations: true
 
+validation:
+  anchors: warn
+  unrecognized_links: warn
+
 nav:
   - Home: index.md
   - Philosophy: philosophy.md
   - Language:
     - Syntax: language/syntax.md
-    - Concepts: language/concepts.md
+    - How qex Evaluates: language/concepts.md
     - Missing Values: language/missing-values.md
     - Groups and Labels: language/groups.md
     - Universes: language/universes.md
@@ -85,8 +92,11 @@ nav:
     - Advanced Patterns: examples/advanced-patterns.md
   - Python:
     - Installation: python/installation.md
+    - Parsing: python/parsing.md
     - Signals: python/signal.md
     - Evaluation: python/evaluation.md
+    - Universes: python/universes.md
+    - Diagnostics: python/diagnostics.md
     - Graphs and Dask: python/distributed.md
   - Data:
     - Data Format: data/format.md

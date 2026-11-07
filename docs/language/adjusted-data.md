@@ -44,13 +44,7 @@ anything as traded or as filed. The check follows the exponent through the expre
 | `returns(5)`, `volatility(63)`, `close() * volume(20)` | fine |
 | `field('price') > 5`, `rank(field('mcap'))` | fine |
 
-```python
-from qex import qex
-from qex.adjust import check
-
-check(qex("rank(close())"), fields)              # raises LookAhead, saying what to write instead
-check(qex("rank(close())"), fields, mode="warn") # returns the problems and lets it run
-```
-
-`fields` is the data's declarations (`{"close": {"adjustment": 1, "unit": "usd_per_share"}, ...}`); a panel's
-manifest carries them. A field without a declaration is not checked, and neither is anything computed from it.
+An expression the rule refuses is refused before it runs, with a message saying what to write instead. From Python
+the check is `qex.adjust.check` ([Diagnostics](../python/diagnostics.md#adjusted-data-and-look-ahead-qexadjustcheck)),
+and the declarations come with the data ([Data Format](../data/format.md)). A field without a declaration is not
+checked, and neither is anything computed from it.
