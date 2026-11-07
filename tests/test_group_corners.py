@@ -90,9 +90,9 @@ def test_the_universe_leaves_non_members_out_of_labels_and_groups(data):
     assert close_to(out.iloc[0], [-0.5, 0.5, -0.5, 0.5, N, N])        # buckets of the four members only
 
 
-def test_time_series_group_operators_take_label_expressions(data):
+def test_group_std_and_count_take_label_expressions(data):
     by_name = dict(data, bucket=ev("quantile(field('size'), 2)", data))
-    for op in ("group_std(close(), {g}, 2)", "group_count_valid(close(), {g}, 2)"):
+    for op in ("group_std(close(), {g})", "group_count_valid(close(), {g}, 2)"):
         a = ev(op.format(g="'bucket'"), by_name)
         b = ev(op.format(g="quantile(field('size'), 2)"), data)
         pd.testing.assert_frame_equal(a, b)

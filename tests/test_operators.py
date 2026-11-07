@@ -960,31 +960,27 @@ class TestPairsTrading:
             assert abs(finance_sum) < 1e-10, f"Finance pair not zero-sum: {finance_sum}"
 
     def test_group_std_basic(self, pairs_data):
-        """Test that group_std computes rolling std within pairs."""
-        signal = alpha("group_std(returns(1), 'pair', 20)")
+        """group_std is the spread across each pair's members on each day."""
+        signal = alpha("group_std(returns(1), 'pair')")
         result = signal.evaluate(pairs_data)
+        r = alpha("returns(1)").evaluate(pairs_data)
 
-        # Should have values after warm-up
-        assert result.iloc[25:].notna().all().all()
+        assert result.iloc[1:].notna().all().all()
+        for date in result.index[1:]:
+            for a, b in [('AAPL', 'MSFT'), ('XOM', 'CVX'), ('JPM', 'GS')]:
+                expected = np.std([r.loc[date, a], r.loc[date, b]], ddof=1)
+                assert np.isclose(result.loc[date, a], expected)
+                assert np.isclose(result.loc[date, b], expected)
 
-        # Within each pair, all members should have the same std value
-        for date in result.index[25:]:
-            # Tech pair should have same std
-            assert np.isclose(
-                result.loc[date, 'AAPL'],
-                result.loc[date, 'MSFT']
-            )
-
-            # Energy pair should have same std
-            assert np.isclose(
-                result.loc[date, 'XOM'],
-                result.loc[date, 'CVX']
-            )
+    def test_group_std_window_form_is_refused(self, pairs_data):
+        """The pre-0.12.0 form group_std(x, g, n) fails with a message saying what to write."""
+        with pytest.raises(ValueError, match="ts_std"):
+            alpha("group_std(returns(1), 'pair', 20)")
 
     def test_pairs_zscore_signal(self, pairs_data):
         """Test z-score normalized pair spread signal."""
-        # Z-score of pair spread: spread / spread_volatility
-        signal = alpha("group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 60)")
+        # Z-score of pair spread: the spread over its own volatility
+        signal = alpha("let s = group_demean(returns(5), 'pair') in s / ts_std(s, 60)")
         result = signal.evaluate(pairs_data)
 
         # Should have values after warm-up (60 days)
@@ -1014,7 +1010,7 @@ class TestPairsTrading:
         # Test that where() can handle scalar constants (0)
         signal = alpha(
             "where("
-            "abs(group_demean(returns(10), 'pair')) > group_std(returns(10), 'pair', 60), "
+            "abs(group_demean(returns(10), 'pair')) > ts_std(group_demean(returns(10), 'pair'), 60), "
             "group_demean(-returns(5), 'pair'), "
             "0)"
         )
@@ -1684,13 +1680,13 @@ class TestLetBindings:
 
         signal = alpha(
             "let spread = group_demean(returns(5), 'pair'), "
-            "spread_vol = group_std(returns(5), 'pair', 20) "
+            "spread_vol = ts_std(spread, 20) "
             "in spread / spread_vol"
         )
         result = signal.evaluate(simple_data)
 
         signal_equiv = alpha(
-            "group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 20)"
+            "group_demean(returns(5), 'pair') / ts_std(group_demean(returns(5), 'pair'), 20)"
         )
         result_equiv = signal_equiv.evaluate(simple_data)
 

@@ -12,7 +12,7 @@ import pandas as pd
 
 from .signal import Signal
 from .data import resolve_data
-from .universe import in_universe, finite_in_universe
+from .universe import in_universe, finite_in_universe, universe_members
 
 
 GroupsArg = Union[str, Signal]
@@ -58,21 +58,22 @@ def _get_group_data(data, groups) -> pd.DataFrame:
 
 
 def _align_labels(group_df: pd.DataFrame, index, columns) -> pd.DataFrame:
-    """Labels on these dates and names: a date missing from group_df takes its last row, a name missing from it has
-    no group (NaN)."""
+    """Labels on these dates and names, as of each date: a date missing from group_df takes the latest row on or
+    before it (labels given monthly hold until the next row), a date before group_df's first row has no group, and a
+    name missing from it has no group (NaN). Never a later row: that would group stocks by labels not yet known."""
     groups = group_df.reindex(columns=columns)
-    rows = groups.reindex(index).astype(object)
-    missing = ~index.isin(groups.index)
-    if missing.any():
-        rows.loc[missing] = groups.iloc[-1].values
-    return rows
+    if not groups.index.is_monotonic_increasing:
+        groups = groups.sort_index()
+    if groups.index.equals(index):
+        return groups.astype(object)
+    return groups.astype(object).reindex(index, method='ffill')
 
 
 def _group_codes(values: pd.DataFrame, group_df: pd.DataFrame):
     """Integer group codes aligned to values' dates and columns, -1 where the group is NaN.
 
-    A date missing from group_df takes group_df's last row, and a column missing from it has
-    no group (NaN), as in the per-date loops these replace.
+    A date missing from group_df takes the latest row on or before it (none before its first row), and
+    a column missing from it has no group (NaN).
     """
     rows = _align_labels(group_df, values.index, values.columns)
     codes, uniques = pd.factorize(rows.to_numpy(dtype=object).ravel())
@@ -87,6 +88,13 @@ def _group_totals(v: np.ndarray, codes: np.ndarray, n_groups: int):
     sums = np.bincount(key[ok], weights=v[ok], minlength=size)
     counts = np.bincount(key[ok], minlength=size)
     return key, sums, counts
+
+
+def _in_group(codes: np.ndarray, values: pd.DataFrame) -> np.ndarray:
+    """The cells that get their group's value: names with a group that day, inside the cross-sectional universe."""
+    has = codes >= 0
+    members = universe_members(values.index, values.columns)
+    return has if members is None else has & members
 
 
 class Group(Signal):
@@ -260,9 +268,17 @@ def group_cross(*groups) -> GroupCross:
 
 
 class GroupCountValid(Signal):
-    """Count non-NaN values within each group over a rolling window, broadcast to all members."""
+    """How many values each group has over the last ``window`` days, broadcast to every member.
+
+    On each day, the members are the stocks with that label that day, and the count is every value those stocks have
+    over the window (a stock counts once per day it has a value; an infinity counts, as in is_valid). With window 1 it
+    is the number of the group's members with a value that day. The first days use the shorter window there is. A
+    group whose members have no values in the window gets 0; names with no group, or outside the universe, get NaN.
+    """
 
     def __init__(self, signal: Signal, groups: GroupsArg, window: int):
+        if isinstance(window, bool) or not isinstance(window, int) or window < 1:
+            raise ValueError(f"group_count_valid takes a window of at least 1 day (got {window!r})")
         self.signal = signal
         self.groups = _as_groups(groups)
         self.window = window
@@ -271,34 +287,16 @@ class GroupCountValid(Signal):
         values = in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
-        result = pd.DataFrame(
-            np.nan,
-            index=values.index,
-            columns=values.columns
-        )
-
-        # For each date, count valid values in each group over the rolling window
-        for i, date in enumerate(values.index):
-            # Get the window of data
-            start_idx = max(0, i - self.window + 1)
-            window_values = values.iloc[start_idx:i + 1]
-
-            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
-
-            for group_name in date_groups.unique():
-                if pd.isna(group_name):
-                    continue
-                mask = date_groups == group_name
-                group_tickers = mask[mask].index
-
-                # Count non-NaN values for this group's tickers in the window
-                group_window_values = window_values[group_tickers]
-                count = group_window_values.notna().sum().sum()
-
-                # Broadcast count to all members of the group
-                result.loc[date, mask] = count
-
-        return result
+        codes, n_groups = _group_codes(values, group_df)
+        per_name = values.notna().astype(float).rolling(self.window, min_periods=1).sum().to_numpy()
+        T = codes.shape[0]
+        key = np.arange(T)[:, None] * n_groups + codes
+        labelled = codes >= 0
+        counts = np.bincount(key[labelled], weights=per_name[labelled], minlength=T * max(n_groups, 1))
+        has = _in_group(codes, values)
+        out = np.full(codes.shape, np.nan)
+        out[has] = counts[key[has]]
+        return pd.DataFrame(out, index=values.index, columns=values.columns)
 
     def _cache_key(self):
         return ('GroupCountValid', self.signal._cache_key(), _groups_key(self.groups), self.window)
@@ -310,72 +308,61 @@ def group_count_valid(signal: Signal, groups: GroupsArg, window: int) -> GroupCo
 
 
 class GroupStd(Signal):
-    """Rolling standard deviation within groups.
+    """Standard deviation of a signal across each group's members on each day, broadcast to every member.
 
-    Computes the std of each group member's values over a rolling window,
-    then broadcasts the group std to all members. Useful for normalizing
-    pair spreads.
+    Like group_demean and group_sum, it works on one day's cross-section: the spread of x among the
+    stocks that share a label that day (sample standard deviation, ddof 1). A member whose own value
+    is missing still gets its group's value; a group with fewer than two values that day gets NaN.
+
+        group_demean(x, 'sector') / group_std(x, 'sector')       a z-score within each sector
+
+    Before qex 0.12.0 it took a window, group_std(x, g, n), and pooled n days of every member's values
+    into one sample. That form is refused: for a pair's spread over time use
+    let s = group_demean(x, 'pair') in s / ts_std(s, n).
     """
 
-    def __init__(self, signal: Signal, groups: GroupsArg, window: int):
+    def __init__(self, signal: Signal, groups: GroupsArg):
         self.signal = signal
         self.groups = _as_groups(groups)
-        self.window = window
 
     def _compute(self, data):
         values = finite_in_universe(self.signal.evaluate(data))
         group_df = _get_group_data(data, self.groups)
 
-        result = pd.DataFrame(
-            np.nan,
-            index=values.index,
-            columns=values.columns
-        )
-
-        # For each date, compute rolling std within each group
-        for i, date in enumerate(values.index):
-            if i < self.window - 1:
-                continue
-
-            # Get the window of data
-            start_idx = i - self.window + 1
-            window_values = values.iloc[start_idx:i + 1]
-
-            date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
-
-            for group_name in date_groups.unique():
-                if pd.isna(group_name):
-                    continue
-                mask = date_groups == group_name
-                group_tickers = mask[mask].index
-
-                # Get all values for this group in the window and compute std
-                group_window_values = window_values[group_tickers].values.flatten()
-                group_window_values = group_window_values[~np.isnan(group_window_values)]
-
-                if len(group_window_values) >= 2:
-                    std = np.std(group_window_values, ddof=1)
-                    result.loc[date, mask] = std
-
-        return result
+        codes, n_groups = _group_codes(values, group_df)
+        v = values.to_numpy(dtype=float)
+        key, sums, counts = _group_totals(v, codes, n_groups)
+        has = codes >= 0
+        ok = has & ~np.isnan(v)
+        with np.errstate(invalid='ignore', divide='ignore'):
+            means = sums / counts
+            dev = np.zeros(v.shape)
+            dev[ok] = (v[ok] - means[key[ok]]) ** 2                  # two passes: deviations from the group mean
+            ss = np.bincount(key[ok], weights=dev[ok], minlength=sums.size)
+            std = np.sqrt(ss / np.where(counts >= 2, counts - 1, np.nan))
+        has = _in_group(codes, values)
+        out = np.full(v.shape, np.nan)
+        out[has] = std[key[has]]
+        return pd.DataFrame(out, index=values.index, columns=values.columns)
 
     def _cache_key(self):
-        return ('GroupStd', self.signal._cache_key(), _groups_key(self.groups), self.window)
+        return ('GroupStd', self.signal._cache_key(), _groups_key(self.groups))
 
 
-def group_std(signal: Signal, groups: GroupsArg, window: int) -> GroupStd:
-    """Create a GroupStd signal.
-
-    Computes rolling standard deviation within each group. Useful for
-    normalizing pair spreads to get z-scores.
+def group_std(signal: Signal, groups: GroupsArg, *window) -> GroupStd:
+    """Create a GroupStd signal: the standard deviation across each group's members that day.
 
     Example:
-        # Z-score of pair spread
-        spread = group_demean(returns(5), 'pair')
-        spread_vol = group_std(returns(5), 'pair', 60)
-        zscore = spread / spread_vol
+        # Within-sector z-score
+        group_demean(returns(5), 'sector') / group_std(returns(5), 'sector')
     """
-    return GroupStd(signal, groups, window)
+    if window:
+        raise ValueError(
+            f"group_std() takes a signal and its groups, group_std(x, groups), and gives the spread across the "
+            f"group's members on each day, like the other group operators. Before qex 0.12.0 it took a window "
+            f"(got {window[0]!r}) and pooled that many days; that form is gone. For a pair's spread over time, "
+            f"use let s = group_demean(x, groups) in s / ts_std(s, n).")
+    return GroupStd(signal, groups)
 
 
 class GroupSum(Signal):
@@ -395,9 +382,10 @@ class GroupSum(Signal):
 
         codes, n_groups = _group_codes(values, group_df)
         v = values.to_numpy(dtype=float)
-        key, sums, _ = _group_totals(v, codes, n_groups)
-        # Every member gets its group's sum, including members whose own value is NaN
-        has = codes >= 0
+        key, sums, counts = _group_totals(v, codes, n_groups)
+        sums = np.where(counts > 0, sums, np.nan)               # a group with no values that day has no sum, not 0
+        # Every member gets its group's sum, including members whose own value is NaN; names outside the universe don't
+        has = _in_group(codes, values)
         out = np.full(v.shape, np.nan)
         out[has] = sums[key[has]]
         return pd.DataFrame(out, index=values.index, columns=values.columns)

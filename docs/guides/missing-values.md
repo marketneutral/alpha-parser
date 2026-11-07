@@ -54,6 +54,7 @@ report.reason('2003-06-02', 'AAI')               # one cell: 'short history: out
 | no group | a group operator, for a stock with no label that day |
 | calculation error | NaN from finite inputs: `0 / 0`, `log` or `sqrt` of a negative, a z-score with no spread |
 | infinite value | a division by zero |
+| too few names | a day with too few names for a cross-sectional fit: `regression_neut` with k regressors needs k + 2 |
 
 A missing input passes its reason on; a node gives its own reason only where all its inputs had values. In qexarena,
 **why missing?** under a qex cell shows the same report, and `x.missing` does in Python.

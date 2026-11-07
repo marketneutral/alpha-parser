@@ -465,6 +465,7 @@ qex/
 
 ### Math Operations
 - `log(signal)` - Natural logarithm
+- `exp(signal)` - e to the signal, the inverse of `log`
 - `abs(signal)` - Absolute value
 - `sign(signal)` - Sign (-1, 0, or 1)
 - `sqrt(signal)` - Square root
@@ -481,7 +482,8 @@ qex/
 - `ts_var(signal, period)` - Rolling variance
 - `delay(signal, period)` - Lag/shift signal
 - `delta(signal, period)` - Difference from N periods ago
-- `ts_rank(signal, period)` - Percentile rank within rolling window (optimized with scipy)
+- `ts_rank(signal, period)` - Percentile rank within rolling window
+- `ts_quantile(signal, period, q)` - Rolling q-quantile (0.5 is the median)
 - `fill_forward(signal, limit)` - Forward fill NaN for up to N periods
 - `ts_corr(signal1, signal2, period[, min_periods])` - Rolling correlation
 - `ts_cov(signal1, signal2, period[, min_periods])` - Rolling covariance
@@ -511,7 +513,8 @@ qex/
 - `winsorize(signal, limit)` - Cap extreme values at percentiles (e.g., 0.05 caps at 5th/95th)
 - `scale(signal)` - Scale so absolute values sum to 1
 - `truncate(signal, max_weight)` - Clip values to [-max_weight, max_weight]
-- `regression_neut(y, x)` - Residual of y on x (with intercept), fit across names each day: zero mean and zero covariance with x. `regression_neut(z, ts_beta_shrunk(returns(1), returns(1, 'market'), 252))` takes market beta out of z
+- `regression_neut(y, x1, x2, ...)` - Residual of y on one or more regressors (with intercept), fit across names each day: zero mean and zero covariance with each. Several regressors are one joint fit, which nesting is not. `regression_neut(z, ts_beta_shrunk(returns(1), returns(1, 'market'), 252))` takes market beta out of z
+- `pca_factor(signal, window, k[, refit])` - Each stock's beta to the k-th statistical factor (principal component across stocks), refit every `refit` days and held
 
 > **Note:** Both `rank` and `quantile` are ascending: higher signal values produce higher ranks/buckets.
 
@@ -529,7 +532,7 @@ qex/
 - `group('group_name')` - Access group data for filtering (use with `where()`)
 - `group_rank(signal, 'group_name')` - Rank within groups
 - `group_demean(signal, 'group_name')` - Demean within groups (subtract group mean)
-- `group_std(signal, 'group_name', window)` - Rolling std within groups (for normalizing pair spreads)
+- `group_std(signal, 'group_name')` - Standard deviation across the group's members that day (`group_demean(x, g) / group_std(x, g)` is a within-group z-score)
 - `group_sum(signal, 'group_name')` - Sum within groups, broadcast to all members
 - `group_count_valid(signal, 'group_name', window)` - Count non-NaN within group over window
 
@@ -554,7 +557,8 @@ signal = qex("""
 This is useful when certain signals or factors don't apply to specific sectors (e.g., value metrics for financials, inventory metrics for services).
 
 ### Validity Operations
-- `is_valid(signal)` - Returns 1 where not NaN, 0 otherwise
+- `is_valid(signal)` - Returns 1 where not NaN, 0 otherwise (an infinity counts as valid)
+- `is_finite(signal)` - Returns 1 where a finite number, 0 where NaN or infinite
 
 ### Variable Bindings (`let ... in`)
 

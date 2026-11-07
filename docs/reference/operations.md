@@ -52,6 +52,7 @@ forward returns of `Backtest` and `QuantileAnalysis`, and it is the same on pand
 | Operation | Description |
 |-----------|-------------|
 | `log(x)` | Natural logarithm |
+| `exp(x)` | e to the `x`, the inverse of `log` (too large gives inf) |
 | `abs(x)` | Absolute value |
 | `sign(x)` | Sign (-1, 0, or 1) |
 | `sqrt(x)` | Square root |
@@ -63,6 +64,9 @@ forward returns of `Backtest` and `QuantileAnalysis`, and it is the same on pand
 qex("log(close())")
 qex("sign(returns(20)) * sqrt(abs(returns(20)))")
 qex("max(returns(5), 0)")  # Positive returns only
+qex("exp(ts_sum(log(1 + returns(1)), 20)) - 1")  # Daily returns compounded over 20 days
+qex("1 / (1 + exp(-zscore(returns(5))))")      # A sigmoid
+qex("scale(exp(zscore(returns(5)) / 0.5))")    # A cross-sectional softmax, temperature 0.5
 ```
 
 ## Time-Series Operations
@@ -79,11 +83,17 @@ Operate along time axis for each ticker independently.
 | `ts_max(x, period)` | Rolling maximum |
 | `ts_min(x, period)` | Rolling minimum |
 | `ts_var(x, period)` | Rolling variance |
+| `ts_quantile(x, period, q[, min_periods])` | Rolling `q`-quantile, `q` in [0, 1]: 0.5 is the median, 0 and 1 are `ts_min` and `ts_max` |
 
 ```python
 qex("ts_mean(returns(1), 20)")  # 20-day average return
 qex("close() / ts_max(close(), 252)")  # Distance from 52-week high
+qex("-ts_quantile(returns(1), 252, 0.05)")  # 5% value-at-risk, as a loss
+qex("ts_quantile(returns(1), 60, 0.75) - ts_quantile(returns(1), 60, 0.25)")  # interquartile range
 ```
+
+`ts_quantile` interpolates linearly between the two nearest values and skips missing ones; like
+`ts_corr`, it needs `min_periods` values in the window (default `min(20, period)`).
 
 ### Lag and Difference
 
@@ -195,7 +205,8 @@ Operate across tickers for each day independently.
 | `winsorize(x, limit)` | Cap at percentiles (e.g., 0.05 caps at 5th/95th) |
 | `scale(x)` | Scale so absolute values sum to 1 |
 | `truncate(x, max)` | Clip to [-max, max] |
-| `regression_neut(y, x)` | Residual of y on x (with intercept), fit across names each day |
+| `regression_neut(y, x1, x2, ...)` | Residual of y on one or more regressors (with intercept), fit across names each day |
+| `pca_factor(x, window, k[, refit])` | Each stock's beta to the k-th statistical factor of x (a principal component across stocks), refit every `refit` days (default 21) |
 
 ```python
 qex("rank(returns(20))")  # Higher return → higher rank
@@ -210,6 +221,47 @@ zero covariance with `x`, which is what "neutral to `x`" means. Names where eith
 are NaN. The fit runs over the cross-sectional universe (below), which `build_book` sets from
 `BookSettings(universe=...)`. The signal is then exactly neutral; the book is only close to it,
 because truncation and rescaling come after. See [Market Beta](../guides/market-beta.md).
+
+With several regressors, `regression_neut(y, beta, size, momentum)` is one least-squares fit on all of
+them at once, over the names where `y` and every regressor are valid; the residual has zero covariance
+with each. Nesting, `regression_neut(regression_neut(y, beta), size)`, is not the same: when `beta` and
+`size` are correlated, the second step brings back some of the beta exposure the first removed.
+Collinear regressors give the least-squares fit of smallest norm, not an error.
+
+### Statistical factors: `pca_factor`
+
+`pca_factor(x, window, k, refit)` finds the common factors of `x` (usually `returns(1)`) from the data alone, by a
+principal component analysis across stocks, and gives each stock's exposure to the k-th:
+
+```python
+qex("pca_factor(returns(1), 252, 1)")                   # each stock's beta to the first statistical factor
+qex("""let r = returns(1)
+       in regression_neut(zscore(-returns(5)), pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3))""")
+                                                         # short-term reversal with three statistical factors removed
+```
+
+- **Point in time.** At each refit date (every `refit` rows, the first once `window` rows exist) the fit uses the
+  trailing `window` rows of `x`, ending that day, and its result holds until the next refit. Before the first fit the
+  value is missing (`explain_missing`: short history).
+- **Which names.** A fit includes the names with values on at least 90% of its window (and, inside a universe, the
+  members that day); the missing days count as the name's mean. A name not in a fit has no value until the next one.
+- **Correlation PCA.** Each name is demeaned and divided by its own volatility over the window, so a few volatile
+  stocks don't make up the first components.
+- **The value is a beta.** It is the stock's beta to the k-th eigenportfolio's return, sigma_i * v_i in `x`'s units
+  (v the k-th eigenvector of the correlation matrix): the exposure a position in the stock carries to the factor, which
+  is what `regression_neut` should remove.
+- **Components keep their identity.** Each refit's components are matched to the previous refit's by overlap and
+  signed to agree, so a factor does not swap with a neighbour of similar size or flip sign from one month to the next;
+  k is the k-th largest at the first fit, followed after. The first component is signed long (the market). Where two
+  factors are equally large, any mix of them is equally a component; tracking settles on one as they separate.
+- **Cost.** One SVD of a window x names matrix per refit (about 0.1 s for 252 x 3,000). The decomposition is a node
+  of its own in the expression's graph (`pca_basis`, internal), which every `pca_factor` on the same `x`, `window` and
+  `refit` takes as its input, so components 1 to 5 cost one decomposition: in a `compute_context`, in `SignalGraph`, and
+  on Dask. `k` is at most 20.
+
+A day needs at least k + 2 valid names for k regressors. With k + 1 or fewer, the fit (an intercept and k slopes)
+passes through every point, so the residual is rounding noise (around 1e-16) that a `rank` or `zscore` would turn into
+full-size positions; that day is NaN instead, and `explain_missing` says `too few names`.
 
 **Infinities.** `zscore`, `demean`, `winsorize`, `scale`, `regression_neut`, `group_demean`,
 `group_std` and `group_sum` leave an infinite value out of the day's statistics and give that
@@ -252,7 +304,9 @@ active; `latch(on, off)` gives it hysteresis. The [Universes guide](../guides/un
 
 Like cross-sectional, but within groups. `groups` is a group's name (`'sector'`) or any expression that gives each
 stock a label (`quantile(field('mcap'), 5)`, `coalesce(group('sector'), 'Other')`, `group_cross(...)`). A stock with
-no label is in no group and gets no value. The [Group Operations guide](../guides/groups.md) works through each one.
+no label is in no group and gets no value, and so does a stock outside the universe. Labels given on fewer dates than the
+data hold from their date until the next row (never a later row). The [Group Operations guide](../guides/groups.md)
+works through each one.
 
 `group(...)` and `group_cross(...)` give **labels**, not numbers. Labels can be compared (`==`, `!=`), used to group,
 and passed through `coalesce` and `where`; anything else (`rank(group('sector'))`, `group('sector') + 1`) is refused
@@ -265,8 +319,8 @@ when the expression is parsed, with a message saying what to write instead
 | `group_rank(x, groups)` | Rank within each group, in (0, 1] |
 | `group_demean(x, groups)` | Demean within each group |
 | `group_quantile(x, groups, n)` | Quantile buckets within each group, 1 to n: a dependent double sort |
-| `group_std(x, groups, period)` | Rolling std within group |
-| `group_sum(x, groups)` | Sum within group |
+| `group_std(x, groups)` | Standard deviation across the group's members that day (every member gets it) |
+| `group_sum(x, groups)` | Sum within group (missing when the group has no values that day) |
 | `group_count_valid(x, groups, period)` | Count non-NaN within group |
 | `group_cross(a, b, ...)` | One grouping from several: labels joined with `\|`, `'Technology\|3'` |
 
@@ -297,7 +351,8 @@ This is useful when factors don't apply to certain sectors (e.g., value metrics 
 |-----------|-------------|
 | `where(cond, if_true, if_false)` | Ternary conditional: `if_true` where `cond` is nonzero, `if_false` where it is 0, missing where it is missing |
 | `coalesce(x, y)` | `x` where it has a value, else `y` (a number or a signal): `coalesce(close() > 8, 0)` |
-| `is_valid(x)` | Returns 1 where not NaN, else 0 |
+| `is_valid(x)` | Returns 1 where not NaN, else 0 (an infinity counts as valid) |
+| `is_finite(x)` | Returns 1 where `x` is a finite number, 0 where it is NaN or infinite |
 | `None` | No value here, on purpose: `where(cond, x, None)`. Missing like NaN, but reported as excluded by `explain_missing` |
 | `fill_forward(x, limit)` | Forward fill NaN for up to `limit` periods; `fill_forward(x)` with no limit fills until the next value |
 | `latch(on, off)` | 1 from a day `on` is true until a day `off` is (off wins a tie), 0 before; missing days change nothing. Hysteresis: `latch(mcap >= 300e6, mcap < 240e6)` |
@@ -335,6 +390,7 @@ report.on('2003-06-02')                          # each missing name that day, i
 | no group | a group operator, for a name with no group that day |
 | calculation error | NaN from finite inputs: `0 / 0`, `log` or `sqrt` of a negative, a z-score with no spread |
 | infinite value | a division by zero |
+| too few names | a day with too few names for a cross-sectional fit: `regression_neut` with k regressors needs k + 2 |
 
 A missing input passes on its reason; a node gives its own only where every input had a value. Explaining changes
 nothing: it reads the values the expression's own evaluation produced.

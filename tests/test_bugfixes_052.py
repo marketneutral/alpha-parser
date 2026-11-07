@@ -129,8 +129,8 @@ def test_group_sum_ignores_infinity(inf_data):
 
 
 def test_group_std_ignores_infinity(inf_data):
-    out = _ev(f"group_std({SIGNAL}, 'sector', 5)", inf_data).iloc[-1]
-    assert np.isfinite(out.drop("S3")).all()
+    out = _ev(f"group_std({SIGNAL}, 'sector')", inf_data).iloc[-1]
+    assert np.isfinite(out).all()        # S3 (infinite) is left out of its sector's spread but gets it
 
 
 def test_regression_neut_ignores_infinity(inf_data):

@@ -343,7 +343,7 @@ def pairs_trading_examples():
 
     Alpha-parser supports pairs via GROUP operations:
         - group_demean: Subtract the pair's average
-        - group_std: Compute volatility within each pair
+        - ts_std of the spread: how stretched the pair is against its own history
     """
     print("\n" + "="*70)
     print("SECTION 4: PAIRS TRADING")
@@ -409,14 +409,14 @@ def pairs_trading_examples():
     # ---------------------------------------------------------------------
     # Z-Score Normalized Spread
     # ---------------------------------------------------------------------
-    # Normalize by rolling std within the pair
+    # Normalize the spread by its own rolling volatility
     # This gives comparable magnitude across different pairs
     signal = alpha(
-        "group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 60)"
+        "let s = group_demean(returns(5), 'pair') in s / ts_std(s, 60)"
     )
 
     print("\n4.2 Z-Score Normalized Spread")
-    print("    Formula: group_demean(returns, 'pair') / group_std(returns, 'pair', 60)")
+    print("    Formula: let s = group_demean(returns(5), 'pair') in s / ts_std(s, 60)")
     print("    Rationale: Normalize spread by its historical volatility.")
     print("               Z-score > 2 might indicate entry opportunity.")
 
@@ -460,7 +460,7 @@ def pairs_trading_examples():
     # Only trade when spread is extreme (z-score > threshold)
     signal = alpha(
         "where("
-        "  abs(group_demean(returns(10), 'pair') / group_std(returns(10), 'pair', 60)) > 1.5,"
+        "  abs(group_demean(returns(10), 'pair') / ts_std(group_demean(returns(10), 'pair'), 60)) > 1.5,"
         "  -group_demean(returns(5), 'pair'),"
         "  0"
         ")"
@@ -654,7 +654,7 @@ def event_driven_examples():
         earnings_dates = np.random.choice(252, size=4, replace=False)
         for ed in earnings_dates:
             # Surprise between -0.1 and +0.1
-            earnings_surprise.iloc[ed][ticker] = np.random.uniform(-0.1, 0.1)
+            earnings_surprise.loc[dates[ed], ticker] = np.random.uniform(-0.1, 0.1)
 
     data = {
         'close': close,
@@ -959,14 +959,14 @@ def advanced_composition_examples():
     # ---------------------------------------------------------------------
     signal = alpha(
         "let spread = group_demean(returns(5), 'sector'), "
-        "    spread_vol = group_std(returns(5), 'sector', 60), "
+        "    spread_vol = ts_std(spread, 60), "
         "    z = spread / spread_vol "
         "in where(abs(z) > 1.5, -spread, 0)"
     )
 
     print("\n8.5 Pairs Trading Z-Score with let")
     print("    Formula: let spread = group_demean(returns(5), 'sector'),")
-    print("                 spread_vol = group_std(returns(5), 'sector', 60),")
+    print("                 spread_vol = ts_std(spread, 60),")
     print("                 z = spread / spread_vol")
     print("             in where(abs(z) > 1.5, -spread, 0)")
     print("")

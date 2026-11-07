@@ -38,9 +38,9 @@ from .operators import (
     Add, Sub, Mul, Div, Neg,
     Greater, Less, GreaterEqual, LessEqual, Equal, NotEqual,
     And, Or, Not,
-    IsValid, is_valid,
-    Log, Abs, Sign, Sqrt, Power, Max, Min,
-    log, abs_, sign, sqrt, power, max_, min_,
+    IsValid, is_valid, IsFinite, is_finite,
+    Log, Exp, Abs, Sign, Sqrt, Power, Max, Min,
+    log, exp, abs_, sign, sqrt, power, max_, min_,
     _ensure_signal,
 )
 
@@ -59,17 +59,17 @@ from .primitives import (Returns, Volatility, Volume, Adv, returns, volatility, 
 from .timeseries import (
     TsMean, TsStd, TsSum, TsMax, TsMin, TsVar, Delay, Delta, TsRank, FillForward,
     TsCorr, TsCov, Ewma, EwmaVar, EwmaCov, TsBeta, TsBetaShrunk, TsBetaEwma,
-    TsArgmax, TsArgmin, TsSkew, TsKurt, DecayLinear,
+    TsArgmax, TsArgmin, TsSkew, TsKurt, DecayLinear, TsQuantile,
     TsMeanEvents, TsStdEvents, TsSumEvents, TsCountEvents,
     ts_mean, ts_std, ts_sum, ts_max, ts_min, ts_var, delay, delta, ts_rank, fill_forward, latch, Latch,
     ts_corr, ts_cov, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
-    ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
+    ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear, ts_quantile,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 
 # Cross-sectional operations
 from .crosssection import (
-    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate, RegressionNeut,
+    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate, RegressionNeut, PcaFactor, pca_factor,
     rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut,
 )
 
@@ -151,6 +151,8 @@ __all__ = [
     'Not',
     'IsValid',
     'is_valid',
+    'is_finite',
+    'IsFinite',
     'Log',
     'Abs',
     'Sign',
@@ -159,6 +161,8 @@ __all__ = [
     'Max',
     'Min',
     'log',
+    'exp',
+    'Exp',
     'abs_',
     'sign',
     'sqrt',
@@ -233,6 +237,8 @@ __all__ = [
     'delay',
     'delta',
     'ts_rank',
+    'ts_quantile',
+    'TsQuantile',
     'fill_forward',
     'latch',
     'Latch',
@@ -268,6 +274,8 @@ __all__ = [
     'Scale',
     'Truncate',
     'RegressionNeut',
+    'PcaFactor',
+    'pca_factor',
     'rank',
     'zscore',
     'demean',

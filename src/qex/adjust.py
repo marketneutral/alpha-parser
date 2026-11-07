@@ -14,6 +14,7 @@ exponent through an expression:
     delay and the time-series operators keep it (ts_mean(close()) is still an adjusted level)
     ts_rank, ts_corr, ts_argmax and other scale-free time-series statistics give 0
     log turns exponent e into an additive shift; a difference of two shifts over time cancels (log(close()) - log(delay(close(), 5)))
+    exp undoes log (exp(log(close())) is an adjusted level); exp of a plain number is a plain number
     adding, subtracting, max, min and comparing need the same exponent on both sides
     comparing with a constant needs exponent 0
     every cross-sectional and group operator needs exponent 0 in what it compares
@@ -71,7 +72,7 @@ def _classes():
 
 
 _PRESERVE = ("TsMean", "TsSum", "TsMax", "TsMin", "Delay", "Ewma", "DecayLinear", "FillForward", "TsMeanEvents",
-             "TsSumEvents", "TsStd", "TsStdEvents")
+             "TsSumEvents", "TsStd", "TsStdEvents", "TsQuantile")
 _FREE_TS = ("TsRank", "TsArgmax", "TsArgmin", "TsCorr", "TsSkew", "TsKurt", "TsCountEvents", "Latch")
 _SQUARE = ("TsVar", "EwmaVar")
 _PAIR_SUM = ("TsCov", "EwmaCov")
@@ -199,7 +200,7 @@ def _walk(s, fields, seen, found, mode):
     elif isinstance(s, (op.Greater, op.Less, op.GreaterEqual, op.LessEqual, op.Equal, op.NotEqual)):
         same(w(s.left), w(s.right), s, "compares")
         out = FREE
-    elif isinstance(s, (op.And, op.Or, op.Not, op.IsValid, op.Sign)):
+    elif isinstance(s, (op.And, op.Or, op.Not, op.IsValid, op.IsFinite, op.Sign)):
         for k in kids:
             w(k)
         out = FREE
@@ -208,6 +209,9 @@ def _walk(s, fields, seen, found, mode):
     elif isinstance(s, op.Log):
         v = w(kids[0])
         out = UNKNOWN if v.e is None else (V(v.e, True, ()) if v.e != 0 else FREE)
+    elif isinstance(s, op.Exp):
+        v = w(kids[0])                                   # exp(log(close())) is the adjusted level again
+        out = UNKNOWN if v.e is None else (V(v.e, False, None) if v.log else FREE if v.e == 0 else UNKNOWN)
     elif isinstance(s, op.Sqrt):
         v = w(kids[0])
         out = UNKNOWN if v.e is None or v.log else V(v.e / 2, False, None)
@@ -244,9 +248,12 @@ def _walk(s, fields, seen, found, mode):
         out = same(w(s.if_true), w(s.if_false), s, "chooses between")
     elif isinstance(s, cond.Coalesce):
         out = same(w(s.x), w(s.y), s, "fills")
+    elif name == "PcaBasis":
+        out = w(kids[0])                                 # checked where pca_factor compares it across stocks
     elif s.__class__.__module__ == cs.__name__:
         for k in kids:
-            need_free(w(k), k, f"{label(s).split('(')[0]}()")
+            part = k.signal if type(k).__name__ == "PcaBasis" else k
+            need_free(w(k), part, f"{label(s).split('(')[0]}()")
         out = FREE
     elif s.__class__.__module__ == gr.__name__:
         groups = getattr(s, "groups", None)

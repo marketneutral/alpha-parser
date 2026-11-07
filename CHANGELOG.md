@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.12.0
+
+**Breaking: `group_std` changes meaning.** Everything else here is new and changes no existing expression.
+
+### `group_std(x, groups)` is one day's spread within each group
+
+Every other group operator (`group_rank`, `group_demean`, `group_sum`, `group_quantile`) works on one day's
+cross-section; `group_std` was the exception. `group_std(x, g, n)` pooled n days of every member's values into one
+sample, so it mostly measured how much the whole group moved over the window, not how far apart its members are.
+Now `group_std(x, g)` is the standard deviation across the group's members that day (ddof 1), broadcast to every
+member, so `group_demean(x, g) / group_std(x, g)` is a within-group z-score. It is vectorized (the old form looped in
+Python over every day and group).
+
+The old three-argument form **is refused when the expression is parsed**, with a message naming the replacement; it
+never silently gives different numbers. For a pair's spread against its own history, which is what the old pairs
+examples meant: `let s = group_demean(x, 'pair') in s / ts_std(s, n)`. The pairs-trading guide, the cookbook and the
+README now use that. `group_count_valid(x, g, w)` keeps its window.
+
+Before adopting this version, check stored expressions for `group_std` (qexarena issue #36).
+
+### The other group operators: three fixes that change numbers, and one that doesn't
+
+Each change touches only the cases named; everywhere else the numbers are identical.
+
+- **Labels are taken as of each date (a look-ahead fix).** When the labels have fewer dates than the data (monthly
+  sector labels on daily prices), a date without a label row took the label frame's *last* row, so a stock was
+  grouped by a label from the future. Now each date takes the latest row on or before it, and a date before the first
+  row has no group. This is in the shared label alignment, so it covers every group operator, `group_cross`,
+  `build_book`'s group neutralization and `explain_missing`. Labels given every day are unaffected.
+- **`group_sum` of a group with no values that day is missing, not 0.** 0 is a value, and a position once a book is
+  built; `group_demean` and `group_rank` already gave NaN there.
+- **Names outside the universe get NaN from `group_sum`, `group_std` and `group_count_valid`,** as every other
+  cross-sectional operator gives them. They used to get their group's number. A member whose own value is missing
+  still does.
+- **`group_count_valid` is vectorized,** with results identical to the old loop (tested against it), which took
+  about 2 s per 150 days of 3,000 names. Its window must now be at least 1.
+
+### New operators
+
+- `exp(x)`: the inverse of `log`. With it, compounding (`exp(ts_sum(log(1 + r), n)) - 1`), a sigmoid
+  (`1 / (1 + exp(-x))`) and a cross-sectional softmax (`scale(exp(x / T))`) need no operators of their own. Too large
+  an argument gives inf.
+- `ts_quantile(x, period, q[, min_periods])`: the rolling q-quantile (0.5 the median, 0 and 1 `ts_min` and
+  `ts_max`), interpolated linearly, with the same `min_periods` default as the other rolling operators. Value-at-risk
+  is `-ts_quantile(returns(1), 252, 0.05)`; an interquartile range no single print can move is the 0.75 quantile less
+  the 0.25.
+- `is_finite(x)`: 1 where `x` is a finite number, 0 where it is missing or infinite (`is_valid` counts an infinity as
+  valid).
+- `regression_neut(y, x1, x2, ...)`: several regressors in one least-squares fit per day, so the residual has zero
+  covariance with each. Nesting `regression_neut(regression_neut(y, x1), x2)` is not the same when `x1` and `x2` are
+  correlated: the second step brings back some of the `x1` exposure. With one regressor nothing changes, including
+  its cache key, so qexarena's expression hashes of sealed alphas keep.
+
+  A day needs at least k + 2 valid names for k regressors (three for one). With fewer, the fit passes through every
+  point and the residual is rounding noise (around 1e-16) that `rank` or `zscore` would turn into full-size
+  positions; such a day is now NaN, for the one-regressor form too (it gave that noise before), and
+  `explain_missing` reports a new reason, `too few names`. On a cross-section of hundreds of names it never applies.
+
+- `pca_factor(x, window, k[, refit])`: each stock's beta to the k-th statistical factor of `x`, from a correlation
+  PCA across stocks on the trailing `window` days, refit every `refit` days (default 21) and held in between.
+  Components are tracked across refits (matched by overlap, signs aligned), so a factor keeps its identity; names
+  need values on 90% of the window; inside a universe only members enter the fit. Every `pca_factor` on the same `x`,
+  `window` and `refit` shares one decomposition per refit: it is a node of its own in the graph (`pca_basis`), so the
+  DAG shows it shared and Dask computes it once. With the joint `regression_neut`, a statistical-factor
+  residual is one line: `regression_neut(y, pca_factor(r, 252, 1), ..., pca_factor(r, 252, 5))`.
+
+The look-ahead check (`qex.adjust`) knows the new operators: `ts_quantile` keeps its input's adjustment, `exp` undoes
+`log`, and `is_finite` gives a plain number.
+
+### Fixed
+
+- `SignalGraph.compute_dask` (and `DistributedSignalEngine` on a cluster) gave each node's task only the data, so every
+  task recomputed its whole subtree: a five-node chain computed its leaf five times. Each task now receives its
+  inputs' results and computes only its own node. On a PCA residual reversal with three factors, that is one
+  decomposition and one `returns(1)` instead of 15 and 20, with identical results. CI now installs the `distributed`
+  extra, so the Dask tests run.
+
+- The cookbook's event-driven section (Section 6) set its earnings surprises by chained assignment
+  (`df.iloc[i][col] = v`), which pandas 3's copy-on-write discards: the data stayed all NaN and the section ran on
+  no events. It now sets them in one step (`df.loc[date, col] = v`) and finds its 20 events on pandas 2 and 3.
+
 ## 0.11.0
 
 ### Adjusted data and look-ahead: `qex.adjust`
