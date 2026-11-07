@@ -53,6 +53,11 @@ Each change touches only the cases named; everywhere else the numbers are identi
   correlated: the second step brings back some of the `x1` exposure. With one regressor nothing changes, including
   its cache key, so qexarena's expression hashes of sealed alphas keep.
 
+  A day needs at least k + 2 valid names for k regressors (three for one). With fewer, the fit passes through every
+  point and the residual is rounding noise (around 1e-16) that `rank` or `zscore` would turn into full-size
+  positions; such a day is now NaN, for the one-regressor form too (it gave that noise before), and
+  `explain_missing` reports a new reason, `too few names`. On a cross-section of hundreds of names it never applies.
+
 The look-ahead check (`qex.adjust`) knows the new operators: `ts_quantile` keeps its input's adjustment, `exp` undoes
 `log`, and `is_finite` gives a plain number.
 

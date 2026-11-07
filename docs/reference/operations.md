@@ -227,6 +227,10 @@ with each. Nesting, `regression_neut(regression_neut(y, beta), size)`, is not th
 `size` are correlated, the second step brings back some of the beta exposure the first removed.
 Collinear regressors give the least-squares fit of smallest norm, not an error.
 
+A day needs at least k + 2 valid names for k regressors. With k + 1 or fewer, the fit (an intercept and k slopes)
+passes through every point, so the residual is rounding noise (around 1e-16) that a `rank` or `zscore` would turn into
+full-size positions; that day is NaN instead, and `explain_missing` says `too few names`.
+
 **Infinities.** `zscore`, `demean`, `winsorize`, `scale`, `regression_neut`, `group_demean`,
 `group_std` and `group_sum` leave an infinite value out of the day's statistics and give that
 name NaN, so one division by zero (a zero-volume day in `volume(20) / volume(1)`) can't empty the
@@ -354,6 +358,7 @@ report.on('2003-06-02')                          # each missing name that day, i
 | no group | a group operator, for a name with no group that day |
 | calculation error | NaN from finite inputs: `0 / 0`, `log` or `sqrt` of a negative, a z-score with no spread |
 | infinite value | a division by zero |
+| too few names | a day with too few names for a cross-sectional fit: `regression_neut` with k regressors needs k + 2 |
 
 A missing input passes on its reason; a node gives its own only where every input had a value. Explaining changes
 nothing: it reads the values the expression's own evaluation produced.

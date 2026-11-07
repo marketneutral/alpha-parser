@@ -360,3 +360,48 @@ def test_group_count_valid_is_fast_and_checks_its_window():
     assert time.perf_counter() - start < 10                        # the loop took about 2 s for 150 days of 3,000 names
     with pytest.raises(ValueError, match="window"):
         qex("group_count_valid(close(), 'sector', 0)")
+
+
+# --- regression_neut: a day needs k + 2 names ---------------------------------------------------
+
+@pytest.mark.parametrize("k, n, has_value", [(1, 1, False), (1, 2, False), (1, 3, True),
+                                             (2, 3, False), (2, 4, True), (3, 4, False), (3, 5, True)])
+def test_regression_neut_needs_k_plus_two_names(k, n, has_value):
+    rng = np.random.default_rng(k * 10 + n)
+    idx = pd.bdate_range("2024-01-01", periods=1)
+    cols = [f"S{i}" for i in range(6)]
+    d = {"close": pd.DataFrame(1.0, index=idx, columns=cols)}
+    for name in ["y"] + [f"x{j}" for j in range(k)]:
+        v = pd.DataFrame(rng.normal(size=(1, 6)), index=idx, columns=cols)
+        v.iloc[0, n:] = NAN                                         # n valid names
+        d[name] = v
+    out = _ev("regression_neut(field('y'), " + ", ".join(f"field('x{j}')" for j in range(k)) + ")", d).iloc[0]
+    if has_value:
+        assert out.iloc[:n].notna().all() and np.abs(out.iloc[:n]).max() > 1e-6
+    else:
+        assert out.isna().all()                                     # not rounding noise a rank would amplify
+
+
+def test_regression_neut_guard_counts_names_in_the_universe(data):
+    member = pd.DataFrame(False, index=data["y"].index, columns=data["y"].columns)
+    member.iloc[:, :3] = True                                        # 3 members: enough for 1 regressor, not 2
+    with compute_context(), cross_section_universe(member):
+        one = qex("regression_neut(field('y'), field('a'))").evaluate(data)
+        two = qex("regression_neut(field('y'), field('a'), field('b'))").evaluate(data)
+    assert one.iloc[:, :3].notna().all().all()
+    assert two.isna().all().all()
+
+
+def test_explain_missing_says_too_few_names():
+    from qex import explain_missing
+    idx = pd.bdate_range("2024-01-01", periods=2)
+    cols = ["A", "B", "C", "D"]
+    d = {"close": pd.DataFrame(1.0, index=idx, columns=cols),
+         "y": pd.DataFrame([[1.0, 2, 3, NAN], [1.0, 2, 3, 4]], index=idx, columns=cols),
+         "a": pd.DataFrame([[1.0, 5, 2, 7], [1.0, 5, 2, 7]], index=idx, columns=cols),
+         "b": pd.DataFrame([[3.0, 1, 4, 1], [3.0, 1, 4, 2]], index=idx, columns=cols)}
+    report = explain_missing(qex("regression_neut(field('y'), field('a'), field('b'))"), d)
+    day = report.on(idx[0])
+    assert list(day.loc[["A", "B", "C"], "reason"]) == ["too few names"] * 3
+    assert day.loc["D", "reason"] == "no data"
+    assert report.on(idx[1]).empty                                   # four names: enough for two regressors

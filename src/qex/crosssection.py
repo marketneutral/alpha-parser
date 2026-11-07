@@ -164,7 +164,11 @@ class RegressionNeut(Signal):
     One regressor, on each date over the names where both y and x are valid:
         residual = (y - mean(y)) - b * (x - mean(x)),   b = cov(y, x) / var(x)
     so the result has zero mean and zero cross-sectional covariance with x. Names where either is
-    NaN are NaN. A day on which x does not vary (or only one name is valid) gets b = 0.
+    NaN are NaN. A day on which x does not vary gets b = 0.
+
+    A day needs at least k + 2 valid names for k regressors; with fewer, the fit's k + 1 numbers
+    (intercept and slopes) pass through every point, the residual is rounding noise, and the whole
+    day is NaN instead.
 
     Several regressors, regression_neut(y, x1, x2, ...): one least-squares fit of y on all of them
     at once, over the names where y and every x are valid, so the residual has zero mean and zero
@@ -187,6 +191,7 @@ class RegressionNeut(Signal):
         y = finite_in_universe(self.y.evaluate(data))
         x = finite_in_universe(self.x.evaluate(data).reindex_like(y))
         valid = y.notna() & x.notna()
+        valid = valid & (valid.sum(axis=1) >= 3).to_numpy()[:, None]          # k + 2 names, k = 1
         y, x = y.where(valid), x.where(valid)
         yc = y.sub(y.mean(axis=1), axis=0)
         xc = x.sub(x.mean(axis=1), axis=0)
@@ -205,7 +210,7 @@ class RegressionNeut(Signal):
         out = np.full(Y.shape, np.nan)
         for t in range(Y.shape[0]):
             ok = valid[t]
-            if not ok.any():
+            if ok.sum() < X.shape[2] + 2:                # an exact fit: the residual would be rounding noise
                 continue
             yc = Y[t, ok] - Y[t, ok].mean()
             A = X[t, ok, :] - X[t, ok, :].mean(axis=0)

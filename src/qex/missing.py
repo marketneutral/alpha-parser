@@ -13,6 +13,8 @@ node where it began:
     no group              a group operator, for a name with no group that day
     calculation error     NaN from finite inputs: 0 / 0, log or sqrt of a negative, a z-score with no spread
     infinite value        a division by zero
+    too few names         a day with too few names for a cross-sectional fit: regression_neut with k regressors
+                          needs k + 2
 
 Where a missing input explains a missing output, the reason is the input's: a cell takes the reason of the first
 input missing there, and a node's own reason applies only where every input had a value. Nothing is computed twice
@@ -40,7 +42,7 @@ from .context import compute_context, get_context
 from .operators import Constant, NoneValue
 from .signal import Signal
 
-PRESENT, NO_DATA, OUTSIDE, HISTORY, EXCLUDED, NO_GROUP, CALC, INFINITE = range(8)
+PRESENT, NO_DATA, OUTSIDE, HISTORY, EXCLUDED, NO_GROUP, CALC, INFINITE, TOO_FEW = range(9)
 REASONS = {
     NO_DATA: "no data",
     OUTSIDE: "outside the universe",
@@ -49,6 +51,7 @@ REASONS = {
     NO_GROUP: "no group",
     CALC: "calculation error",
     INFINITE: "infinite value",
+    TOO_FEW: "too few names",
 }
 _CROSS = tuple(c for c in vars(_cs).values() if isinstance(c, type) and issubclass(c, Signal) and c.__module__ == _cs.__name__)
 _GROUP_OPS = tuple(c for c in vars(_gr).values() if isinstance(c, type) and issubclass(c, Signal)
@@ -263,6 +266,14 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
                 own(missing & (codes_ < 0), NO_GROUP)
                 if hasattr(s, "window"):
                     own(missing, HISTORY)
+            if isinstance(s, _cs.RegressionNeut):
+                usable = np.ones(shape, bool)                               # names that could enter the day's fit
+                for res in got:
+                    usable &= res[0] == PRESENT
+                if in_uni is not None:
+                    usable &= in_uni
+                n_regressors = 1 + len(s.more or ())
+                own(missing & (usable.sum(axis=1) < n_regressors + 2)[:, None], TOO_FEW)
             own(missing & np.isinf(v), INFINITE)
             own(missing, CALC)
         elif isinstance(s, _TIME):
