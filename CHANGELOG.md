@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.12.1
+
+Fixes found while rewriting the documentation. Expressions that parsed before give the same tree, except those with a
+`#` comment followed by more lines, which now parse in full (every expression in qexarena's universes, templates and
+595 example-notebook cells parses exactly as before).
+
+- **`#` comments end at the end of their line.** The parser joined an expression's lines before removing comments, so
+  a comment hid every line after it: `rank(returns(5))  # reversal` followed by a line `* -1` parsed, silently, as
+  `rank(returns(5))`. Comments are now removed line by line first (a `#` inside a quoted string is kept), in
+  `_collapse_whitespace`, which qexarena's notebook also uses to join cells.
+- **Clear errors for what qex doesn't have.** `and`, `or`, `not`, `%`, `//`, keyword arguments, lists, indexing,
+  attributes and `if`/`else` raised `KeyError` or "Unsupported node type"; each now says what to write instead
+  (`&`, `|`, `~`, `where`, arguments by position). Unary `+x` is `x`.
+- **Constant arguments are checked when an expression is read**: windows and counts must be whole numbers of at
+  least 1 (a lag, 0 or more), half-lives and `truncate`'s limit above 0, `winsorize`'s level in [0, 0.5], names
+  quoted strings. `returns('5')`, `delay(x, 1.5)`, `quantile(x, 0)`, `ts_mean(x, 0)` and `truncate(x, -1)` were
+  accepted and gave errors later or meaningless numbers. Values pass through unchanged (`20.0` stays `20.0`), so no
+  cache key, and no qexarena expression hash, changes.
+- **The risk model's `liquidity` factor is dollar volume.** It was described as "20-day average dollar volume" but
+  computed `rank(ts_mean(volume(1), 20))`, share volume; it is now `rank(adv(20))`. Risk-model numbers that use it
+  change.
+
 ## 0.12.0
 
 **Breaking: `group_std` changes meaning.** Everything else here is new and changes no existing expression.

@@ -184,6 +184,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_missing_prices.py` - Returns across halts/delistings, held weights in backtests, forward returns
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
+- `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
 - `test_docs.py` - The documentation: every operator documented, every qex block parses, Python blocks compile, worked pages run
 - `test_bugfixes_052.py` - Regression tests for the 0.5.2 fixes (paired betas, infinities in cross-sections, risk model, ts_rank, math of numbers)
 - `test_distributed.py` - Distributed evaluation and graph visualization tests

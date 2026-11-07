@@ -51,7 +51,7 @@ number each day. Two sets come with qex:
 | `value` | `rank(winsorize(field('book_to_price'), 0.05))` |
 | `momentum` | `rank(returns(252) - returns(21))` |
 | `volatility` | `rank(volatility(60))` |
-| `liquidity` | `rank(ts_mean(volume(1), 20))`: average volume in shares (its description says dollar volume; it is not) |
+| `liquidity` | `rank(adv(20))`: 20-day average dollar volume |
 | `short_term_reversal` | `rank(-returns(5))` |
 
 `PRICE_ONLY_FACTORS` (prices and volume only):
@@ -60,7 +60,7 @@ number each day. Two sets come with qex:
 |--------|------------|
 | `momentum` | `rank(returns(252) - returns(21))` |
 | `volatility` | `rank(volatility(60))` |
-| `liquidity` | `rank(ts_mean(volume(1), 20))` |
+| `liquidity` | `rank(adv(20))` |
 | `short_term_reversal` | `rank(-returns(5))` |
 | `medium_term_reversal` | `rank(-returns(20))` |
 

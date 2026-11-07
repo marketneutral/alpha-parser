@@ -23,9 +23,8 @@ signal = qex("""
 """)
 ```
 
-!!! warning
-    Don't put `#` comments inside a multi-line expression: qex joins its lines before reading it, so a comment
-    hides everything after it. See [Syntax](../language/syntax.md#layout).
+`#` comments run to the end of their line, so a multi-line expression can be commented line by line
+([Syntax](../language/syntax.md#layout)).
 
 `alpha()` is the same function under its older name, and `QexParser` is the class behind both.
 
