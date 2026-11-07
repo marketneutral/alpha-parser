@@ -1,4 +1,4 @@
-# Distributed Signal Evaluation
+# Graphs and Dask
 
 Efficiently evaluate thousands of signals with shared sub-expression deduplication.
 
@@ -98,6 +98,13 @@ Data is transferred once and cached on each worker. All tasks reference the same
 # Workers load from S3/GCS/NFS on demand
 # Configure via Dask's standard mechanisms
 ```
+
+## Each node once, on one machine or many
+
+`graph.compute(data)` evaluates every node once, in one compute context. `graph.compute_dask(data, client)` submits
+one Dask task per node and hands each task its inputs' results, so a node is computed once across the cluster too,
+and an expensive shared node, such as the decomposition behind several `pca_factor` calls, is computed by one task.
+(Before qex 0.12.0 each task recomputed its whole subtree.)
 
 ## How Deduplication Works
 

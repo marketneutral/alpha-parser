@@ -1,6 +1,8 @@
 # Data Format
 
-How to structure data for qex.
+qex reads data as a Python dict of pandas objects: one entry per **field**, each a table of dates by stocks. This
+page is the contract every other part of qex relies on. The pages after it cover labels, universes, event data,
+large datasets, adjusted prices, and halts and delistings.
 
 ## Basic Structure
 
@@ -16,9 +18,9 @@ data = {
 
 Each DataFrame field has:
 
-- **Index**: `DatetimeIndex` (trading dates)
-- **Columns**: Ticker symbols
-- **Values**: Float (use `NaN` for missing)
+- **index**: a `DatetimeIndex` of trading dates, ascending;
+- **columns**: one per stock (ticker symbols, or any stable identifier);
+- **values**: numbers, with `NaN` for missing (labels are strings: see [Labels and Groups](labels.md)).
 
 A field with a single value per day can instead be a date-indexed `pd.Series`
 (see [Date-only fields](#date-only-fields-and-the-market)).
@@ -33,7 +35,7 @@ data = {
 }
 ```
 
-Optional:
+Optional, for the operators that read them:
 
 ```python
 data = {
@@ -74,98 +76,6 @@ qex("ts_corr(returns(1), returns(1, 'market'), 252)")    # each name's market co
 
 Use a total-return series (dividends reinvested), so that ex-dividend days are not market
 moves. [Market Beta](../examples/market-beta.md) covers choosing the market and estimating beta.
-
-## Universe
-
-A universe field marks which names are in the investable universe each day: 1 (or any
-finite value) for members, NaN otherwise. `BookSettings(universe='member')` uses it both
-to restrict the book and to restrict the signal's cross-sectional operators to the day's
-members (see [Backtesting](../python-examples/backtesting.md#the-universe-inside-the-signal)).
-
-```python
-data['member'] = member_df     # same index and columns as close; 1.0 or NaN
-```
-
-Keep every name's full price history in `close`, including days before it joined and after
-it left: time-series operators use it, so a new member has a beta and a volatility on its
-first day.
-
-## Group Data
-
-For `group_rank`, `group_demean`, etc.:
-
-```python
-# Same index and columns as price data
-# Values are group identifiers (strings)
-sector_df = pd.DataFrame(
-    [['Tech', 'Tech', 'Finance', 'Finance']] * len(dates),
-    index=dates,
-    columns=tickers
-)
-
-data['sector'] = sector_df
-
-qex("group_demean(returns(20), 'sector')")
-```
-
-## Sparse Event Data
-
-For events like earnings (most days are NaN):
-
-```python
-# NaN on non-event days
-earnings = pd.DataFrame(np.nan, index=dates, columns=tickers)
-
-# Fill in event values
-earnings.loc['2024-01-15', 'AAPL'] = 1.25  # AAPL reported
-earnings.loc['2024-01-18', 'MSFT'] = 2.10  # MSFT reported
-
-data['earnings'] = earnings
-
-# Forward fill to hold signal
-qex("fill_forward(field('earnings'), 60)")
-
-# Check if event occurred
-qex("is_valid(field('earnings'))")
-```
-
-## LazyData for Large Datasets
-
-Load fields on demand:
-
-```python
-from qex import LazyData
-
-data = LazyData({
-    'close': lambda: pd.read_parquet('data/close.parquet'),
-    'volume': lambda: pd.read_parquet('data/volume.parquet'),
-    'earnings': lambda: pd.read_parquet('data/earnings.parquet'),
-})
-
-# Only 'close' is loaded (volume, earnings stay on disk)
-signal = qex("rank(returns(20))")
-result = signal.evaluate(data)
-```
-
-### Self-Describing Data
-
-Add descriptions for documentation:
-
-```python
-data = LazyData(
-    data={
-        'close': lambda: pd.read_parquet('close.parquet'),
-        'earnings': lambda: pd.read_parquet('earnings.parquet'),
-    },
-    descriptions={
-        'close': 'Daily adjusted close price',
-        'earnings': 'Quarterly EPS surprise',
-    }
-)
-
-# Inspect available fields
-print(data.describe())
-```
 
 ## Example: Complete Dataset
 

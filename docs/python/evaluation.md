@@ -1,7 +1,7 @@
-# Evaluation Module
+# Evaluation
 
-Backtesting, book construction and quantile analysis tools. Everything here is importable
-from `qex` as well as from `evaluation`.
+Backtests, quantile and IC analysis, and performance metrics. Everything here is importable from `qex` as well as
+from `evaluation`. How a signal becomes a book is in [Books](books.md).
 
 ## Backtest
 
@@ -25,7 +25,7 @@ print(result.summary())
 | `signal` | Signal | required | Signal to backtest |
 | `holding_period` | int | `1` | Days each day's target book is held: the book held is the average of the last `holding_period` targets (below) |
 | `transaction_cost` | float | `0.0` | Cost per dollar traded (0.001 = 10 bps), charged on daily turnover |
-| `settings` | BookSettings | `None` | Build the book with [book settings](#book-settings); `None` uses `signal.to_weights()` at delay 0 |
+| `settings` | BookSettings | `None` | Build the book with [book settings](books.md#book-settings); `None` uses `signal.to_weights()` at delay 0 |
 
 `run(data, start_date=None, end_date=None)` returns a `BacktestResult`.
 
@@ -75,45 +75,6 @@ results = bt.run_walk_forward(
 Returns a DataFrame with one row per window: `start`, `end`, `sharpe`, `return`,
 `volatility`, `max_drawdown`. Nothing is fitted on the first `train_period` days.
 
-## Book Settings
-
-`BookSettings` and `build_book` turn a signal into the book *Finding Alphas* and WorldQuant
-BRAIN simulate: restricted to a universe, delayed, neutralized, scaled to a gross of one and
-truncated.
-
-```python
-from qex import qex, BookSettings, build_book
-
-settings = BookSettings(delay=1, universe='member', neutralize='market', truncation=0.05)
-w = build_book(qex("rank(-returns(5))"), data, settings)
-```
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `delay` | `1` | Day t's weights use data up to day t − delay |
-| `universe` | `None` | A data field, 1 for names in the universe that day and NaN otherwise; `None` is every name with a price |
-| `neutralize` | `"market"` | `"market"`, a group field such as `"sector"`, or `None` |
-| `truncation` | `0.05` | Largest absolute weight of one name, as a fraction of the book; `None` for no cap |
-| `rounds` | `1000` | Most neutralize, scale and clip rounds per day |
-| `mask_cross_section` | `True` | With a universe, cross-sectional operators in the signal compare only the day's universe ([details](../language/concepts.md#which-stocks-a-cross-section-compares)); `False` applies the universe to the finished signal only, as before 0.5 |
-
-### Untradable names
-
-A name with no close that day can't be traded. `Backtest` holds its previous weight until it
-trades again, for at most `MAX_PRICE_GAP` (10) days, and then drops it (a delisting).
-`hold_untradable` applies the same rule to any weights:
-
-```python
-from qex import hold_untradable, forward_returns
-
-held = hold_untradable(w, data['close'])                 # what Backtest holds
-pnl = (held * forward_returns(data['close']).reindex_like(held).fillna(0)).sum(axis=1)
-```
-
-`Backtest` books P&L daily, on `forward_returns(close, 1)`. `QuantileAnalysis` measures
-`forward_returns(close, holding_period)`. Both are NaN when the end price is missing, and measured from the last
-valid price when the start price is.
-
 ### Holding period
 
 With `holding_period=h > 1`, `Backtest` holds each day's target book for h days, as h overlapping books
@@ -132,15 +93,6 @@ counted each day's move up to h times.)
 `QuantileAnalysis(holding_period=h)` is unchanged: its IC on h-day forward returns is the standard measure, and its
 quantile return series overlap (a day's move is in h consecutive values), so read them as h-day returns, not as P&L.
 
-### Book statistics
-
-```python
-from qex import turnover, fitness, margin_bps
-
-to = turnover(w)          # sum(|w_t - w_{t-1}|) each day
-fitness(pnl, to)          # Sharpe * sqrt(|annual return| / max(mean turnover, 0.125))
-margin_bps(pnl, to)       # total P&L / total traded, in basis points
-```
 
 ## Quantile Analysis
 
@@ -234,10 +186,6 @@ recovery, or −1 if it has not recovered).
       members:
         - run
         - run_walk_forward
-
-::: evaluation.book.BookSettings
-
-::: evaluation.book.build_book
 
 ::: evaluation.quantile.QuantileAnalysis
     options:
