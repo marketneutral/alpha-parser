@@ -52,7 +52,7 @@ Each operation snaps together like lego. Cross-sectional ranks, validity masks, 
 
 A common source of backtest errors is accidentally using future data. qex rules this out by design: every operation looks only backward in time, and `delay()` refuses a negative lag. There's no way to write an expression that peeks at tomorrow's price.
 
-One thing the language cannot decide for you is *when* you trade on a value. A signal computed from today's close can't be traded at that same close in practice; build the book with `delay=1` (see [Backtesting](guides/backtesting.md#book-settings-finding-alphas)) so that today's weights use only yesterday's data.
+One thing the language cannot decide for you is *when* you trade on a value. A signal computed from today's close can't be traded at that same close in practice; build the book with `delay=1` (see [Backtesting](python-examples/backtesting.md#book-settings-finding-alphas)) so that today's weights use only yesterday's data.
 
 ## Who writes quant expressions?
 

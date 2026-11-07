@@ -208,5 +208,5 @@ Like every cross-sectional operator, a group operator compares only the members 
 
 ## See also
 
-- [All operations](../reference/operations.md#group-operations), for the table of every operator.
+- [All operations](reference.md#group-operations), for the table of every operator.
 - [Missing values](missing-values.md): `None`, why a value is missing, three-valued logic and `coalesce`.

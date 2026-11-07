@@ -133,7 +133,7 @@ from 20 days; raise it (`ts_beta(returns(1), returns(1, 'market'), 252, 126)`) t
 `ts_beta_shrunk` pulls each name's beta `b` toward the day's mean beta in proportion to its
 own sampling error (Vasicek 1973): `w * b + (1 - w) * mean(b)`, with
 `w = var(b) / (var(b) + se(b)^2)`. Short or noisy histories move most. See
-[Market Beta](../guides/market-beta.md#shrinking-beta) for the derivation, and why a fixed
+[Market Beta](../examples/market-beta.md#shrinking-beta) for the derivation, and why a fixed
 blend like Bloomberg's `0.67 b + 0.33` changes nothing that `rank` or `regression_neut` sees.
 
 ```python
@@ -220,7 +220,7 @@ qex("regression_neut(rank(returns(20)), ts_beta_shrunk(returns(1), returns(1, 'm
 zero covariance with `x`, which is what "neutral to `x`" means. Names where either input is NaN
 are NaN. The fit runs over the cross-sectional universe (below), which `build_book` sets from
 `BookSettings(universe=...)`. The signal is then exactly neutral; the book is only close to it,
-because truncation and rescaling come after. See [Market Beta](../guides/market-beta.md).
+because truncation and rescaling come after. See [Market Beta](../examples/market-beta.md).
 
 With several regressors, `regression_neut(y, beta, size, momentum)` is one least-squares fit on all of
 them at once, over the names where `y` and every regressor are valid; the residual has zero covariance
@@ -294,7 +294,7 @@ with cross_section_universe("field('mcap') >= 300e6", data):
 ```
 
 A universe is a mask, a data field's name, or a **universe expression**, evaluated over every stock with no universe
-active; `latch(on, off)` gives it hysteresis. The [Universes guide](../guides/universes.md) works through it.
+active; `latch(on, off)` gives it hysteresis. The [Universes guide](universes.md) works through it.
 
 !!! warning "rank() is Ascending"
     Higher values get higher ranks.
@@ -305,13 +305,13 @@ active; `latch(on, off)` gives it hysteresis. The [Universes guide](../guides/un
 Like cross-sectional, but within groups. `groups` is a group's name (`'sector'`) or any expression that gives each
 stock a label (`quantile(field('mcap'), 5)`, `coalesce(group('sector'), 'Other')`, `group_cross(...)`). A stock with
 no label is in no group and gets no value, and so does a stock outside the universe. Labels given on fewer dates than the
-data hold from their date until the next row (never a later row). The [Group Operations guide](../guides/groups.md)
+data hold from their date until the next row (never a later row). The [Group Operations guide](groups.md)
 works through each one.
 
 `group(...)` and `group_cross(...)` give **labels**, not numbers. Labels can be compared (`==`, `!=`), used to group,
 and passed through `coalesce` and `where`; anything else (`rank(group('sector'))`, `group('sector') + 1`) is refused
 when the expression is parsed, with a message saying what to write instead
-([Numbers and labels](../guides/groups.md#numbers-and-labels)).
+([Numbers and labels](groups.md#numbers-and-labels)).
 
 | Operation | Description |
 |-----------|-------------|
@@ -364,7 +364,7 @@ qex("fill_forward(field('earnings'), 60)")  # Hold earnings for quarter
 
 ### None, and why a value is missing
 
-The [Missing Values guide](../guides/missing-values.md) works through all of this with examples.
+The [Missing Values guide](missing-values.md) works through all of this with examples.
 
 `None` and `0` are different answers. `0` is a value: a book demeans its signal, so a `0` above or below the day's
 average is a position, and a cross-section counts it. `None` is no value: cross-sections and the book leave it out,

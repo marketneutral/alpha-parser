@@ -8,8 +8,8 @@
 signal = qex("rank(-returns(20) / volatility(60))")
 ```
 
-[Get Started](getting-started/quickstart.md){ .md-button .md-button--primary }
-[Operations Reference](reference/operations.md){ .md-button }
+[Get Started](python-examples/quickstart.md){ .md-button .md-button--primary }
+[Operations Reference](language/reference.md){ .md-button }
 
 </div>
 
@@ -93,7 +93,7 @@ print(result.summary())
 | **Math** | `log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min` |
 | **Conditional** | `where`, `is_valid`, `fill_forward` |
 
-[See all operations →](reference/operations.md)
+[See all operations →](language/reference.md)
 
 ## Installation
 

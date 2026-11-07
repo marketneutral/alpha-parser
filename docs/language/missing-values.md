@@ -138,6 +138,6 @@ A group operator gives a stock with no label no value, with the reason *no group
 
 ## See also
 
-- [All operations](../reference/operations.md#none-and-why-a-value-is-missing): `None`, the reasons table, and the
+- [All operations](reference.md#none-and-why-a-value-is-missing): `None`, the reasons table, and the
   comparison operators.
 - [Group Operations](groups.md).
