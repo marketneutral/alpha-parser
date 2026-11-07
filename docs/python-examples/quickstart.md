@@ -115,4 +115,4 @@ with compute_context():
 - [Data Format](../data/format.md) - Detailed data requirements
 - [Backtesting](backtesting.md) - Books, costs and statistics
 - [Market Beta](../examples/market-beta.md) - Measuring and removing market exposure
-- [Operations Reference](../language/reference.md) - All available operations
+- [Operator Reference](../language/reference.md): every operator

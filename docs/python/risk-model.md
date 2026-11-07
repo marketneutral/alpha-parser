@@ -80,7 +80,7 @@ model = FactorRiskModel(style_factors=factors).fit(data)
 skipped with a warning.
 
 For a statistical model instead, with factors found from the returns themselves, see `pca_factor` in the
-[Operator Reference](../language/reference.md#pca_factor).
+[Operator Reference](../language/ops/cross-sectional.md#pca_factor).
 
 ## API reference
 
