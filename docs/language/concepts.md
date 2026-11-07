@@ -53,7 +53,7 @@ Which tickers they compare is the *cross-sectional universe*. In a book built wi
 `BookSettings(universe='member')` it is the day's members, and names outside it get NaN;
 evaluated on its own, a signal compares every ticker with data. Time-series operations
 always see each ticker's full history. See
-[the cross-sectional universe](../reference/operations.md#the-cross-sectional-universe).
+[the cross-sectional universe](reference.md#the-cross-sectional-universe).
 
 ### Group Operations
 
@@ -79,7 +79,7 @@ data = {
 
 The DataFrames should share the same index and columns. A field with one value per day,
 such as a market index, can be a date-indexed `pd.Series`.
-See [Data Format](../guides/data-format.md).
+See [Data Format](../data/format.md).
 
 ## Evaluation
 
@@ -154,7 +154,7 @@ signal = qex("demean(rank(returns(20)))")
 
 Then `.to_weights(data, normalize=True)` scales so absolute weights sum to 1. A book built
 with `build_book` is demeaned (or group-demeaned) for you; see
-[Backtesting](../guides/backtesting.md#book-settings-finding-alphas).
+[Backtesting](../python-examples/backtesting.md#book-settings-finding-alphas).
 
 Equal long and short dollars do not make a book market-neutral: see
-[Market Beta](../guides/market-beta.md).
+[Market Beta](../examples/market-beta.md).

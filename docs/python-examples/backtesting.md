@@ -55,7 +55,7 @@ With a universe set, the signal's cross-sectional operators (`rank`, `demean`, `
 `regression_neut`, the group operators, ...) compare only the names in the universe that
 day, as BRAIN does, and give NaN outside it. Time-series operators still see every name's
 full history, so a name that joined today has its past returns and beta. See
-[the cross-sectional universe](../reference/operations.md#the-cross-sectional-universe).
+[the cross-sectional universe](../language/reference.md#the-cross-sectional-universe).
 
 `BookSettings(mask_cross_section=False)` applies the universe only to the finished signal
 instead, so `rank(x)` ranks a member among every name with data. That reproduces books from
@@ -78,7 +78,7 @@ w = build_book(signal, data, BookSettings(delay=1, universe="member", truncation
 
 The book is then close to beta-neutral, not exactly: betas are estimated, and truncation
 comes after the regression. Check the realized correlation of the book's P&L with the
-market. [Market Beta](market-beta.md) covers estimating, shrinking and removing beta.
+market. [Market Beta](../examples/market-beta.md) covers estimating, shrinking and removing beta.
 
 ### Weights and statistics on their own
 

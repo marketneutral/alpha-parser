@@ -91,7 +91,7 @@ Calmar, maximum drawdown, return on gross), position counts and turnover, and th
 drawdowns. On this random data there is nothing to find, so expect a Sharpe near zero.
 
 For books built the way *Finding Alphas* and WorldQuant BRAIN simulate them (delay,
-universe, neutralization, truncation), see [Backtesting](../guides/backtesting.md#book-settings-finding-alphas).
+universe, neutralization, truncation), see [Backtesting](backtesting.md#book-settings-finding-alphas).
 
 ## 6. Use Compute Context for Caching
 
@@ -111,8 +111,8 @@ with compute_context():
 
 ## Next Steps
 
-- [Concepts](concepts.md) - Understand signals, operations, and evaluation
-- [Data Format](../guides/data-format.md) - Detailed data requirements
-- [Backtesting](../guides/backtesting.md) - Books, costs and statistics
-- [Market Beta](../guides/market-beta.md) - Measuring and removing market exposure
-- [Operations Reference](../reference/operations.md) - All available operations
+- [Concepts](../language/concepts.md) - Understand signals, operations, and evaluation
+- [Data Format](../data/format.md) - Detailed data requirements
+- [Backtesting](backtesting.md) - Books, costs and statistics
+- [Market Beta](../examples/market-beta.md) - Measuring and removing market exposure
+- [Operations Reference](../language/reference.md) - All available operations

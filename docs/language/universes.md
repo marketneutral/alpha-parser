@@ -113,6 +113,6 @@ days.
 
 ## See also
 
-- [All operations](../reference/operations.md#the-cross-sectional-universe): what the cross-sectional universe
+- [All operations](reference.md#the-cross-sectional-universe): what the cross-sectional universe
   restricts, and what it does not.
 - [Group Operations](groups.md), whose operators compare within groups inside the universe.

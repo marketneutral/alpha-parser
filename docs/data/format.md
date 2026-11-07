@@ -73,14 +73,14 @@ qex("ts_corr(returns(1), returns(1, 'market'), 252)")    # each name's market co
 ```
 
 Use a total-return series (dividends reinvested), so that ex-dividend days are not market
-moves. [Market Beta](market-beta.md) covers choosing the market and estimating beta.
+moves. [Market Beta](../examples/market-beta.md) covers choosing the market and estimating beta.
 
 ## Universe
 
 A universe field marks which names are in the investable universe each day: 1 (or any
 finite value) for members, NaN otherwise. `BookSettings(universe='member')` uses it both
 to restrict the book and to restrict the signal's cross-sectional operators to the day's
-members (see [Backtesting](backtesting.md#the-universe-inside-the-signal)).
+members (see [Backtesting](../python-examples/backtesting.md#the-universe-inside-the-signal)).
 
 ```python
 data['member'] = member_df     # same index and columns as close; 1.0 or NaN
