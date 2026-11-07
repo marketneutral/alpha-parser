@@ -85,6 +85,7 @@ nav:
     - Adjusted Data and Look-Ahead: language/adjusted-data.md
     - Operator Reference: language/reference.md
   - Examples:
+    - About the Examples: examples/index.md
     - Momentum: examples/momentum.md
     - Mean Reversion: examples/mean-reversion.md
     - Pairs Trading: examples/pairs-trading.md
@@ -115,6 +116,9 @@ nav:
   - Python Examples:
     - Quick Start: python-examples/quickstart.md
     - Backtesting: python-examples/backtesting.md
+    - Backtesting the Examples: python-examples/example-backtests.md
+    - Checking a Book's Beta: python-examples/beta-check.md
+    - Example Scripts: python-examples/scripts.md
 
 extra:
   social:

@@ -21,17 +21,13 @@ take beta out explicitly and check the result.
 
 Put the market in the data as a date-indexed `pd.Series`, under the key `'market'`:
 
-```python
-data['market'] = spy_close      # pd.Series: one total-return price per day
-```
-
-A Series field is broadcast to every ticker, on the dates and tickers of `close`; dates it
-lacks are NaN. `market()` is that field, and `returns(n, 'market')` is the market's return
+The data supplies the market as a series with one price per day, given to every stock
+([Data Format](../data/format.md#date-only-fields-and-the-market)). `market()` is that series, and `returns(n, 'market')` is the market's return
 over the same `n` days as a stock's `returns(n)`:
 
-```python
-qex("returns(1, 'market')")          # the market's daily return, on every ticker
-qex("volatility(63, 'market')")      # its 63-day annualized volatility
+```qex
+returns(1, 'market')    # the market's daily return, on every ticker
+volatility(63, 'market')    # its 63-day annualized volatility
 ```
 
 Which market? Use the one you would actually hedge with, and keep it consistent between
@@ -45,8 +41,8 @@ the signal and the checks you run on the book:
 
 ## Estimating beta
 
-```python
-qex("ts_beta(returns(1), returns(1, 'market'), 252)")
+```qex
+ts_beta(returns(1), returns(1, 'market'), 252)
 ```
 
 `ts_beta(y, x, period[, min_periods])` is the rolling OLS slope `cov(y, x) / var(x)` over
@@ -58,26 +54,24 @@ changes in beta but are noisier; longer ones are stabler but slow.
 **History.** By default a window needs only `min(20, period)` paired observations, so a
 stock 20 days after listing gets a "252-day" beta from 20 days. Ask for more:
 
-```python
-qex("ts_beta(returns(1), returns(1, 'market'), 252, 126)")    # NaN until 126 days are paired
+```qex
+ts_beta(returns(1), returns(1, 'market'), 252, 126)    # NaN until 126 days are paired
 ```
 
 **Asynchronous prices.** A stock that trades less than the index responds to the market a
 day late, which biases its daily beta toward zero. Multi-day returns absorb the lag:
 
-```python
-qex("ts_beta(returns(3), returns(3, 'market'), 756)")         # 3-day returns over 3 years
+```qex
+ts_beta(returns(3), returns(3, 'market'), 756)    # 3-day returns over 3 years
 ```
 
 Frazzini and Pedersen (2014) split the estimate in two, with a long, low-frequency window for
 the correlation and a shorter daily one for the volatilities:
 
-```python
-qex("""
-    let rho = ts_corr(returns(3), returns(3, 'market'), 1260),
-        vol = volatility(252) / volatility(252, 'market')
-    in rho * vol
-""")
+```qex
+let rho = ts_corr(returns(3), returns(3, 'market'), 1260),
+    vol = volatility(252) / volatility(252, 'market')
+in rho * vol
 ```
 
 **Outliers.** One earnings jump or deal announcement can move a year's beta a long way.
@@ -85,12 +79,10 @@ A robust (Huber) regression would down-weight those days, but a rolling robust f
 every stock and every day is slow. Clipping each stock's returns at a few times its own
 recent volatility before the regression does most of the same work:
 
-```python
-qex("""
-    let r = returns(1),
-        s = ts_std(r, 63)
-    in ts_beta(min(max(r, -4 * s), 4 * s), returns(1, 'market'), 252)
-""")
+```qex
+let r = returns(1),
+    s = ts_std(r, 63)
+in ts_beta(min(max(r, -4 * s), 4 * s), returns(1, 'market'), 252)
 ```
 
 !!! warning "Clip in time, not across names"
@@ -109,8 +101,8 @@ to move back toward the middle in the next period.
 `ts_beta_shrunk` pulls each estimate toward the cross-sectional mean in proportion to
 its own uncertainty (Vasicek 1973):
 
-```python
-qex("ts_beta_shrunk(returns(1), returns(1, 'market'), 252)")
+```qex
+ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
 ```
 
 For stock *i* on day *t*:
@@ -160,11 +152,9 @@ neutralization sees.
 returns the residual. The result has zero mean and zero covariance with `x` across stocks,
 so a book with those weights has no exposure to `x`:
 
-```python
-qex("""
-    let b = ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
-    in regression_neut(rank(-returns(5)), b)
-""")
+```qex
+let b = ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
+in regression_neut(rank(-returns(5)), b)
 ```
 
 The regression is ordinary least squares on purpose. Only OLS residuals are exactly
@@ -176,16 +166,9 @@ neutralization OLS.
 `build_book` does this by default: with `BookSettings(universe=...)`, every cross-sectional
 operator, `regression_neut` included, compares only the stocks in the universe that day (see
 [the cross-sectional universe](../language/concepts.md#which-stocks-a-cross-section-compares)).
-Evaluating a signal on its own, outside `build_book`, needs the same restriction:
-
-```python
-from qex import cross_section_universe
-
-with cross_section_universe(data['member'].notna()):
-    z = signal.evaluate(data)
-```
-
-A fit over every stock with data is not neutral among the members that are traded.
+Evaluating a signal on its own, outside a book, needs the same restriction
+([Universes from Python](../python/universes.md)): a fit over every stock with data is not neutral among the
+members that are traded.
 
 **Rank before you neutralize.** The book is built after the regression: the weights are
 demeaned, scaled to gross one and clipped at the truncation, and clipping is not linear.
@@ -194,46 +177,28 @@ hedging term spread across all the others keeps most of its weight; the book can
 with a large beta of the *opposite* sign. Ranking first spreads the weight out, so little is
 clipped:
 
-```python
-qex("""
-    let b = ts_beta_shrunk(returns(1), returns(1, 'market'), 252),
-        spiky = returns(20) / power(volatility(63), 4)
-    in regression_neut(rank(spiky), b)
-""")
+```qex
+let b = ts_beta_shrunk(returns(1), returns(1, 'market'), 252),
+    spiky = returns(20) / power(volatility(63), 4)
+in regression_neut(rank(spiky), b)
 ```
 
 rather than `regression_neut(spiky, b)`, whose weight is concentrated in the few
 lowest-volatility stocks.
 
-**More than one exposure.** `regression_neut` removes one variable. To remove beta and
-something else, neutralize one and then the other; with two correlated variables the result
-is not quite a joint regression, so check both exposures afterwards.
+**More than one exposure.** `regression_neut(y, beta, size)` removes several variables in one fit, so the result is
+neutral to each. Nesting one `regression_neut` inside another is not the same: when the variables are correlated, the
+second step brings back some of the first.
 
 ## Checking the book
 
-The neutralization uses estimated betas; the book is exposed to realized ones. Always check
-the realized market exposure of the book itself:
+The neutralization uses estimated betas; the book is exposed to realized ones. Always check the realized market
+exposure of the book itself: its P&L's correlation with the market, its realized beta, and its ex-ante beta day by
+day. [Checking a Book's Beta](../python-examples/beta-check.md) does it in a few lines.
 
-```python
-from qex import forward_returns
-from evaluation import BookSettings, build_book, hold_untradable
-
-settings = BookSettings(delay=1, universe='member', truncation=0.05)
-w = hold_untradable(build_book(signal, data, settings), data['close'])
-fwd = forward_returns(data['close'])
-pnl = (w * fwd.reindex_like(w).fillna(0)).sum(axis=1)
-mkt = forward_returns(data['market']).reindex(w.index)
-
-pnl.corr(mkt)                                  # realized correlation with the market
-pnl.cov(mkt) / mkt.var()                       # realized beta of the book
-
-b = qex("ts_beta_shrunk(returns(1), returns(1, 'market'), 252)").evaluate(data)
-(w * b.shift(1).reindex_like(w)).sum(axis=1)   # ex-ante beta, day by day
-```
-
-Expect the realized correlation to be close to zero, not exactly zero: betas are estimated
-and they drift. A correlation that stays large means the estimate is poor for this signal
-(try the shrunk or multi-day beta) or the truncation is undoing the hedge (rank first).
+Expect the realized correlation to be close to zero, not exactly zero: betas are estimated and they drift. A
+correlation that stays large means the estimate is poor for this signal (try the shrunk or multi-day beta) or the
+truncation is undoing the hedge (rank first).
 
 ## References
 

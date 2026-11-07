@@ -127,44 +127,10 @@ qex("let mom = returns(60) in rank(mom)")
 qex("rank(returns(60))")
 ```
 
-## API Reference
+## API reference
 
-### SignalGraph
-
-```python
-class SignalGraph:
-    def add_signal(signal, name=None) -> str
-        """Add a signal to the graph."""
-
-    def stats() -> dict
-        """Return graph statistics."""
-
-    def visualize(filename, format=None, rankdir='TB', ...) -> str
-        """Render graph with graphviz."""
-
-    def compute(data, outputs=None) -> dict
-        """Compute signals (single machine, cached)."""
-
-    def compute_dask(data, client=None, outputs=None) -> dict
-        """Compute signals with Dask distributed."""
-```
-
-### DistributedSignalEngine
-
-```python
-class DistributedSignalEngine:
-    def __init__(client=None)
-        """Initialize with optional Dask client."""
-
-    def load_data(data)
-        """Scatter data to workers."""
-
-    def evaluate(expressions, names=None) -> dict
-        """Evaluate multiple expressions efficiently."""
-
-    def visualize(expressions, **kwargs) -> str
-        """Build graph from expressions and visualize."""
-```
+`SignalGraph` and `DistributedSignalEngine` are documented, with every method, in the
+[API Reference](api.md#graphs).
 
 ## Performance Tips
 

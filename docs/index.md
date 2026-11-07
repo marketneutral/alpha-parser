@@ -4,101 +4,63 @@
 
 ## Express quant signals in one line
 
-```python
-signal = qex("rank(-returns(20) / volatility(60))")
+```qex
+rank(-returns(20) / volatility(60))
 ```
 
-[Get Started](python-examples/quickstart.md){ .md-button .md-button--primary }
-[Operations Reference](language/reference.md){ .md-button }
+[Quick Start](python-examples/quickstart.md){ .md-button .md-button--primary }
+[Operator Reference](language/reference.md){ .md-button }
 
 </div>
 
-<div class="features" markdown>
+qex is a language for quantitative trading signals. A signal is one readable expression, applied to a whole panel of
+stock data at once.
 
-<div class="feature" markdown>
-### Readable
-Signal logic is self-documenting. No more deciphering 50 lines of pandas.
-</div>
+Sector-neutral, risk-adjusted momentum:
 
-<div class="feature" markdown>
-### Composable
-Build complex signals from simple primitives. Nest operations freely.
-</div>
-
-<div class="feature" markdown>
-### Efficient
-Built-in caching. Shared sub-expressions computed once.
-</div>
-
-<div class="feature" markdown>
-### Flexible
-Works with any DataFrame pipeline. Lazy loading for large datasets.
-</div>
-
-</div>
-
----
-
-## What is qex?
-
-qex is a DSL for defining quantitative trading signals. Instead of writing verbose pandas code, express signals as readable one-liners:
-
-```python
-from qex import qex
-
-# Sector-neutral momentum
-signal = qex("group_demean(returns(60) / volatility(60), 'sector')")
-
-# Mean reversion with volatility filter
-signal = qex("where(volatility(20) > 0.3, -returns(5), None)")
-
-# Multi-factor composite with variable bindings
-signal = qex("""
-    let mom = rank(returns(60)) - 0.5,
-        rev = rank(-returns(5)) - 0.5
-    in 0.7 * mom + 0.3 * rev
-""")
+```qex
+group_demean(returns(60) / volatility(60), 'sector')
 ```
 
-## Quick Example
+Short-term reversal, leaving out the most volatile stocks:
+
+```qex
+where(volatility(20) > 0.6, None, rank(-returns(5)))
+```
+
+A blend of the two, with names:
+
+```qex
+let mom = rank(returns(60)) - 0.5,
+    rev = rank(-returns(5)) - 0.5
+in 0.7 * mom + 0.3 * rev
+```
+
+## Where to find what
+
+| Section | For |
+|---------|-----|
+| [Philosophy](philosophy.md) | why signals are written this way, and how to go from an idea to an expression |
+| [Language](language/syntax.md) | qex itself, with no Python: syntax, how expressions are evaluated, missing values, groups, universes, look-ahead, and the [operator reference](language/reference.md) |
+| [Examples](examples/index.md) | signals written in qex: momentum, mean reversion, pairs, events, market beta, technical indicators |
+| [Python](python/installation.md) | installing qex, parsing and evaluating, books, backtests, diagnostics, the risk model, Dask |
+| [Data](data/format.md) | the data qex reads: format, labels, universes, events, large datasets, adjusted prices, gaps |
+| [Python Examples](python-examples/quickstart.md) | worked programs: the quick start, backtesting, checking a book's beta |
+
+## In Python
 
 ```python
 from qex import qex, Backtest
-import pandas as pd
 
-# Load your data
-data = {
-    'close': pd.read_parquet('close.parquet'),
-    'volume': pd.read_parquet('volume.parquet'),
-}
-
-# Define a signal
 signal = qex("demean(rank(returns(20)))")
-
-# Backtest it
-bt = Backtest(signal, transaction_cost=0.001)
-result = bt.run(data)
+result = Backtest(signal, transaction_cost=0.001).run(data)    # data: a dict of DataFrames, see Data
 print(result.summary())
 ```
-
-## Operations at a Glance
-
-| Category | Operations |
-|----------|------------|
-| **Data** | `close`, `field`, `market` |
-| **Primitives** | `returns`, `volatility`, `volume`, `adv` |
-| **Time-Series** | `ts_mean`, `ts_std`, `delay`, `delta`, `ewma`, `ts_corr`, `ts_beta`, `ts_beta_shrunk` |
-| **Cross-Sectional** | `rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `regression_neut` |
-| **Group** | `group_rank`, `group_demean`, `group_std` |
-| **Math** | `log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min` |
-| **Conditional** | `where`, `is_valid`, `fill_forward` |
-
-[See all operations →](language/reference.md)
 
 ## Installation
 
 ```bash
-git clone https://github.com/marketneutral/alpha-parser
-cd alpha-parser
-pip install -e ".[all]"
+pip install git+https://github.com/marketneutral/alpha-parser.git
 ```
+
+Optional extras and a development install are in [Installation](python/installation.md).
