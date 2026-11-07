@@ -136,7 +136,6 @@ class QexParser:
             ast.Sub: operator.sub,
             ast.Mult: operator.mul,
             ast.Div: operator.truediv,
-            ast.Mod: operator.mod,
             ast.Pow: operator.pow,
             ast.Gt: operator.gt,
             ast.Lt: operator.lt,
@@ -150,7 +149,7 @@ class QexParser:
 
         self.unaryops = {
             ast.USub: operator.neg,
-            ast.UAdd: operator.pos,
+            ast.UAdd: lambda x: x,                     # +x is x
             ast.Invert: operator.invert,
         }
 
@@ -292,15 +291,26 @@ class QexParser:
         """Recursively visit AST nodes and build Signal tree."""
 
         if isinstance(node, ast.BinOp):
+            if type(node.op) not in self.binops:
+                raise ValueError(f"{_OP_NAMES.get(type(node.op), type(node.op).__name__)} is not a qex operator: qex has "
+                                 f"+ - * / ** for arithmetic, comparisons, and & | ~ for logic")
             left = self._visit(node.left)
             right = self._visit(node.right)
             op = self.binops[type(node.op)]
             return op(left, right)
 
         elif isinstance(node, ast.UnaryOp):
+            if isinstance(node.op, ast.Not):
+                raise ValueError("'not' is not qex: write ~x, as in ~(returns(5) > 0)")
             operand = self._visit(node.operand)
             op = self.unaryops[type(node.op)]
             return op(operand)
+
+        elif isinstance(node, ast.BoolOp):
+            word = "and" if isinstance(node.op, ast.And) else "or"
+            sym = "&" if word == "and" else "|"
+            raise ValueError(f"'{word}' is not qex: write {sym}, with each comparison in parentheses, "
+                             f"as in (returns(5) > 0) {sym} (volume(1) > volume(20))")
 
         elif isinstance(node, ast.Compare):
             # Handle comparison operators (e.g., a < b, a > b)
@@ -313,11 +323,18 @@ class QexParser:
             return op(left, right)
 
         elif isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                raise ValueError("Only operators are called in qex, by name, as in rank(x)")
             func_name = node.func.id
             if func_name not in self.functions:
                 raise ValueError(f"Unknown function: {func_name}")
+            if node.keywords:
+                raise ValueError(f"{func_name}() takes its arguments by position, not by name: write "
+                                 f"{func_name}(x, 20), not {func_name}(x, {node.keywords[0].arg or '...'}=20)")
+            if any(isinstance(a, ast.Starred) for a in node.args):
+                raise ValueError(f"{func_name}() takes its arguments written out, not *unpacked")
 
-            args = [self._visit_arg(arg) for arg in node.args]
+            args = _check_args(func_name, [self._visit_arg(arg) for arg in node.args])
 
             return self.functions[func_name](*args)
 
@@ -338,7 +355,7 @@ class QexParser:
             raise ValueError(f"Unknown variable: {name}")
 
         else:
-            raise ValueError(f"Unsupported node type: {type(node)}")
+            raise ValueError(_unsupported(node))
 
     def _visit_arg(self, node: ast.AST) -> Any:
         """Visit argument node - could be Signal, variable, or literal."""
@@ -367,10 +384,108 @@ class QexParser:
             return self._visit(node)
 
 
+def _strip_comments(expression: str) -> str:
+    """Remove each `# comment` to the end of its line; a # inside a quoted string is kept."""
+    out = []
+    for line in expression.split("\n"):
+        quote, i = None, 0
+        while i < len(line):
+            ch = line[i]
+            if quote:
+                if ch == "\\":
+                    i += 1
+                elif ch == quote:
+                    quote = None
+            elif ch in "'\"":
+                quote = ch
+            elif ch == "#":
+                line = line[:i]
+                break
+            i += 1
+        out.append(line)
+    return "\n".join(out)
+
+
 def _collapse_whitespace(expression: str) -> str:
-    """Turn every run of whitespace outside quoted strings into one space."""
+    """Remove `#` comments, then turn every run of whitespace outside quoted strings into one space.
+
+    Comments go first, line by line: joining the lines first would let a comment swallow the lines after it."""
+    expression = _strip_comments(expression)
     parts = re.split(r"""('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")""", expression)
     return "".join(p if i % 2 else re.sub(r"\s+", " ", p) for i, p in enumerate(parts))
+
+
+# What each operator's constant arguments must be, by position: a window of days (a whole number, at least 1), a lag
+# (whole, at least 0), a count (whole, at least 1), a name (a quoted string), a half-life (a number above 0), a level in
+# [0, 1], a winsorizing level in [0, 0.5], a positive number. "x" is an expression and is not checked here.
+_ARG_RULES = {
+    "returns": ("window", "name"), "volatility": ("window", "name"), "volume": ("window",), "adv": ("window",),
+    "field": ("name",), "group": ("name",),
+    **{f: ("x", "window") for f in ("ts_mean", "ts_std", "ts_sum", "ts_max", "ts_min", "ts_var", "ts_rank",
+                                   "ts_argmax", "ts_argmin", "ts_skew", "ts_kurt", "decay_linear", "ts_count_events")},
+    # ts_quantile, pca_factor, group_quantile and group_count_valid check their own arguments, with their own messages
+    "ts_quantile": ("x", "x", "x", "count"),
+    "delay": ("x", "lag"), "delta": ("x", "lag"),
+    **{f: ("x", "x", "window", "count") for f in ("ts_corr", "ts_cov", "ts_beta", "ts_beta_shrunk")},
+    "ewma": ("x", "halflife"), "ewma_var": ("x", "halflife"), "ewma_cov": ("x", "x", "halflife"),
+    "ts_beta_ewma": ("x", "x", "halflife"),
+    **{f: ("x", "count", "count") for f in ("ts_mean_events", "ts_std_events", "ts_sum_events")},
+    "fill_forward": ("x", "count"),
+    "quantile": ("x", "count"), "winsorize": ("x", "winsor"), "truncate": ("x", "positive"),
+}
+
+_RULE_TEXT = {"window": "a whole number of days, at least 1", "lag": "a whole number of days, 0 or more",
+              "count": "a whole number, at least 1", "name": "a name in quotes, as in 'sector'",
+              "halflife": "a number of days above 0", "level": "a number from 0 to 1",
+              "winsor": "a number from 0 to 0.5", "positive": "a number above 0"}
+
+_ORDINAL = {1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"}
+
+
+def _check_args(func_name: str, args: list) -> list:
+    """The arguments, each constant one checked against its operator's rule. Values pass through unchanged (20.0 stays
+    20.0: an expression's cache key, which qexarena hashes as its identity, must not change). Raises ValueError naming
+    the operator, the argument and what it must be."""
+    rules = _ARG_RULES.get(func_name, ())
+    out = list(args)
+    for i, (rule, value) in enumerate(zip(rules, args)):
+        if rule == "x":
+            continue
+        ok = True
+        if rule == "name":
+            ok = isinstance(value, str)
+        elif isinstance(value, bool) or not isinstance(value, (int, float)):
+            ok = False
+        elif rule in ("window", "lag", "count"):
+            # a negative lag is left to delay() and delta(), whose message explains the look-ahead
+            ok = float(value).is_integer() and (rule == "lag" or value >= 1)
+        elif rule in ("halflife", "positive"):
+            ok = value > 0
+        elif rule == "level":
+            ok = 0 <= value <= 1
+        elif rule == "winsor":
+            ok = 0 <= value <= 0.5
+        if not ok:
+            shown = "an expression" if isinstance(value, Signal) else repr(value)
+            raise ValueError(f"{func_name}()'s {_ORDINAL.get(i + 1, f'argument {i + 1}')} argument must be "
+                             f"{_RULE_TEXT[rule]} (got {shown})")
+    return out
+
+
+_OP_NAMES = {ast.Mod: "'%'", ast.FloorDiv: "'//'", ast.MatMult: "'@'", ast.LShift: "'<<'", ast.RShift: "'>>'",
+             ast.BitXor: "'^'"}
+
+_NODE_NAMES = {ast.List: "a list [...]", ast.Tuple: "a tuple", ast.Dict: "a dict {...}", ast.Set: "a set {...}",
+               ast.Subscript: "indexing x[...]", ast.Attribute: "an attribute x.y", ast.IfExp: "'if ... else'",
+               ast.Lambda: "lambda", ast.ListComp: "a comprehension", ast.GeneratorExp: "a comprehension",
+               ast.DictComp: "a comprehension", ast.SetComp: "a comprehension", ast.JoinedStr: "an f-string",
+               ast.Await: "await", ast.NamedExpr: "':='", ast.Starred: "*unpacking"}
+
+
+def _unsupported(node) -> str:
+    what = _NODE_NAMES.get(type(node), type(node).__name__)
+    hint = " (use where(cond, a, b))" if isinstance(node, ast.IfExp) else ""
+    return f"{what} is not part of qex{hint}"
 
 
 # Backwards compatibility alias

@@ -104,10 +104,15 @@ let sharpe = returns(60) /
 in rank(sharpe)
 ```
 
-!!! warning "Don't use `#` comments in a multi-line expression"
-    qex joins the lines of an expression before reading it, so a `#` comments out **everything after it, on every
-    following line**. `rank(returns(5))  # reversal` followed by a line `* -1` reads as `rank(returns(5))`, with no
-    error. A `#` comment is only safe on the last line. Explain an expression next to it, not inside it.
+A `#` starts a comment, which runs to the end of its line; a `#` inside a quoted string is part of the string:
+
+```qex
+let mom = returns(60),        # three months
+    vol = volatility(60)      # over the same window
+in rank(mom / vol)            # risk-adjusted momentum
+```
+
+(Before qex 0.12.1, the lines were joined before comments were removed, so a comment hid every line after it.)
 
 ## What is refused
 
@@ -120,15 +125,27 @@ with a message:
 | `a + b` with no `let` for `b` | `Unknown variable: b` |
 | `let rank = returns(1) in rank` | `Cannot shadow function name: rank` |
 | `rank(returns(1), 2)` | the wrong number of arguments for the operator |
-| `ts_mean(returns(1), period=20)` | keyword arguments aren't supported |
+| `ts_mean(returns(1), period=20)` | arguments are by position, not by name |
 | `1 < returns(1) < 2` | `Chained comparisons not supported` |
 | `returns(1) ** returns(2)` | `The exponent of ** must be a number, as in power(x, n)` |
 | `rank(group('sector'))`, `group('sector') + 1` | labels where numbers are needed ([Groups and Labels](groups.md#numbers-and-labels)) |
 | `group_std(x, 'pair', 60)` | the window form of `group_std` was removed in qex 0.12.0; the message gives the replacement |
-| `and`, `or`, `not`, `%`, `//`, `[...]`, `x.y`, `if`/`else` | not part of qex (use `&`, `\|`, `~` for logic) |
+| `a and b`, `a or b`, `not a` | not qex: write `&`, `\|`, `~` |
+| `a % b`, `a // b` | not qex operators |
+| `[1, 2]`, `x[0]`, `x.y`, `a if c else b` | not part of qex (for a choice, `where(c, a, b)`) |
+| `returns('5')`, `delay(x, 1.5)`, `ts_mean(x, 0)` | each operator's constant arguments are checked (below) |
 
-Most argument checks happen when the expression is read: a negative `delay` or `delta`, a `ts_quantile` level outside
-0 to 1, a `pca_factor` component beyond 20, a window of less than 1 for `group_count_valid`. A `winsorize` level
-outside 0 to 1 is refused only when the expression is computed. A few values are not checked at all and give
-meaningless results rather than an error: a window of 0 (`ts_mean(x, 0)`), `quantile(x, 0)`, a negative
-`truncate` limit.
+Every operator's constant arguments are checked when the expression is read, and a bad one is refused with a message
+naming the operator, the argument and what it must be:
+
+| Argument | Must be | For |
+|----------|---------|-----|
+| a window | a whole number of days, at least 1 | `returns`, `volatility`, `volume`, `adv`, the rolling `ts_` operators, `ts_count_events` |
+| a lag | a whole number of days, 0 or more | `delay`, `delta` |
+| a count | a whole number, at least 1 | `quantile`'s buckets, `fill_forward`'s limit, an event operator's `n` and `min_n`, a `min_periods` |
+| a half-life | a number of days above 0 | `ewma`, `ewma_var`, `ewma_cov`, `ts_beta_ewma` |
+| a level | from 0 to 1, or 0 to 0.5 for `winsorize` | `ts_quantile`, `winsorize` |
+| a limit | a number above 0 | `truncate` |
+| a name | a quoted string | `field`, `group`, the price field of `returns` and `volatility` |
+
+`20.0` counts as a whole number.

@@ -73,7 +73,7 @@ DEFAULT_STYLE_FACTORS = [
     ),
     FactorDefinition(
         name="liquidity",
-        expression="rank(ts_mean(volume(1), 20))",
+        expression="rank(adv(20))",
         description="20-day average dollar volume",
     ),
     FactorDefinition(
@@ -98,7 +98,7 @@ PRICE_ONLY_FACTORS = [
     ),
     FactorDefinition(
         name="liquidity",
-        expression="rank(ts_mean(volume(1), 20))",
+        expression="rank(adv(20))",
         description="20-day average dollar volume",
     ),
     FactorDefinition(
