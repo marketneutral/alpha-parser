@@ -90,6 +90,8 @@ class SignalGraph:
             children.append(signal.x)
         if hasattr(signal, 'y') and isinstance(signal.y, Signal):
             children.append(signal.y)
+        if hasattr(signal, 'basis') and isinstance(signal.basis, Signal):    # pca_factor's shared decomposition
+            children.append(signal.basis)
         more = getattr(signal, 'more', None)                 # regression_neut's regressors after the first
         if isinstance(more, tuple):
             children.extend(m for m in more if isinstance(m, Signal))
@@ -361,15 +363,14 @@ class SignalGraph:
                 signal = self.nodes[cache_key]
                 deps = self.dependencies[cache_key]
 
-                # Compute dependencies first
-                for dep_key in deps:
-                    get_result(dep_key)
-
-                # Submit this computation
+                # Each node is one task, given its dependencies' results, so nothing is computed twice
+                dep_futures = [get_result(dep_key) for dep_key in deps]
                 future = client.submit(
-                    _evaluate_signal,
+                    _evaluate_node,
                     signal,
                     data_future,
+                    list(deps),
+                    *dep_futures,
                     key=str(cache_key),
                 )
                 computed[cache_key] = future
@@ -393,6 +394,17 @@ class SignalGraph:
 def _evaluate_signal(signal: Signal, data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Worker function to evaluate a signal."""
     return signal.evaluate(data)
+
+
+def _evaluate_node(signal: Signal, data: Dict[str, pd.DataFrame], dep_keys, *dep_results):
+    """Worker function for one node of the graph: its inputs' results are placed in a fresh compute context's cache
+    first, so evaluating the node computes only the node itself, not its whole subtree again."""
+    from .context import compute_context
+    with compute_context() as ctx:
+        ctx.check(data)
+        for key, result in zip(dep_keys, dep_results):
+            ctx.cache[key] = result
+        return signal.evaluate(data)
 
 
 class DistributedSignalEngine:

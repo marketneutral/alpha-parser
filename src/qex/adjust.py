@@ -248,9 +248,12 @@ def _walk(s, fields, seen, found, mode):
         out = same(w(s.if_true), w(s.if_false), s, "chooses between")
     elif isinstance(s, cond.Coalesce):
         out = same(w(s.x), w(s.y), s, "fills")
+    elif name == "PcaBasis":
+        out = w(kids[0])                                 # checked where pca_factor compares it across stocks
     elif s.__class__.__module__ == cs.__name__:
         for k in kids:
-            need_free(w(k), k, f"{label(s).split('(')[0]}()")
+            part = k.signal if type(k).__name__ == "PcaBasis" else k
+            need_free(w(k), part, f"{label(s).split('(')[0]}()")
         out = FREE
     elif s.__class__.__module__ == gr.__name__:
         groups = getattr(s, "groups", None)

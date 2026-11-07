@@ -62,13 +62,20 @@ Each change touches only the cases named; everywhere else the numbers are identi
   PCA across stocks on the trailing `window` days, refit every `refit` days (default 21) and held in between.
   Components are tracked across refits (matched by overlap, signs aligned), so a factor keeps its identity; names
   need values on 90% of the window; inside a universe only members enter the fit. Every `pca_factor` on the same `x`,
-  `window` and `refit` shares one decomposition per refit. With the joint `regression_neut`, a statistical-factor
+  `window` and `refit` shares one decomposition per refit: it is a node of its own in the graph (`pca_basis`), so the
+  DAG shows it shared and Dask computes it once. With the joint `regression_neut`, a statistical-factor
   residual is one line: `regression_neut(y, pca_factor(r, 252, 1), ..., pca_factor(r, 252, 5))`.
 
 The look-ahead check (`qex.adjust`) knows the new operators: `ts_quantile` keeps its input's adjustment, `exp` undoes
 `log`, and `is_finite` gives a plain number.
 
 ### Fixed
+
+- `SignalGraph.compute_dask` (and `DistributedSignalEngine` on a cluster) gave each node's task only the data, so every
+  task recomputed its whole subtree: a five-node chain computed its leaf five times. Each task now receives its
+  inputs' results and computes only its own node. On a PCA residual reversal with three factors, that is one
+  decomposition and one `returns(1)` instead of 15 and 20, with identical results. CI now installs the `distributed`
+  extra, so the Dask tests run.
 
 - The cookbook's event-driven section (Section 6) set its earnings surprises by chained assignment
   (`df.iloc[i][col] = v`), which pandas 3's copy-on-write discards: the data stayed all NaN and the section ran on

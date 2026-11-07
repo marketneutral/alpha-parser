@@ -254,9 +254,10 @@ qex("""let r = returns(1)
   signed to agree, so a factor does not swap with a neighbour of similar size or flip sign from one month to the next;
   k is the k-th largest at the first fit, followed after. The first component is signed long (the market). Where two
   factors are equally large, any mix of them is equally a component; tracking settles on one as they separate.
-- **Cost.** One SVD of a window x names matrix per refit (about 0.1 s for 252 x 3,000). Every `pca_factor` on the same
-  `x`, `window` and `refit` shares it within a `compute_context`, so components 1 to 5 cost one decomposition. `k` is at
-  most 20.
+- **Cost.** One SVD of a window x names matrix per refit (about 0.1 s for 252 x 3,000). The decomposition is a node
+  of its own in the expression's graph (`pca_basis`, internal), which every `pca_factor` on the same `x`, `window` and
+  `refit` takes as its input, so components 1 to 5 cost one decomposition: in a `compute_context`, in `SignalGraph`, and
+  on Dask. `k` is at most 20.
 
 A day needs at least k + 2 valid names for k regressors. With k + 1 or fewer, the fit (an intercept and k slopes)
 passes through every point, so the residual is rounding noise (around 1e-16) that a `rank` or `zscore` would turn into

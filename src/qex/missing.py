@@ -93,6 +93,11 @@ def label(signal: Signal, nested: bool = False) -> str:
     if isinstance(signal, _dt.Field):
         return f"{signal.name}()" if signal.name in ("close", "open", "high", "low") else f"field('{signal.name}')"
     name = type(signal).__name__
+    if name in ("PcaFactor", "PcaBasis"):               # written pca_factor(x, window, k[, refit]); the basis is internal
+        basis = signal.basis if name == "PcaFactor" else signal
+        args = [label(basis.signal), str(basis.window)] + ([str(signal.k)] if name == "PcaFactor" else [])
+        args += [str(basis.refit)] if basis.refit != 21 else []
+        return f"{'pca_factor' if name == 'PcaFactor' else 'pca_basis'}({', '.join(args)})"
     kids = children(signal)
     if name in _SYMBOLS and len(kids) == 2:
         text = f"{label(kids[0], True)} {_SYMBOLS[name]} {label(kids[1], True)}"
@@ -208,6 +213,15 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
         s = nodes[k]
         node_id = len(labels)
         labels.append(label(s))
+        if isinstance(s, _cs.PcaBasis):                 # a decomposition, not a frame: its input's reasons pass through
+            code, cause, origin = (a.copy() for a in results[s.signal._cache_key()])
+            results[k] = (code, cause, origin)
+            for c in children(s):
+                ck = c._cache_key()
+                users[ck] -= 1
+                if users[ck] == 0 and ck != order[-1]:
+                    results.pop(ck, None)
+            continue
         v = frame(s.evaluate(data))
         missing = ~np.isfinite(v)
         code = np.zeros(shape, np.int8)

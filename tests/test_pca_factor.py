@@ -156,3 +156,42 @@ def test_adjusted_levels_are_refused():
     check(qex("pca_factor(returns(1), 252, 1)"), f)
     with pytest.raises(LookAhead):
         check(qex("pca_factor(close(), 252, 1)"), f, alpha=False)
+
+
+def test_the_decomposition_is_a_shared_node_of_the_graph():
+    from qex import SignalGraph
+    from qex.missing import label
+    e = qex("let r = returns(1) in regression_neut(r, pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3, 5))")
+    g = SignalGraph()
+    g.add_signal(e, name="a")
+    bases = [k for k in g.nodes if k[0] == "PcaBasis"]
+    assert len(bases) == 2                                            # refit 21 (shared by k = 1, 2) and refit 5
+    shared = ("PcaBasis", ("Returns", 1, "close"), 252, 21)
+    users = [k for k, deps in g.dependencies.items() if shared in deps]
+    assert sorted(k[3] for k in users) == [1, 2]
+    assert label(e) == ("regression_neut(returns(1), pca_factor(returns(1), 252, 1), pca_factor(returns(1), 252, 2), "
+                        "pca_factor(returns(1), 252, 3, 5))")
+    assert label(g.nodes[shared]) == "pca_basis(returns(1), 252)"
+
+
+def test_dask_computes_each_node_once(monkeypatch):
+    dd = pytest.importorskip("dask.distributed")
+    from qex import SignalGraph
+    import qex.primitives as pr
+    d, _, _ = _two_factor_data(T=300, N=30)
+    calls = {"svd": 0, "returns": 0}
+    real_fits, real_returns = cs._pca_fits, pr.Returns._compute
+    monkeypatch.setattr(cs, "_pca_fits", lambda *a: calls.__setitem__("svd", calls["svd"] + 1) or real_fits(*a))
+
+    def counted(self, data):
+        calls["returns"] += 1
+        return real_returns(self, data)
+    monkeypatch.setattr(pr.Returns, "_compute", counted)
+    expr = ("let r = returns(1) in zscore(-ts_sum(regression_neut(r, pca_factor(r, 120, 1), pca_factor(r, 120, 2), "
+            "pca_factor(r, 120, 3)), 5))")
+    g = SignalGraph()
+    g.add_signal(qex(expr), name="a")
+    with dd.Client(processes=False, dashboard_address=None) as client:
+        out = g.compute_dask(d, client=client)["a"]
+    assert calls == {"svd": 1, "returns": 1}                          # was 15 and 20: every task redid its subtree
+    pd.testing.assert_frame_equal(out, _ev(expr, d))

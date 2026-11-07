@@ -287,6 +287,35 @@ def _pca_fits(values, window: int, refit: int, members):
     return fits
 
 
+class PcaBasis(Signal):
+    """The principal components of x, refit every `refit` rows on the trailing `window` rows: the decomposition every
+    pca_factor on the same x, window and refit shares. Internal: its value is the list of fits (see _pca_fits), not a
+    dates x names frame, and it is not written in qex; pca_factor(x, window, k, refit) builds it. As a node of the
+    graph, it is computed once and cached like any other node, and the DAG shows it shared."""
+
+    def __init__(self, signal: Signal, window: int, refit: int):
+        self.signal = signal
+        self.window = window
+        self.refit = refit
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        members = universe_members(values.index, values.columns)
+        return PcaFits(values.index, values.columns, _pca_fits(values, self.window, self.refit, members))
+
+    def _cache_key(self):
+        return ('PcaBasis', self.signal._cache_key(), self.window, self.refit)
+
+
+class PcaFits(list):
+    """A PcaBasis's value: [(position, names, betas)] per refit, with the dates and names they index."""
+
+    def __init__(self, index, columns, fits):
+        super().__init__(fits)
+        self.index = index
+        self.columns = columns
+
+
 class PcaFactor(Signal):
     """Each stock's beta to the k-th statistical factor of x: a principal component of x across stocks.
 
@@ -304,8 +333,9 @@ class PcaFactor(Signal):
         regression_neut(r, pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3))
                                            r with three statistical factors removed, r = returns(1)
 
-    Every pca_factor on the same x, window and refit shares one decomposition per refit in a compute_context.
-    Cost: one SVD of a window x names matrix per refit, about 0.1 s for 252 x 3,000.
+    Its input is a PcaBasis node, so every pca_factor on the same x, window and refit shares one decomposition per
+    refit, in a compute_context, in SignalGraph and on Dask. Cost: one SVD of a window x names matrix per refit, about
+    0.1 s for 252 x 3,000.
     """
 
     def __init__(self, signal: Signal, window: int, k: int, refit: int = 21):
@@ -314,40 +344,31 @@ class PcaFactor(Signal):
                 raise ValueError(f"pca_factor() {name} must be a whole number of at least {low} (got {val!r}).")
         if k > PCA_MAX_COMPONENTS:
             raise ValueError(f"pca_factor() keeps the first {PCA_MAX_COMPONENTS} components; k = {k} is beyond them.")
-        self.signal = signal
-        self.window = window
+        self.basis = PcaBasis(signal, window, refit)
         self.k = k
-        self.refit = refit
 
-    def _basis(self, data):
-        from .context import get_context
-        from .universe import universe_token
-        values = self.signal.evaluate(data)
-        members = universe_members(values.index, values.columns)
-        ctx = get_context()
-        key = ('PcaBasis', self.signal._cache_key(), self.window, self.refit, universe_token())
-        if ctx is not None:
-            ctx.check(data)
-            if key not in ctx.cache:
-                ctx.cache[key] = _pca_fits(values, self.window, self.refit, members)
-            return values, ctx.cache[key]
-        return values, _pca_fits(values, self.window, self.refit, members)
+    @property
+    def window(self):
+        return self.basis.window
+
+    @property
+    def refit(self):
+        return self.basis.refit
 
     def _compute(self, data):
         import numpy as np
         import pandas as pd
-        values, fits = self._basis(data)
-        T, N = values.shape
+        fits = self.basis.evaluate(data)
+        T, N = len(fits.index), len(fits.columns)
         out = np.full((T, N), np.nan)
         for i, (p, names, betas) in enumerate(fits):
             end = fits[i + 1][0] if i + 1 < len(fits) else T
             if self.k <= betas.shape[0]:
                 out[p:end, names] = betas[self.k - 1]
-        frame = pd.DataFrame(out, index=values.index, columns=values.columns)
-        return in_universe(frame)
+        return in_universe(pd.DataFrame(out, index=fits.index, columns=fits.columns))
 
     def _cache_key(self):
-        return ('PcaFactor', self.signal._cache_key(), self.window, self.k, self.refit)
+        return ('PcaFactor', self.basis.signal._cache_key(), self.window, self.k, self.refit)
 
 
 def pca_factor(signal: Signal, window: int, k: int, refit: int = 21) -> PcaFactor:
