@@ -13,9 +13,9 @@ An operator is called by name with its arguments in parentheses, separated by co
 there are no keyword arguments.
 
 ```qex
-returns(20)                          one argument
-ts_corr(returns(1), volume(1), 60)   several
-close()                              none
+returns(20)                          # one argument
+ts_corr(returns(1), volume(1), 60)   # several
+close()                              # none
 ```
 
 An argument is either an **expression** (anything on this page) or a **constant** the operator needs: a window length,
@@ -70,7 +70,7 @@ From tightest to loosest, as in ordinary arithmetic:
 
 `&` and `|` bind tighter than comparisons, so **comparisons inside `&` and `|` need parentheses**:
 
-```qex
+```text
 (returns(5) > 0) & (volume(1) > volume(20))    right
 returns(5) > 0 & volume(1) > volume(20)        refused: it reads as a chained comparison
 returns(5) > 0 & volume(1)                     no error, but reads as returns(5) > (0 & volume(1))

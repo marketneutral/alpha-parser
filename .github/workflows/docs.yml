@@ -8,6 +8,11 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'src/**'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'src/**'
   workflow_dispatch:
 
 permissions:
@@ -34,15 +39,17 @@ jobs:
         run: |
           pip install -e ".[docs]"
 
-      - name: Build docs
-        run: mkdocs build
+      - name: Build docs (strict, so broken links, anchors and warnings fail)
+        run: mkdocs build --strict
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

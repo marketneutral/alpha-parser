@@ -4,7 +4,7 @@
 
 A quant expression is a formula that transforms market data into a trading signal. It takes prices, volumes, and other observables as inputs and outputs a number for each stock on each day. That number represents conviction: how much you want to be long or short.
 
-```python
+```qex
 rank(-returns(20) / volatility(60))
 ```
 
@@ -18,7 +18,7 @@ Quant expressions are declarative. You describe *what* you want to compute, not 
 
 The gap between "I wonder if..." and "let's see the backtest" should be measured in keystrokes, not hours. When you have a hunch—maybe stocks with high short-term momentum but low long-term momentum are about to reverse—you should be able to write it down and test it immediately:
 
-```python
+```qex
 rank(returns(5)) - rank(returns(60))
 ```
 
@@ -28,7 +28,7 @@ Done. Run the backtest. See if the idea has merit. Move on or iterate.
 
 Six months from now, you'll look at your code. With a quant expression, the signal *is* the documentation:
 
-```python
+```qex
 let mom = returns(20), vol = volatility(60) in
 rank(mom / vol) * sign(mom)
 ```
@@ -39,9 +39,9 @@ Compare this to 200 lines of pandas operations spread across three files. The ex
 
 Good signals often combine multiple effects. Maybe you want momentum, but only for liquid stocks, and you want to neutralize sector exposure:
 
-```python
+```qex
 group_demean(
-    rank(returns(20)) * (adv(20) > 1000000),
+    where(adv(20) > 1000000, rank(returns(20)), None),
     'sector'
 )
 ```
@@ -94,25 +94,25 @@ Write down the ingredients before you write the expression.
 
 Start with the core effect:
 
-```python
+```qex
 returns(5)
 ```
 
 Then add transformations. Maybe you want ranks instead of raw values:
 
-```python
+```qex
 rank(returns(5))
 ```
 
 Maybe you want to compare short-term to long-term:
 
-```python
+```qex
 rank(returns(5)) - rank(returns(60))
 ```
 
 Maybe you want to scale by volatility:
 
-```python
+```qex
 (rank(returns(5)) - rank(returns(60))) / volatility(20)
 ```
 
@@ -124,7 +124,7 @@ What happens when data is missing? What happens for illiquid stocks? What happen
 
 Robust signals handle edge cases explicitly:
 
-```python
+```qex
 let raw = returns(5) / volatility(20) in
 where(adv(20) > 500000, rank(raw) - 0.5, None)
 ```
@@ -137,7 +137,7 @@ Every long position implies a short position somewhere. When you rank stocks, yo
 
 Mean reversion signals bet that extreme moves reverse:
 
-```python
+```qex
 rank(-returns(5))
 ```
 
@@ -145,7 +145,7 @@ You're long recent losers, short recent winners. That's a bet that short-term pr
 
 Momentum signals bet the opposite:
 
-```python
+```qex
 rank(returns(60))
 ```
 
@@ -161,7 +161,7 @@ Some patterns appear again and again. They're worth knowing:
 
 Raw momentum is noisy. Dividing by volatility gives a Sharpe-ratio-like measure:
 
-```python
+```qex
 rank(returns(20) / volatility(60))
 ```
 
@@ -169,16 +169,16 @@ rank(returns(20) / volatility(60))
 
 Don't fade every move. Fade moves that are large relative to history:
 
-```python
-let z = (close() - ts_mean(close(), 20)) / ts_std(close(), 20) in
-rank(-z) * (abs(z) > 2)
+```qex
+let z = (close() - ts_mean(close(), 20)) / ts_std(close(), 20)
+in where(abs(z) > 2, rank(-z), None)
 ```
 
 ### Momentum with quality
 
 Combine momentum with some measure of quality—low volatility, high liquidity, strong fundamentals:
 
-```python
+```qex
 rank(returns(60)) * rank(-volatility(60)) * rank(adv(20))
 ```
 
@@ -186,13 +186,13 @@ rank(returns(60)) * rank(-volatility(60)) * rank(adv(20))
 
 Cross-sectional signals compare stocks to each other on the same day:
 
-```python
+```qex
 rank(returns(20))
 ```
 
 Time-series signals compare a stock to its own history:
 
-```python
+```qex
 ts_rank(returns(20), 252)
 ```
 
