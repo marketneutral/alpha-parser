@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.12.0
+
+**Breaking: `group_std` changes meaning.** Everything else here is new and changes no existing expression.
+
+### `group_std(x, groups)` is one day's spread within each group
+
+Every other group operator (`group_rank`, `group_demean`, `group_sum`, `group_quantile`) works on one day's
+cross-section; `group_std` was the exception. `group_std(x, g, n)` pooled n days of every member's values into one
+sample, so it mostly measured how much the whole group moved over the window, not how far apart its members are.
+Now `group_std(x, g)` is the standard deviation across the group's members that day (ddof 1), broadcast to every
+member, so `group_demean(x, g) / group_std(x, g)` is a within-group z-score. It is vectorized (the old form looped in
+Python over every day and group).
+
+The old three-argument form **is refused when the expression is parsed**, with a message naming the replacement; it
+never silently gives different numbers. For a pair's spread against its own history, which is what the old pairs
+examples meant: `let s = group_demean(x, 'pair') in s / ts_std(s, n)`. The pairs-trading guide, the cookbook and the
+README now use that. `group_count_valid(x, g, w)` keeps its window.
+
+Before adopting this version, check stored expressions for `group_std` (qexarena issue #36).
+
+### New operators
+
+- `exp(x)`: the inverse of `log`. With it, compounding (`exp(ts_sum(log(1 + r), n)) - 1`), a sigmoid
+  (`1 / (1 + exp(-x))`) and a cross-sectional softmax (`scale(exp(x / T))`) need no operators of their own. Too large
+  an argument gives inf.
+- `ts_quantile(x, period, q[, min_periods])`: the rolling q-quantile (0.5 the median, 0 and 1 `ts_min` and
+  `ts_max`), interpolated linearly, with the same `min_periods` default as the other rolling operators. Value-at-risk
+  is `-ts_quantile(returns(1), 252, 0.05)`; an interquartile range no single print can move is the 0.75 quantile less
+  the 0.25.
+- `is_finite(x)`: 1 where `x` is a finite number, 0 where it is missing or infinite (`is_valid` counts an infinity as
+  valid).
+- `regression_neut(y, x1, x2, ...)`: several regressors in one least-squares fit per day, so the residual has zero
+  covariance with each. Nesting `regression_neut(regression_neut(y, x1), x2)` is not the same when `x1` and `x2` are
+  correlated: the second step brings back some of the `x1` exposure. With one regressor nothing changes, including
+  its cache key, so qexarena's expression hashes of sealed alphas keep.
+
+The look-ahead check (`qex.adjust`) knows the new operators: `ts_quantile` keeps its input's adjustment, `exp` undoes
+`log`, and `is_finite` gives a plain number.
+
+### Fixed
+
+- The cookbook's event-driven section (Section 6) set its earnings surprises by chained assignment
+  (`df.iloc[i][col] = v`), which pandas 3's copy-on-write discards: the data stayed all NaN and the section ran on
+  no events. It now sets them in one step (`df.loc[date, col] = v`) and finds its 20 events on pandas 2 and 3.
+
 ## 0.11.0
 
 ### Adjusted data and look-ahead: `qex.adjust`

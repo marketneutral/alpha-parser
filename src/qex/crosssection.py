@@ -159,22 +159,31 @@ def truncate(signal: Signal, max_weight: float) -> Truncate:
 
 
 class RegressionNeut(Signal):
-    """Cross-sectional residual of y on x, with an intercept, separately each day.
+    """Cross-sectional residual of y on one or more regressors, with an intercept, separately each day.
 
-    On each date, over the names where both y and x are valid:
+    One regressor, on each date over the names where both y and x are valid:
         residual = (y - mean(y)) - b * (x - mean(x)),   b = cov(y, x) / var(x)
     so the result has zero mean and zero cross-sectional covariance with x. Names where either is
     NaN are NaN. A day on which x does not vary (or only one name is valid) gets b = 0.
+
+    Several regressors, regression_neut(y, x1, x2, ...): one least-squares fit of y on all of them
+    at once, over the names where y and every x are valid, so the residual has zero mean and zero
+    covariance with each x. This is not the same as nesting, regression_neut(regression_neut(y, x1),
+    x2): when x1 and x2 are correlated the second step brings back some of the x1 exposure the first
+    removed. Collinear regressors give the least-squares fit of smallest norm, not an error.
 
     The neutrality holds for the expression itself. A book built from it afterwards (truncation,
     clipping, rescaling) is only approximately neutral to x, and less so the more the cap binds.
     """
 
-    def __init__(self, y: Signal, x: Signal):
+    def __init__(self, y: Signal, x: Signal, *more: Signal):
         self.y = y
         self.x = x
+        self.more = tuple(more) if more else None        # regressors after the first; None keeps the one-x form
 
     def _compute(self, data):
+        if self.more:
+            return self._compute_multiple(data)
         y = finite_in_universe(self.y.evaluate(data))
         x = finite_in_universe(self.x.evaluate(data).reindex_like(y))
         valid = y.notna() & x.notna()
@@ -185,10 +194,30 @@ class RegressionNeut(Signal):
         b = ((yc * xc).sum(axis=1) / var.where(var > 0)).fillna(0.0)
         return yc - xc.mul(b, axis=0)
 
+    def _compute_multiple(self, data):
+        import numpy as np
+        import pandas as pd
+        y = finite_in_universe(self.y.evaluate(data))
+        xs = [finite_in_universe(s.evaluate(data).reindex_like(y)) for s in (self.x,) + self.more]
+        Y = y.to_numpy(dtype=float)
+        X = np.stack([x.to_numpy(dtype=float) for x in xs], axis=2)          # dates x names x regressors
+        valid = np.isfinite(Y) & np.isfinite(X).all(axis=2)
+        out = np.full(Y.shape, np.nan)
+        for t in range(Y.shape[0]):
+            ok = valid[t]
+            if not ok.any():
+                continue
+            yc = Y[t, ok] - Y[t, ok].mean()
+            A = X[t, ok, :] - X[t, ok, :].mean(axis=0)
+            beta = np.linalg.lstsq(A, yc, rcond=None)[0]
+            out[t, ok] = yc - A @ beta
+        return pd.DataFrame(out, index=y.index, columns=y.columns)
+
     def _cache_key(self):
-        return ('RegressionNeut', self.y._cache_key(), self.x._cache_key())
+        more = tuple(s._cache_key() for s in self.more) if self.more else ()
+        return ('RegressionNeut', self.y._cache_key(), self.x._cache_key()) + more
 
 
-def regression_neut(y: Signal, x: Signal) -> RegressionNeut:
-    """Create a RegressionNeut signal: y with its daily cross-sectional fit on x removed."""
-    return RegressionNeut(y, x)
+def regression_neut(y: Signal, x: Signal, *more: Signal) -> RegressionNeut:
+    """Create a RegressionNeut signal: y with its daily cross-sectional fit on x (and any further regressors) removed."""
+    return RegressionNeut(y, x, *more)

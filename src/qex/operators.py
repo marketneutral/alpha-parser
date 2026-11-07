@@ -234,6 +234,34 @@ def is_valid(signal: Signal) -> IsValid:
     return IsValid(signal)
 
 
+class IsFinite(Signal):
+    """1 where the signal is a finite number, 0 where it is missing or infinite.
+
+    is_valid counts an infinity as valid (it is a value); is_finite does not. Use it to keep the
+    result of a division by zero out of a signal: where(is_finite(x), x, None).
+    """
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        import numpy as np
+        import pandas as pd
+        values = self.signal.evaluate(data)
+        if isinstance(values, pd.DataFrame):
+            return pd.DataFrame(np.isfinite(values.to_numpy(dtype=float)).astype(float),
+                                index=values.index, columns=values.columns)
+        return float(values is not None and np.isfinite(values))
+
+    def _cache_key(self):
+        return ('IsFinite', self.signal._cache_key())
+
+
+def is_finite(signal) -> IsFinite:
+    """Create an IsFinite signal: 1 where finite, 0 where missing or infinite."""
+    return IsFinite(_ensure_signal(signal))
+
+
 # Math Operations
 
 class Log(Signal):
@@ -249,6 +277,27 @@ class Log(Signal):
 
     def _cache_key(self):
         return ('Log', self.signal._cache_key())
+
+
+class Exp(Signal):
+    """e raised to a signal: the inverse of log.
+
+    exp(ts_sum(log(1 + returns(1)), n)) - 1 compounds daily returns, 1 / (1 + exp(-x)) is a sigmoid,
+    and scale(exp(x / T)) is a cross-sectional softmax with temperature T. An argument too large to
+    represent gives inf (no warning).
+    """
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        import numpy as np
+        values = self.signal.evaluate(data)
+        with np.errstate(over='ignore'):
+            return np.exp(values)
+
+    def _cache_key(self):
+        return ('Exp', self.signal._cache_key())
 
 
 class Abs(Signal):
@@ -346,6 +395,11 @@ class Min(BinaryOp):
 def log(signal) -> Log:
     """Create a Log signal (natural logarithm)."""
     return Log(_ensure_signal(signal))
+
+
+def exp(signal) -> Exp:
+    """Create an Exp signal (e to the signal; the inverse of log)."""
+    return Exp(_ensure_signal(signal))
 
 
 def abs_(signal) -> Abs:

@@ -90,6 +90,9 @@ class SignalGraph:
             children.append(signal.x)
         if hasattr(signal, 'y') and isinstance(signal.y, Signal):
             children.append(signal.y)
+        more = getattr(signal, 'more', None)                 # regression_neut's regressors after the first
+        if isinstance(more, tuple):
+            children.extend(m for m in more if isinstance(m, Signal))
         if hasattr(signal, 'condition') and isinstance(signal.condition, Signal):
             children.append(signal.condition)
         if hasattr(signal, 'if_true') and isinstance(signal.if_true, Signal):

@@ -24,15 +24,19 @@ qex("group_demean(-returns(5), 'sector')")
 
 ## Z-Score Normalized
 
-Normalize by historical spread volatility:
+Normalize the spread by its own volatility over time:
 
 ```python
 qex("""
     let spread = group_demean(returns(5), 'sector'),
-        spread_vol = group_std(returns(5), 'sector', 60)
+        spread_vol = ts_std(spread, 60)
     in -spread / spread_vol
 """)
 ```
+
+`group_std(returns(5), 'sector')` is a different number: how far apart the sector's members are on
+one day. Dividing by it, `group_demean(x, 'sector') / group_std(x, 'sector')`, is a z-score within the
+sector that day, not a measure of how stretched a spread is against its own history.
 
 ## Threshold Trading
 
@@ -41,7 +45,7 @@ Only trade when spread is stretched:
 ```python
 qex("""
     let spread = group_demean(returns(5), 'sector'),
-        spread_vol = group_std(returns(5), 'sector', 60),
+        spread_vol = ts_std(spread, 60),
         z = spread / spread_vol
     in where(abs(z) > 1.5, -spread, 0)
 """)
@@ -121,7 +125,7 @@ from qex import qex, Backtest
 
 signal = qex("""
     let spread = group_demean(returns(5), 'sector'),
-        spread_vol = group_std(returns(5), 'sector', 60),
+        spread_vol = ts_std(spread, 60),
         z = spread / spread_vol
     in where(abs(z) > 1.5, -z, 0)
 """)

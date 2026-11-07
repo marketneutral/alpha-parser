@@ -574,6 +574,40 @@ def latch(on: Signal, off: Signal) -> Latch:
     return Latch(on, off)
 
 
+class TsQuantile(Signal):
+    """Rolling q-quantile of a signal over its last ``period`` values.
+
+    Linear interpolation between the two nearest values (numpy's default): q = 0.5 is the median,
+    q = 0 and q = 1 are ts_min and ts_max. Missing values are skipped; the window needs at least
+    ``min_periods`` of them (default min(20, period)), as the other rolling operators do.
+
+        ts_quantile(returns(1), 252, 0.05)                              the 5% value-at-risk, as a return
+        ts_quantile(x, 60, 0.75) - ts_quantile(x, 60, 0.25)              an interquartile range
+    """
+
+    def __init__(self, signal: Signal, period: int, q: float, min_periods: int = None):
+        if not 0 <= q <= 1:
+            raise ValueError(f"ts_quantile() q must be between 0 and 1 (got {q}).")
+        if period < 1:
+            raise ValueError(f"ts_quantile() period must be >= 1 (got {period}).")
+        self.signal = signal
+        self.period = period
+        self.q = float(q)
+        self.min_periods = _get_min_periods(period, min_periods)
+
+    def _compute(self, data):
+        values = self.signal.evaluate(data)
+        return values.rolling(self.period, min_periods=self.min_periods).quantile(self.q)
+
+    def _cache_key(self):
+        return ('TsQuantile', self.signal._cache_key(), self.period, self.q, self.min_periods)
+
+
+def ts_quantile(signal: Signal, period: int, q: float, min_periods: int = None) -> TsQuantile:
+    """Create a TsQuantile signal: the rolling q-quantile (0.5 is the median). min_periods defaults to min(20, period)."""
+    return TsQuantile(signal, period, q, min_periods)
+
+
 def ts_corr(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsCorr:
     """Create a TsCorr signal (rolling correlation). min_periods defaults to min(20, period)."""
     return TsCorr(signal1, signal2, period, min_periods)

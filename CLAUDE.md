@@ -49,6 +49,8 @@ PYTHONPATH=src pytest tests/ -v
 - Group operators take a group's name or any labels expression (`quantile(field('mcap'), 5)`, `group_cross('sector', ...)`); `group_quantile` sorts within groups (since 0.8.0)
 - Comparisons and logic are three-valued (since 0.7.0): a comparison with a missing side is missing, `&` `|` `~` follow Kleene (false & missing = 0, true | missing = 1), and `where` with a missing condition is missing; `coalesce(x, y)` (x where it has a value, else y) says what missing should mean, as `coalesce(close() > 8, 0)`
 - `None` is the literal for "no value here, on purpose" (`where(cond, x, None)`); `0` is a value, and a position once a book demeans the signal. `explain_missing(signal, data, universe=...)` (`missing.py`) traces each missing cell to its reason and the node where it began
+- Every group operator works on one day's cross-section; `group_std(x, g)` is the day's spread within each group (since 0.12.0; the old `group_std(x, g, n)` window form is refused). `group_count_valid(x, g, w)` alone still counts over a window
+- `regression_neut(y, x1, x2, ...)` with several regressors is one joint least-squares fit; with one regressor its cache key is unchanged (qexarena hashes sealed alphas by it)
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 
 ## Available Operations
@@ -57,10 +59,10 @@ PYTHONPATH=src pytest tests/ -v
 `returns(period)`, `volatility(period)`, `volume(period)`, `adv(period)`
 
 ### Math
-`log(x)`, `abs(x)`, `sign(x)`, `sqrt(x)`, `power(x, n)`, `max(x, y)`, `min(x, y)`
+`log(x)`, `exp(x)`, `abs(x)`, `sign(x)`, `sqrt(x)`, `power(x, n)`, `max(x, y)`, `min(x, y)`
 
 ### Time-Series
-`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ewma_var`, `ewma_cov`, `ts_beta`, `ts_beta_ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
+`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `ts_quantile`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ewma_var`, `ewma_cov`, `ts_beta`, `ts_beta_ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
 
 ### Event-Based (for sparse data)
 `ts_mean_events`, `ts_std_events`, `ts_sum_events`, `ts_count_events`
@@ -86,7 +88,7 @@ qex("where(group('sector')=='Technology', rank(returns(20)), None)")
 `day_of_week`, `day_of_month`, `month_of_year`
 
 ### Conditional/Validity
-`where`, `is_valid`
+`where`, `is_valid`, `is_finite`
 
 ### Variable Bindings
 Use `let ... in` syntax to define variables and avoid repeating complex expressions:
@@ -179,6 +181,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_operators.py` - Comprehensive tests for all operators
 - `test_evaluation.py` - Backtest and quantile analysis tests
 - `test_missing_prices.py` - Returns across halts/delistings, held weights in backtests, forward returns
+- `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_bugfixes_052.py` - Regression tests for the 0.5.2 fixes (paired betas, infinities in cross-sections, risk model, ts_rank, math of numbers)
 - `test_distributed.py` - Distributed evaluation and graph visualization tests
 - `test_integration.py` - Integration tests with real FMP data (requires data fetch)

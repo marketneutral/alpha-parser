@@ -22,7 +22,7 @@ H has no sector label (— is missing).
 | `group_demean(x, groups)` | `x` minus its group's mean |
 | `group_quantile(x, groups, n)` | its bucket within its group, 1 (lowest) to `n` |
 | `group_sum(x, groups)` | its group's total (every member gets the same number) |
-| `group_std(x, groups, period)` | its group's standard deviation of `x`, over a rolling window |
+| `group_std(x, groups)` | the standard deviation of `x` across its group's members that day |
 | `group_count_valid(x, groups, period)` | how many of its group's values are present, over a rolling window |
 
 `groups` is either a group's **name** (`'sector'`, looked up in the data), or any **expression that gives each stock

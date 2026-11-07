@@ -8,19 +8,19 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 from .signal import Signal
-from .operators import Constant, NoneValue, is_valid
+from .operators import Constant, NoneValue, is_valid, is_finite
 from .data import close, open, high, low, field, market, day_of_week, day_of_month, month_of_year
 from .primitives import returns, volatility, volume, adv
 from .timeseries import (
     ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward, latch,
     ts_corr, ts_cov, ts_var, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
-    ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear,
+    ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear, ts_quantile,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut
 from .conditional import where, coalesce
 from .groups import group, group_rank, group_demean, group_count_valid, group_std, group_sum, group_quantile, group_cross
-from .operators import log, abs_, sign, sqrt, power, max_, min_
+from .operators import log, exp, abs_, sign, sqrt, power, max_, min_
 
 
 class QexParser:
@@ -68,6 +68,7 @@ class QexParser:
             'delay': delay,
             'delta': delta,
             'ts_rank': ts_rank,
+            'ts_quantile': ts_quantile,
             'fill_forward': fill_forward,
             'ts_corr': ts_corr,
             'ts_cov': ts_cov,
@@ -116,9 +117,11 @@ class QexParser:
 
             # Validity ops
             'is_valid': is_valid,
+            'is_finite': is_finite,
 
             # Math ops
             'log': log,
+            'exp': exp,
             'abs': abs_,
             'sign': sign,
             'sqrt': sqrt,

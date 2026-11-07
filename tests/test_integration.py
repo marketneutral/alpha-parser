@@ -280,7 +280,7 @@ class TestPairsTradingWithRealData:
         """Test z-score normalized pair spread."""
         from qex import alpha
 
-        signal = alpha("group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 60)")
+        signal = alpha("let s = group_demean(returns(5), 'pair') in s / ts_std(s, 60)")
         result = signal.evaluate(pairs_fmp_data)
 
         # Should have results after 60-day warm-up
@@ -314,7 +314,7 @@ class TestPairsTradingWithRealData:
         from qex import alpha, Backtest
 
         # Z-score normalized - trade when spread is stretched
-        signal = alpha("-group_demean(returns(5), 'pair') / group_std(returns(5), 'pair', 60)")
+        signal = alpha("let s = group_demean(returns(5), 'pair') in -s / ts_std(s, 60)")
         bt = Backtest(signal, transaction_cost=0.001)
         result = bt.run(pairs_fmp_data)
 
