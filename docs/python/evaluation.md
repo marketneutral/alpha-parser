@@ -95,7 +95,7 @@ w = build_book(qex("rank(-returns(5))"), data, settings)
 | `neutralize` | `"market"` | `"market"`, a group field such as `"sector"`, or `None` |
 | `truncation` | `0.05` | Largest absolute weight of one name, as a fraction of the book; `None` for no cap |
 | `rounds` | `1000` | Most neutralize, scale and clip rounds per day |
-| `mask_cross_section` | `True` | With a universe, cross-sectional operators in the signal compare only the day's universe ([details](../language/reference.md#the-cross-sectional-universe)); `False` applies the universe to the finished signal only, as before 0.5 |
+| `mask_cross_section` | `True` | With a universe, cross-sectional operators in the signal compare only the day's universe ([details](../language/concepts.md#which-stocks-a-cross-section-compares)); `False` applies the universe to the finished signal only, as before 0.5 |
 
 ### Untradable names
 

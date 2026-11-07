@@ -1,467 +1,384 @@
-# All Operations
+# Operator Reference
 
-Complete reference of qex operations.
+Every operator in qex, by family. In the signatures:
 
-## Data Access
+- `x`, `y` are expressions (anything that gives a value per date and stock);
+- `period`, `n`, `window`, `halflife` are whole numbers of days or values; `q`, `limit` are numbers;
+- `'name'` is a quoted field or group name; `groups` is a group's name or any expression giving labels;
+- `[, arg]` is an optional argument.
+
+Each time-series operator follows one of three window rules (part of the window, the whole window, exponential),
+explained in [How qex Evaluates](concepts.md#windows-and-history); the tables say which. Missing values and `None`
+are covered in [Missing Values](missing-values.md).
+
+## Data
 
 | Operation | Description |
 |-----------|-------------|
-| `close()` | Closing prices |
-| `open()` | Opening prices |
-| `high()` | Daily highs |
-| `low()` | Daily lows |
-| `field('name')` | Access any named field |
-| `market()` | The market's price level, `data['market']` |
+| `close()` | Each stock's closing price, adjusted for splits and dividends |
+| `open()` | Opening price, adjusted |
+| `high()` | Daily high, adjusted |
+| `low()` | Daily low, adjusted |
+| `field('name')` | Any field of the data by name, read as numbers (read labels with `group('name')`) |
+| `market()` | The market's price level: the data's `market` series, the same for every stock |
 
-```python
-qex("close()")
-qex("field('earnings_surprise')")
-qex("returns(1, 'market')")   # the market's daily return
-```
+A field with one value per day (an index, a rate) is given to every stock. `market()` is whatever market series the
+data supplies: an index's total-return close, an equal-weight index of the universe, a future. `returns(1, 'market')`
+is its daily return.
 
-A field stored as a `pd.Series` indexed by date (one value per day: an index, a rate) is
-broadcast to every ticker, on the dates and tickers of `close`. `market()` reads
-`data['market']`, which can be any market series: SPY's total-return close, an
-equal-weight index of the universe, a future.
+Adjusted prices (`close()`, `open()`, `high()`, `low()`) are for returns and a stock's own history; compare stocks, or
+compare with a dollar amount, with as-traded fields such as `field('price')`. See
+[Adjusted Data and Look-Ahead](adjusted-data.md).
 
 ## Primitives
 
 | Operation | Description |
 |-----------|-------------|
-| `returns(period, field='close')` | Returns over period, of `close` or another price field |
-| `volatility(period, field='close')` | Rolling annualized volatility |
-| `volume(period)` | Rolling average volume, in shares |
-| `adv(period)` | Average dollar volume (price × volume) |
+| `returns(period[, 'field'])` | Return over `period` days, of `close` or another price field: p[t] / p[last price at or before t − period] − 1 |
+| `volatility(period[, 'field'])` | Annualized volatility: the standard deviation of daily returns over `period` days, times √252. Part of the window |
+| `volume(period)` | Average daily volume over `period` days, in shares. Part of the window |
+| `adv(period)` | Average daily dollar volume, close × volume, over `period` days. Part of the window |
 
-```python
-qex("returns(20)")             # 20-day returns
-qex("volatility(60)")          # 60-day annualized vol
-qex("volume(5) / volume(60)")  # Recent volume relative to its norm
-qex("returns(1, 'market')")    # The market's daily return
+```qex
+returns(20)                 # 20-day return
+returns(1, 'market')        # the market's daily return
+volatility(60)              # 60-day annualized volatility
+volume(5) / volume(60)      # recent volume against its norm
 ```
 
-`returns(n)` is `p[t] / p[last valid at or before t - n] - 1`, and NaN on a day with no
-price. A halted or delisted name has NaN returns (it drops out of `rank`, `zscore` and the
-group operators instead of counting as 0%), the reopen day carries the whole move since the
-last price, and a price more than `MAX_PRICE_GAP` (10) rows old no longer counts. The same
-rule (`qex.price_returns`) gives the daily returns behind `volatility`, the risk model and the
-forward returns of `Backtest` and `QuantileAnalysis`, and it is the same on pandas 2 and 3.
+**Returns across gaps.** On a day with no price, a return has no value: a halted or delisted stock drops out of
+`rank` and the group operators rather than counting as 0%. The day it trades again carries the whole move since its
+last price. A price more than 10 days old no longer counts as a last price. The daily returns inside `volatility`
+follow the same rule.
 
-## Math Operations
+## Math
 
 | Operation | Description |
 |-----------|-------------|
-| `log(x)` | Natural logarithm |
-| `exp(x)` | e to the `x`, the inverse of `log` (too large gives inf) |
+| `log(x)` | Natural logarithm; missing for x ≤ 0 (−inf at 0) |
+| `exp(x)` | e to the `x`, the inverse of `log`; inf when too large |
 | `abs(x)` | Absolute value |
-| `sign(x)` | Sign (-1, 0, or 1) |
-| `sqrt(x)` | Square root |
-| `power(x, n)` | Raise to power n |
-| `max(x, y)` | Element-wise maximum |
-| `min(x, y)` | Element-wise minimum |
+| `sign(x)` | −1, 0 or 1 |
+| `sqrt(x)` | Square root; missing for x < 0 |
+| `power(x, n)` | `x` to the power `n`; `n` can be a number or an expression |
+| `max(x, y)` | The larger of `x` and `y`, element by element |
+| `min(x, y)` | The smaller of `x` and `y`, element by element |
 
-```python
-qex("log(close())")
-qex("sign(returns(20)) * sqrt(abs(returns(20)))")
-qex("max(returns(5), 0)")  # Positive returns only
-qex("exp(ts_sum(log(1 + returns(1)), 20)) - 1")  # Daily returns compounded over 20 days
-qex("1 / (1 + exp(-zscore(returns(5))))")      # A sigmoid
-qex("scale(exp(zscore(returns(5)) / 0.5))")    # A cross-sectional softmax, temperature 0.5
+Any argument can be a number: `sqrt(5)`, `max(x, 0)`, `power(2, x)`.
+
+```qex
+log(close() / delay(close(), 20))           # log return
+sign(returns(20)) * sqrt(abs(returns(20)))  # a signed square root
+max(returns(5), 0)                          # positive returns, 0 otherwise
+exp(ts_sum(log(1 + returns(1)), 20)) - 1    # daily returns compounded over 20 days
+1 / (1 + exp(-zscore(returns(5))))          # a sigmoid
+scale(exp(zscore(returns(5)) / 0.5))        # a cross-sectional softmax, temperature 0.5
 ```
 
-## Time-Series Operations
+## Time series
 
-Operate along time axis for each ticker independently.
+Each stock's own history, one stock at a time.
 
-### Rolling Statistics
+### Rolling statistics
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_mean(x, period)` | Rolling mean |
-| `ts_std(x, period)` | Rolling standard deviation |
-| `ts_sum(x, period)` | Rolling sum |
-| `ts_max(x, period)` | Rolling maximum |
-| `ts_min(x, period)` | Rolling minimum |
-| `ts_var(x, period)` | Rolling variance |
-| `ts_quantile(x, period, q[, min_periods])` | Rolling `q`-quantile, `q` in [0, 1]: 0.5 is the median, 0 and 1 are `ts_min` and `ts_max` |
+| `ts_mean(x, period)` | Mean over the last `period` days. Part of the window |
+| `ts_std(x, period)` | Standard deviation over the window. Part of the window |
+| `ts_sum(x, period)` | Sum over the window. Part of the window |
+| `ts_max(x, period)` | Largest value in the window. Part of the window |
+| `ts_min(x, period)` | Smallest value in the window. Part of the window |
+| `ts_var(x, period)` | Variance over the window. Part of the window |
+| `ts_quantile(x, period, q[, min_periods])` | The `q`-quantile of the window, `q` from 0 to 1: 0.5 is the median, 0 and 1 are `ts_min` and `ts_max`. Part of the window |
 
-```python
-qex("ts_mean(returns(1), 20)")  # 20-day average return
-qex("close() / ts_max(close(), 252)")  # Distance from 52-week high
-qex("-ts_quantile(returns(1), 252, 0.05)")  # 5% value-at-risk, as a loss
-qex("ts_quantile(returns(1), 60, 0.75) - ts_quantile(returns(1), 60, 0.25)")  # interquartile range
+Part of the window means a value once the window holds `min(20, period)` values, and a value on a day `x` is missing
+(from the rest of the window). `ts_quantile` interpolates between the two nearest values, and takes its minimum as an
+optional last argument.
+
+```qex
+ts_mean(returns(1), 20)                                        # 20-day average daily return
+close() / ts_max(close(), 252)                                 # distance from the 52-week high
+-ts_quantile(returns(1), 252, 0.05)                            # 5% value-at-risk, as a loss
+ts_quantile(returns(1), 60, 0.75) - ts_quantile(returns(1), 60, 0.25)    # interquartile range
 ```
 
-`ts_quantile` interpolates linearly between the two nearest values and skips missing ones; like
-`ts_corr`, it needs `min_periods` values in the window (default `min(20, period)`).
-
-### Lag and Difference
+### Lag and difference
 
 | Operation | Description |
 |-----------|-------------|
-| `delay(x, period)` | Lag/shift by N periods |
-| `delta(x, period)` | Difference from N periods ago |
+| `delay(x, period)` | The value `period` days ago; `period` ≥ 0 |
+| `delta(x, period)` | Today's value minus the value `period` days ago: `x - delay(x, period)` |
 
-```python
-qex("delay(close(), 1)")  # Yesterday's close
-qex("delta(returns(20), 5)")  # Change in momentum
+There is no negative delay: a value can only come from the past.
+
+```qex
+delay(close(), 1)            # yesterday's close
+delta(returns(20), 5)        # change in 20-day momentum over a week
 ```
 
-### Ranking
+### Ranking and extremes
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_rank(x, period)` | Percentile rank within rolling window |
+| `ts_rank(x, period)` | Today's percentile among the last `period` values, from 1/period to 1; ties share their average rank. The whole window |
+| `ts_argmax(x, period)` | Days since the largest value in the window, 0 if it is today. The whole window |
+| `ts_argmin(x, period)` | Days since the smallest value in the window. The whole window |
 
-```python
-qex("ts_rank(volume(1), 20)")  # Where does today's volume rank vs last 20 days?
+The whole window means every day of the window must have a value: a gap hides the result until it has left the
+window.
+
+```qex
+ts_rank(volume(1), 20)       # where today's volume ranks against the last 20 days
+ts_argmax(close(), 252)      # days since the 52-week high
 ```
 
-### Correlation and Covariance
+### Pairs of series
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_corr(x, y, period[, min_periods])` | Rolling correlation |
-| `ts_cov(x, y, period[, min_periods])` | Rolling covariance |
-| `ts_beta(y, x, period[, min_periods])` | Rolling beta (cov/var) |
-| `ts_beta_shrunk(y, x, period[, min_periods])` | Rolling beta, Vasicek-shrunk toward the cross-sectional mean |
+| `ts_corr(x, y, period[, min_periods])` | Correlation of `x` and `y` over the window. Part of the window |
+| `ts_cov(x, y, period[, min_periods])` | Covariance over the window. Part of the window |
+| `ts_beta(y, x, period[, min_periods])` | Least-squares slope of `y` on `x`, cov(y, x) / var(x), over the window. Part of the window |
+| `ts_beta_shrunk(y, x, period[, min_periods])` | `ts_beta`, pulled toward the day's average beta in proportion to its noise (Vasicek). Part of the window |
 
-`min_periods` (default `min(20, period)`) is the fewest paired observations a window needs
-before it gives a value. With the default, a name 20 days after listing gets a 252-day beta
-from 20 days; raise it (`ts_beta(returns(1), returns(1, 'market'), 252, 126)`) to require more.
+All four use only the days on which both series have a value. `min_periods` (default `min(20, period)`) is the fewest
+such days a window needs: with the default, a stock 20 days after listing gets a "252-day" beta from 20 days, so ask
+for more when it matters, `ts_beta(returns(1), returns(1, 'market'), 252, 126)`.
 
-`ts_beta_shrunk` pulls each name's beta `b` toward the day's mean beta in proportion to its
-own sampling error (Vasicek 1973): `w * b + (1 - w) * mean(b)`, with
-`w = var(b) / (var(b) + se(b)^2)`. Short or noisy histories move most. See
-[Market Beta](../examples/market-beta.md#shrinking-beta) for the derivation, and why a fixed
-blend like Bloomberg's `0.67 b + 0.33` changes nothing that `rank` or `regression_neut` sees.
+`ts_beta_shrunk` gives `w × b + (1 − w) × mean(b)`, with `w = var(b) / (var(b) + se(b)²)`: a beta from a short or
+noisy history moves furthest toward the day's average. The average is over the universe.
+[Market Beta](../examples/market-beta.md#shrinking-beta) derives it.
 
-```python
-qex("ts_corr(returns(1), volume(1), 60)")                       # Return-volume correlation
-qex("ts_beta(returns(1), returns(1, 'market'), 252)")           # Market beta
-qex("ts_beta_shrunk(returns(1), returns(1, 'market'), 252)")    # ... shrunk
+```qex
+ts_corr(returns(1), volume(1), 60)                       # return-volume correlation
+ts_beta(returns(1), returns(1, 'market'), 252)           # market beta
+ts_beta_shrunk(returns(1), returns(1, 'market'), 252)    # market beta, shrunk
 ```
 
-### Exponential Weighted
+### Exponentially weighted
 
 | Operation | Description |
 |-----------|-------------|
-| `ewma(x, halflife)` | Exponentially weighted moving average |
-| `ewma_var(x, halflife)` | EWMA variance |
-| `ewma_cov(x, y, halflife)` | EWMA covariance |
-| `ts_beta_ewma(y, x, halflife)` | EWMA beta |
+| `ewma(x, halflife)` | Exponentially weighted mean: a day's weight halves every `halflife` days. Exponential |
+| `ewma_var(x, halflife)` | Exponentially weighted variance. Exponential |
+| `ewma_cov(x, y, halflife)` | Exponentially weighted covariance. Exponential |
+| `ts_beta_ewma(y, x, halflife)` | ewma_cov(y, x) / ewma_var(x), over the days both have a value. Exponential |
 
-```python
-qex("ewma(returns(1), 10)")  # Halflife of 10 days
+Exponential means a value from the first observation on (there is no warm-up), and a value carried through days
+`x` is missing. The effective look-back is about three half-lives.
+
+```qex
+ewma(returns(1), 10)                                  # a 10-day half-life average return
+ts_beta_ewma(returns(1), returns(1, 'market'), 63)    # a beta that adapts within a quarter
 ```
 
-!!! tip "Halflife vs Period"
-    `halflife=10` means weights decay by 50% every 10 periods.
-    Effective lookback is ~3× halflife.
-
-### Higher Moments
+### Shape of the window
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_skew(x, period)` | Rolling skewness |
-| `ts_kurt(x, period)` | Rolling kurtosis |
+| `ts_skew(x, period)` | Skewness of the window. The whole window |
+| `ts_kurt(x, period)` | Excess kurtosis of the window. The whole window |
+| `decay_linear(x, period)` | Weighted mean with weights period, period − 1, ..., 1, newest heaviest. The whole window |
 
-### Special
+```qex
+ts_skew(returns(1), 60)      # 60-day return skew
+decay_linear(returns(1), 10) # a recency-weighted 10-day average
+```
+
+### Events
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_argmax(x, period)` | Periods since rolling max |
-| `ts_argmin(x, period)` | Periods since rolling min |
-| `decay_linear(x, period)` | Linearly decaying weighted average |
+| `ts_mean_events(x, n[, min_n])` | Mean of the last `n` values `x` has had, however far back; a value every day once there are `min_n` (default `n`) |
+| `ts_std_events(x, n[, min_n])` | Standard deviation of the last `n` values, once there are `min_n` |
+| `ts_sum_events(x, n[, min_n])` | Sum of the last `n` values, once there are `min_n` |
+| `ts_count_events(x, period)` | How many values `x` has in the last `period` days; an answer every day once `period` days have passed |
 
-```python
-qex("ts_argmax(close(), 252)")  # Days since 52-week high
+For data that arrives now and then, such as quarterly earnings, where a fixed window in days would hold a varying
+number of events. Between events the result holds.
+
+```qex
+ts_std_events(field('surprise'), 8)              # standard deviation of the last 8 surprises
+ts_mean_events(field('surprise'), 4, 2)          # average of up to 4, once there are 2
+ts_count_events(field('surprise'), 252) >= 3     # at least three reports in a year
 ```
 
-### Event-Based (for Sparse Data)
+### Filling and state
 
 | Operation | Description |
 |-----------|-------------|
-| `ts_mean_events(x, n, min_n)` | Mean over past N non-NaN values, once there are `min_n` (default all N) |
-| `ts_std_events(x, n, min_n)` | Std over past N non-NaN values, once there are `min_n` (default all N) |
-| `ts_sum_events(x, n, min_n)` | Sum over past N non-NaN values, once there are `min_n` (default all N) |
-| `ts_count_events(x, period)` | Count of non-NaN in rolling window |
+| `fill_forward(x[, limit])` | Carry each value forward over the missing days after it, at most `limit` days; with no limit, until the next value |
+| `latch(on, off)` | 1 from a day `on` is true until a day `off` is true (off wins a tie), then 0 until `on` again; 0 before `on` is first true; a day where either is missing changes nothing |
 
-```python
-# For quarterly earnings (sparse data)
-qex("ts_std_events(field('earnings'), 8)")  # Std of last 8 earnings
+```qex
+fill_forward(field('surprise'), 60)                        # hold an earnings surprise for a quarter
+latch(field('mcap') >= 300e6, field('mcap') < 240e6)       # enter at $300M, leave under $240M
 ```
 
-## Cross-Sectional Operations
+`latch` is how a universe gets hysteresis ([Universes](universes.md#hysteresis-latch)), and how a signal holds a
+position from an entry rule until an exit rule.
 
-Operate across tickers for each day independently.
+## Cross-sectional
+
+Across the stocks on each day, one day at a time. They compare the stocks in the universe, and give every other stock
+no value ([Universes](universes.md)).
 
 | Operation | Description |
 |-----------|-------------|
-| `rank(x)` | Percentile rank (0-1), ascending |
-| `zscore(x)` | Z-score |
-| `demean(x)` | Subtract cross-sectional mean |
-| `quantile(x, n)` | Assign to n buckets (1 to n), ascending |
-| `winsorize(x, limit)` | Cap at percentiles (e.g., 0.05 caps at 5th/95th) |
-| `scale(x)` | Scale so absolute values sum to 1 |
-| `truncate(x, max)` | Clip to [-max, max] |
-| `regression_neut(y, x1, x2, ...)` | Residual of y on one or more regressors (with intercept), fit across names each day |
-| `pca_factor(x, window, k[, refit])` | Each stock's beta to the k-th statistical factor of x (a principal component across stocks), refit every `refit` days (default 21) |
+| `rank(x)` | Percentile rank among the day's stocks, from 1/n to 1, lowest first; ties share their average rank |
+| `zscore(x)` | (x − mean) / standard deviation across the day's stocks; missing when they don't vary |
+| `demean(x)` | x minus the day's mean |
+| `quantile(x, n)` | Bucket 1 (lowest) to `n` by percentile rank |
+| `winsorize(x, limit)` | Clip at the day's `limit` and 1 − `limit` quantiles: `winsorize(x, 0.05)` caps at the 5th and 95th percentiles |
+| `scale(x)` | Divide by the day's sum of absolute values, so they sum to 1 |
+| `truncate(x, max)` | Clip each value to [−max, max] (element by element, not across stocks) |
+| `regression_neut(y, x1, x2, ...)` | y with its least-squares fit on the regressors (and an intercept) taken out, across the day's stocks |
+| `pca_factor(x, window, k[, refit])` | Each stock's beta to the k-th statistical factor of `x`, from a principal component analysis across stocks, refit every `refit` days (default 21) |
 
-```python
-qex("rank(returns(20))")  # Higher return → higher rank
-qex("rank(-returns(20))")  # Higher return → lower rank (reversal)
-qex("zscore(returns(20))")
-qex("winsorize(returns(1), 0.01)")  # Cap 1% tails
-qex("regression_neut(rank(returns(20)), ts_beta_shrunk(returns(1), returns(1, 'market'), 252))")  # momentum, beta out
+```qex
+rank(returns(20))                    # higher return, higher rank
+rank(-returns(5))                    # higher return, lower rank: a reversal
+zscore(returns(20))
+winsorize(returns(1), 0.01)          # cap the 1% tails
+quantile(field('mcap'), 5)           # size quintiles, 1 smallest
 ```
 
-`regression_neut(y, x)` is ordinary least squares on purpose: only OLS residuals have exactly
-zero covariance with `x`, which is what "neutral to `x`" means. Names where either input is NaN
-are NaN. The fit runs over the cross-sectional universe (below), which `build_book` sets from
-`BookSettings(universe=...)`. The signal is then exactly neutral; the book is only close to it,
-because truncation and rescaling come after. See [Market Beta](../examples/market-beta.md).
+**Infinities.** `zscore`, `demean`, `winsorize`, `scale` and `regression_neut` leave an infinite value out of the day's
+statistics and give that stock no value, so one division by zero (a zero-volume day in `volume(20) / volume(1)`)
+can't empty the day. `rank` and `quantile` rank an infinity first or last.
 
-With several regressors, `regression_neut(y, beta, size, momentum)` is one least-squares fit on all of
-them at once, over the names where `y` and every regressor are valid; the residual has zero covariance
-with each. Nesting, `regression_neut(regression_neut(y, beta), size)`, is not the same: when `beta` and
-`size` are correlated, the second step brings back some of the beta exposure the first removed.
-Collinear regressors give the least-squares fit of smallest norm, not an error.
+### `regression_neut`
 
-### Statistical factors: `pca_factor`
+`regression_neut(y, x)` takes out of `y`, each day, the part that `x` explains: the residual of a least-squares fit
+of `y` on `x` with an intercept, over the stocks where both have a value. The result has zero mean and zero
+covariance with `x` across the day's stocks, which is what "neutral to x" means. A day on which `x` doesn't vary
+gives `y` demeaned.
 
-`pca_factor(x, window, k, refit)` finds the common factors of `x` (usually `returns(1)`) from the data alone, by a
-principal component analysis across stocks, and gives each stock's exposure to the k-th:
+With several regressors, `regression_neut(y, beta, size, momentum)` is one fit on all of them at once: the result is
+neutral to each. That is not the same as nesting, `regression_neut(regression_neut(y, beta), size)`: when `beta` and
+`size` are correlated, the second step brings back some of the beta the first took out. Regressors that duplicate
+each other are allowed (the fit of smallest norm is used).
 
-```python
-qex("pca_factor(returns(1), 252, 1)")                   # each stock's beta to the first statistical factor
-qex("""let r = returns(1)
-       in regression_neut(zscore(-returns(5)), pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3))""")
-                                                         # short-term reversal with three statistical factors removed
+A day needs at least k + 2 stocks with values for k regressors; with fewer, the fit passes through every point and
+the residual would be rounding noise, so the day has no value.
+
+```qex
+let beta = ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
+in regression_neut(rank(returns(20)), beta)
 ```
 
-- **Point in time.** At each refit date (every `refit` rows, the first once `window` rows exist) the fit uses the
-  trailing `window` rows of `x`, ending that day, and its result holds until the next refit. Before the first fit the
-  value is missing (`explain_missing`: short history).
-- **Which names.** A fit includes the names with values on at least 90% of its window (and, inside a universe, the
-  members that day); the missing days count as the name's mean. A name not in a fit has no value until the next one.
-- **Correlation PCA.** Each name is demeaned and divided by its own volatility over the window, so a few volatile
-  stocks don't make up the first components.
-- **The value is a beta.** It is the stock's beta to the k-th eigenportfolio's return, sigma_i * v_i in `x`'s units
-  (v the k-th eigenvector of the correlation matrix): the exposure a position in the stock carries to the factor, which
-  is what `regression_neut` should remove.
-- **Components keep their identity.** Each refit's components are matched to the previous refit's by overlap and
-  signed to agree, so a factor does not swap with a neighbour of similar size or flip sign from one month to the next;
-  k is the k-th largest at the first fit, followed after. The first component is signed long (the market). Where two
-  factors are equally large, any mix of them is equally a component; tracking settles on one as they separate.
-- **Cost.** One SVD of a window x names matrix per refit (about 0.1 s for 252 x 3,000). The decomposition is a node
-  of its own in the expression's graph (`pca_basis`, internal), which every `pca_factor` on the same `x`, `window` and
-  `refit` takes as its input, so components 1 to 5 cost one decomposition: in a `compute_context`, in `SignalGraph`, and
-  on Dask. `k` is at most 20.
+Momentum with market beta taken out. With beta and size taken out together:
 
-A day needs at least k + 2 valid names for k regressors. With k + 1 or fewer, the fit (an intercept and k slopes)
-passes through every point, so the residual is rounding noise (around 1e-16) that a `rank` or `zscore` would turn into
-full-size positions; that day is NaN instead, and `explain_missing` says `too few names`.
-
-**Infinities.** `zscore`, `demean`, `winsorize`, `scale`, `regression_neut`, `group_demean`,
-`group_std` and `group_sum` leave an infinite value out of the day's statistics and give that
-name NaN, so one division by zero (a zero-volume day in `volume(20) / volume(1)`) can't empty the
-whole cross-section. `rank`, `quantile` and `group_rank` rank an infinity first or last, as before.
-
-### The cross-sectional universe
-
-Cross-sectional operators compare names with each other, so which names they compare matters.
-In a book built with `BookSettings(universe=...)`, and inside `cross_section_universe(mask)`,
-they compare only the names in the universe that day and give NaN outside it. This applies to
-`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `regression_neut`, the group
-operators and the prior of `ts_beta_shrunk`. Evaluated on its own, with no universe set, a
-signal compares every name with data.
-
-Time-series operators are not restricted: a name that joined today still has its past
-returns, volatility and beta. One consequence: a time-series operator over a cross-sectional
-result, such as `ts_mean(rank(x), 20)` or `ts_beta(winsorize(returns(1), 0.01), ...)`, has no
-history for a name from before it joined.
-
-`BookSettings(mask_cross_section=False)` turns this off, so the universe applies only to the
-finished signal, as in qex before 0.5.
-
-```python
-from qex import cross_section_universe
-with cross_section_universe(data['member'].notna()):
-    r = qex("rank(returns(5))").evaluate(data)   # ranked among members
-with cross_section_universe("field('mcap') >= 300e6", data):
-    r = qex("rank(returns(5))").evaluate(data)   # a universe expression: nonzero is a member
+```qex
+let beta = ts_beta_shrunk(returns(1), returns(1, 'market'), 252),
+    size = log(field('mcap'))
+in regression_neut(zscore(-returns(5)), beta, size)
 ```
 
-A universe is a mask, a data field's name, or a **universe expression**, evaluated over every stock with no universe
-active; `latch(on, off)` gives it hysteresis. The [Universes guide](universes.md) works through it.
+The signal is exactly neutral; a book built from it is close to neutral, since a book's caps and scaling come after.
 
-!!! warning "rank() is Ascending"
-    Higher values get higher ranks.
-    For mean reversion (buy losers), use `rank(-returns(5))`.
+### `pca_factor`
 
-## Group Operations
+`pca_factor(x, window, k, refit)` finds the common factors in `x` (usually `returns(1)`) from the data alone, by a
+principal component analysis across stocks, and gives each stock's exposure to the k-th.
 
-Like cross-sectional, but within groups. `groups` is a group's name (`'sector'`) or any expression that gives each
-stock a label (`quantile(field('mcap'), 5)`, `coalesce(group('sector'), 'Other')`, `group_cross(...)`). A stock with
-no label is in no group and gets no value, and so does a stock outside the universe. Labels given on fewer dates than the
-data hold from their date until the next row (never a later row). The [Group Operations guide](groups.md)
-works through each one.
+- **Point in time.** Every `refit` days (the first once `window` days exist), the analysis uses the last `window`
+  days of `x`, ending that day; its result holds until the next refit. Before the first, there is no value.
+- **Which stocks.** Those with values on at least 90% of the window, and in the universe that day. A stock not in a
+  fit has no value until it is in one.
+- **Correlation, not covariance.** Each stock is scaled by its own volatility first, so a few volatile stocks don't
+  make up the first factors.
+- **A beta.** The value is the stock's beta to the k-th factor's return, in `x`'s units: the exposure a position
+  carries, and what `regression_neut` should take out.
+- **Factors keep their identity.** Each refit's factors are matched to the previous refit's and signed to agree, so
+  factor 2 stays factor 2 and doesn't flip sign. The first factor is the market, signed long. `k` is at most 20.
+- **Shared.** `pca_factor` with the same `x`, `window` and `refit` and different `k` share one decomposition.
 
-`group(...)` and `group_cross(...)` give **labels**, not numbers. Labels can be compared (`==`, `!=`), used to group,
-and passed through `coalesce` and `where`; anything else (`rank(group('sector'))`, `group('sector') + 1`) is refused
-when the expression is parsed, with a message saying what to write instead
-([Numbers and labels](groups.md#numbers-and-labels)).
+```qex
+pca_factor(returns(1), 252, 1)       # each stock's beta to the first statistical factor
+
+let r = returns(1)
+in regression_neut(zscore(-returns(5)), pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3))
+```
+
+## Groups
+
+Like the cross-sectional operators, but within groups: a stock is compared only with the stocks sharing its label that
+day. [Groups and Labels](groups.md) works through each one on an example.
 
 | Operation | Description |
 |-----------|-------------|
-| `group(name)` | The labels themselves, for filtering or as a grouping: `group('sector')` |
-| `group_rank(x, groups)` | Rank within each group, in (0, 1] |
-| `group_demean(x, groups)` | Demean within each group |
-| `group_quantile(x, groups, n)` | Quantile buckets within each group, 1 to n: a dependent double sort |
-| `group_std(x, groups)` | Standard deviation across the group's members that day (every member gets it) |
-| `group_sum(x, groups)` | Sum within group (missing when the group has no values that day) |
-| `group_count_valid(x, groups, period)` | Count non-NaN within group |
-| `group_cross(a, b, ...)` | One grouping from several: labels joined with `\|`, `'Technology\|3'` |
+| `group('name')` | The labels themselves, for comparing or grouping: `group('sector') == 'Technology'` |
+| `group_rank(x, groups)` | Percentile rank within each group, from 1/n to 1 |
+| `group_demean(x, groups)` | x minus its group's mean |
+| `group_quantile(x, groups, n)` | Bucket 1 to `n` within each group: a dependent double sort |
+| `group_std(x, groups)` | Standard deviation across the group's stocks that day; every member gets it |
+| `group_sum(x, groups)` | Sum within the group; every member gets it; missing when the group has no values that day |
+| `group_count_valid(x, groups, period)` | How many values the group's stocks have had over the last `period` days |
+| `group_cross(a, b, ...)` | One grouping from several: labels joined with a bar, `'Technology\|3'` |
 
-```python
-qex("group_demean(returns(20), 'sector')")                          # sector-neutral returns
-qex("group_demean(returns(20), quantile(field('mcap'), 5))")        # size-neutral returns
-qex("group_quantile(field('value'), quantile(field('mcap'), 3), 3)")  # value terciles within size terciles
-qex("group_demean(returns(20), group_cross('sector', quantile(field('mcap'), 3)))")  # sector and size
+`groups` is a group's name (`'sector'`) or any expression giving labels: `quantile(field('mcap'), 5)`,
+`coalesce(group('sector'), 'Other')`, `group_cross(...)`. A stock with no label, or outside the universe, gets no
+value. A member whose own value is missing still gets its group's number from `group_std`, `group_sum` and
+`group_count_valid`. Labels given on fewer dates than the prices hold from their date until the next, never earlier.
+
+```qex
+group_demean(returns(20), 'sector')                                      # sector-neutral momentum
+group_demean(returns(20), quantile(field('mcap'), 5))                    # size-neutral momentum
+group_demean(returns(5), 'sector') / group_std(returns(5), 'sector')     # a z-score within each sector
+group_quantile(field('value'), quantile(field('mcap'), 3), 3)            # value terciles within size terciles
+group_demean(returns(20), group_cross('sector', quantile(field('mcap'), 3)))    # sector- and size-neutral
+volume(1) / group_sum(volume(1), 'sector')                               # share of the sector's volume
 ```
 
-### Sector Filtering
+**Labels and numbers.** `group(...)`, `group_cross(...)` and quoted strings give labels. Labels can be compared with
+`==` and `!=`, used as `groups`, and passed through `where` and `coalesce`; anything else is refused when the
+expression is read. See [Groups and Labels](groups.md#numbers-and-labels).
 
-Use `group()` with `where()` to filter signals by sector membership:
-
-```python
-# Price-to-book isn't meaningful for Financials - zero them out
-qex("where(group('sector')=='Financials', None, field('price_to_book'))")
-
-# A signal for Technology stocks only (no value elsewhere, so no position)
-qex("where(group('sector')=='Technology', rank(returns(20)), None)")
-```
-
-This is useful when factors don't apply to certain sectors (e.g., value metrics for financials, inventory for services).
-
-## Conditional Operations
+## Conditions and missing values
 
 | Operation | Description |
 |-----------|-------------|
-| `where(cond, if_true, if_false)` | Ternary conditional: `if_true` where `cond` is nonzero, `if_false` where it is 0, missing where it is missing |
-| `coalesce(x, y)` | `x` where it has a value, else `y` (a number or a signal): `coalesce(close() > 8, 0)` |
-| `is_valid(x)` | Returns 1 where not NaN, else 0 (an infinity counts as valid) |
-| `is_finite(x)` | Returns 1 where `x` is a finite number, 0 where it is NaN or infinite |
-| `None` | No value here, on purpose: `where(cond, x, None)`. Missing like NaN, but reported as excluded by `explain_missing` |
-| `fill_forward(x, limit)` | Forward fill NaN for up to `limit` periods; `fill_forward(x)` with no limit fills until the next value |
-| `latch(on, off)` | 1 from a day `on` is true until a day `off` is (off wins a tie), 0 before; missing days change nothing. Hysteresis: `latch(mcap >= 300e6, mcap < 240e6)` |
+| `where(cond, if_true, if_false)` | `if_true` where `cond` is nonzero, `if_false` where it is 0, missing where it is missing |
+| `coalesce(x, y)` | `x` where it has a value, else `y` (a number, label or expression) |
+| `is_valid(x)` | 1 where `x` has a value, else 0; an infinity counts as a value |
+| `is_finite(x)` | 1 where `x` is a finite number, 0 where it is missing or infinite |
+| `None` | No value here, on purpose: `where(cond, x, None)` |
 
-```python
-qex("where(volatility(20) > 0.3, None, returns(5))")  # Leave out high-vol
-qex("fill_forward(field('earnings'), 60)")  # Hold earnings for quarter
+```qex
+where(volatility(20) > 0.6, None, returns(5))                        # leave out the most volatile stocks
+where(group('sector') == 'Financials', None, field('book_to_price')) # a ratio that means little for banks
+coalesce(close() > 8, 0)                                             # missing counts as false
+where(is_finite(volume(20) / volume(1)), volume(20) / volume(1), None)
 ```
 
-### None, and why a value is missing
+`None` and `0` are different answers: a `0` is a value, and a book holds a stock at 0 against the day's average;
+`None` takes the stock out. See [Missing Values](missing-values.md).
 
-The [Missing Values guide](missing-values.md) works through all of this with examples.
-
-`None` and `0` are different answers. `0` is a value: a book demeans its signal, so a `0` above or below the day's
-average is a position, and a cross-section counts it. `None` is no value: cross-sections and the book leave it out,
-and arithmetic with it stays missing. Write `0` for "this stock counts, at zero" (an indicator, a neutral bucket, a
-non-event in a sum), and `None` for "this signal does not apply to this stock".
-
-qex has one missing value, so `None` behaves like any NaN. What differs is the reason, which `explain_missing` traces
-through the expression's graph to where each missing cell began:
-
-```python
-from qex import explain_missing, cross_section_universe
-report = explain_missing(qex("ts_mean(rank(returns(1)), 10)"), data, universe=data['member'].notna())
-report.summary(within=data['member'].notna())   # each reason's share of the missing member-days
-report.on('2003-06-02')                          # each missing name that day, its reason, and the node
-```
-
-| Reason | Means |
-|--------|-------|
-| no data | a field has no value that day: before a listing, during a halt, after a delisting |
-| outside the universe | a cross-sectional operator leaves out a name not in the universe that day |
-| short history | a window has too few values yet; when its earlier days were missing, it says why (`short history: outside the universe on earlier days` is a new member) |
-| excluded on purpose | `None`, chosen by a `where` |
-| no group | a group operator, for a name with no group that day |
-| calculation error | NaN from finite inputs: `0 / 0`, `log` or `sqrt` of a negative, a z-score with no spread |
-| infinite value | a division by zero |
-| too few names | a day with too few names for a cross-sectional fit: `regression_neut` with k regressors needs k + 2 |
-
-A missing input passes on its reason; a node gives its own only where every input had a value. Explaining changes
-nothing: it reads the values the expression's own evaluation produced.
-
-## Calendar Operations
+## Calendar
 
 | Operation | Description |
 |-----------|-------------|
-| `day_of_week()` | 0=Monday, 6=Sunday |
-| `day_of_month()` | 1-31 |
-| `month_of_year()` | 1-12 |
+| `day_of_week()` | 0 (Monday) to 6 (Sunday) |
+| `day_of_month()` | 1 to 31 |
+| `month_of_year()` | 1 to 12 |
 
-```python
-qex("where(day_of_week() == 4, returns(5), None)")  # Friday only
-qex("where(month_of_year() == 1, 1, 0)")  # January indicator
+The same for every stock on a day.
+
+```qex
+where(day_of_week() == 4, returns(5), None)                  # Fridays only
+where(month_of_year() == 1, 1, 0)                            # a January indicator
+month_of_year() != delay(month_of_year(), 1)                 # the first trading day of each month
 ```
 
-## Arithmetic Operators
-
-Standard Python operators work:
+## Arithmetic, comparisons and logic
 
 | Operator | Description |
 |----------|-------------|
-| `+`, `-`, `*`, `/` | Basic arithmetic |
-| `**` | Power |
-| `>`, `<`, `>=`, `<=`, `==`, `!=` | Comparison: 1 or 0, and missing where either side is missing |
-| `&`, `\|`, `~` | Logical AND, OR, NOT, three-valued (below) |
+| `+`, `-`, `*`, `/` | Arithmetic, element by element |
+| `**` | Power, with a number as the exponent |
+| `>`, `<`, `>=`, `<=`, `==`, `!=` | 1 or 0, missing where either side is missing |
+| `&`, `\|`, `~` | And, or, not, three-valued |
 
-```python
-qex("returns(20) / volatility(60)")
-qex("(returns(5) > 0) & (volume(1) > volume(20))")
-```
-
-### Comparisons and logic with missing values
-
-A comparison with a missing side is missing, not 0: `close() > 8` on a day with no price is not known, and a 0
-would be a confident "no" that every operator downstream acts on (`where(close() > 8, 1, -1)` would short a stock
-with no price). `&`, `|` and `~` follow Kleene's three-valued logic, as pandas' `NA` does, and `where` with a missing
-condition is missing:
-
-| `a` | `b` | `a & b` | `a \| b` | `~a` |
-|-----|-----|---------|-----------|------|
-| 1 | missing | missing | 1 | 0 |
-| 0 | missing | 0 | missing | 1 |
-| missing | missing | missing | missing | missing |
-
-So a known answer survives: `is_valid(x) & (x > k)` is 0 where `x` is missing, because one side is known false.
-To say that missing counts as false, write it: `coalesce(close() > 8, 0)` is the comparison where it is known and
-0 where it is not. (`where(close() > 8, 1, 0)` stays missing where the price is: the condition picks no branch.)
-Where a condition reads a different field from the value it gates, the difference shows: in
-`returns(1) * (field('volume') > 60)`, a day with a return but no volume is missing, where before it was 0 (and a
-book demeans a 0 into a position).
-
-(Before qex 0.7.0 a comparison with a missing side gave 0, and `where` read a missing condition as true.)
-
-## Variable Bindings
-
-Use `let ... in` to define variables:
-
-```python
-qex("""
-    let mom = returns(60),
-        vol = volatility(60),
-        sharpe = mom / vol
-    in rank(sharpe) * sign(mom)
-""")
-```
-
-Rules:
-
-- Later bindings can reference earlier ones
-- Variable names cannot shadow function names
-- Variables are scoped to the expression
-- Whitespace, including line breaks, is insignificant outside quoted strings
+Precedence and parentheses are in [Syntax](syntax.md#precedence); the three-valued rules in
+[Missing Values](missing-values.md#comparisons-and-logic-three-values).

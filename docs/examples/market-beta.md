@@ -175,7 +175,7 @@ neutralization OLS.
 **Neutralize among the stocks you trade.** The fit must run over the same stocks as the book.
 `build_book` does this by default: with `BookSettings(universe=...)`, every cross-sectional
 operator, `regression_neut` included, compares only the stocks in the universe that day (see
-[the cross-sectional universe](../language/reference.md#the-cross-sectional-universe)).
+[the cross-sectional universe](../language/concepts.md#which-stocks-a-cross-section-compares)).
 Evaluating a signal on its own, outside `build_book`, needs the same restriction:
 
 ```python
