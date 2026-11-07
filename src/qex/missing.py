@@ -81,7 +81,7 @@ _SYMBOLS = {"Add": "+", "Sub": "-", "Mul": "*", "Div": "/", "Greater": ">", "Les
             "LessEqual": "<=", "Equal": "==", "NotEqual": "!=", "And": "&", "Or": "|"}
 
 
-_DEFAULTS = {"price_field": "close"}                     # arguments not written when they take their default
+_DEFAULTS = {"price_field": "close", "refit": 21}                     # arguments not written when they take their default
 
 
 def label(signal: Signal, nested: bool = False) -> str:
@@ -266,6 +266,8 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
                 own(missing & (codes_ < 0), NO_GROUP)
                 if hasattr(s, "window"):
                     own(missing, HISTORY)
+            if isinstance(s, _cs.PcaFactor):
+                own(missing, HISTORY)                                       # before its first fit, or not yet in one
             if isinstance(s, _cs.RegressionNeut):
                 usable = np.ones(shape, bool)                               # names that could enter the day's fit
                 for res in got:

@@ -17,7 +17,7 @@ from .timeseries import (
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear, ts_quantile,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
-from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut
+from .crosssection import rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, pca_factor
 from .conditional import where, coalesce
 from .groups import group, group_rank, group_demean, group_count_valid, group_std, group_sum, group_quantile, group_cross
 from .operators import log, exp, abs_, sign, sqrt, power, max_, min_
@@ -99,6 +99,7 @@ class QexParser:
             'scale': scale,
             'truncate': truncate,
             'regression_neut': regression_neut,
+            'pca_factor': pca_factor,
 
             # Conditional
             'where': where,

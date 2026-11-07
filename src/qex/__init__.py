@@ -69,7 +69,7 @@ from .timeseries import (
 
 # Cross-sectional operations
 from .crosssection import (
-    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate, RegressionNeut,
+    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate, RegressionNeut, PcaFactor, pca_factor,
     rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut,
 )
 
@@ -274,6 +274,8 @@ __all__ = [
     'Scale',
     'Truncate',
     'RegressionNeut',
+    'PcaFactor',
+    'pca_factor',
     'rank',
     'zscore',
     'demean',

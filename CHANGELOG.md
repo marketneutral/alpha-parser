@@ -58,6 +58,13 @@ Each change touches only the cases named; everywhere else the numbers are identi
   positions; such a day is now NaN, for the one-regressor form too (it gave that noise before), and
   `explain_missing` reports a new reason, `too few names`. On a cross-section of hundreds of names it never applies.
 
+- `pca_factor(x, window, k[, refit])`: each stock's beta to the k-th statistical factor of `x`, from a correlation
+  PCA across stocks on the trailing `window` days, refit every `refit` days (default 21) and held in between.
+  Components are tracked across refits (matched by overlap, signs aligned), so a factor keeps its identity; names
+  need values on 90% of the window; inside a universe only members enter the fit. Every `pca_factor` on the same `x`,
+  `window` and `refit` shares one decomposition per refit. With the joint `regression_neut`, a statistical-factor
+  residual is one line: `regression_neut(y, pca_factor(r, 252, 1), ..., pca_factor(r, 252, 5))`.
+
 The look-ahead check (`qex.adjust`) knows the new operators: `ts_quantile` keeps its input's adjustment, `exp` undoes
 `log`, and `is_finite` gives a plain number.
 

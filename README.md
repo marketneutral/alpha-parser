@@ -514,6 +514,7 @@ qex/
 - `scale(signal)` - Scale so absolute values sum to 1
 - `truncate(signal, max_weight)` - Clip values to [-max_weight, max_weight]
 - `regression_neut(y, x1, x2, ...)` - Residual of y on one or more regressors (with intercept), fit across names each day: zero mean and zero covariance with each. Several regressors are one joint fit, which nesting is not. `regression_neut(z, ts_beta_shrunk(returns(1), returns(1, 'market'), 252))` takes market beta out of z
+- `pca_factor(signal, window, k[, refit])` - Each stock's beta to the k-th statistical factor (principal component across stocks), refit every `refit` days and held
 
 > **Note:** Both `rank` and `quantile` are ascending: higher signal values produce higher ranks/buckets.
 

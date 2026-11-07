@@ -206,6 +206,7 @@ Operate across tickers for each day independently.
 | `scale(x)` | Scale so absolute values sum to 1 |
 | `truncate(x, max)` | Clip to [-max, max] |
 | `regression_neut(y, x1, x2, ...)` | Residual of y on one or more regressors (with intercept), fit across names each day |
+| `pca_factor(x, window, k[, refit])` | Each stock's beta to the k-th statistical factor of x (a principal component across stocks), refit every `refit` days (default 21) |
 
 ```python
 qex("rank(returns(20))")  # Higher return → higher rank
@@ -226,6 +227,36 @@ them at once, over the names where `y` and every regressor are valid; the residu
 with each. Nesting, `regression_neut(regression_neut(y, beta), size)`, is not the same: when `beta` and
 `size` are correlated, the second step brings back some of the beta exposure the first removed.
 Collinear regressors give the least-squares fit of smallest norm, not an error.
+
+### Statistical factors: `pca_factor`
+
+`pca_factor(x, window, k, refit)` finds the common factors of `x` (usually `returns(1)`) from the data alone, by a
+principal component analysis across stocks, and gives each stock's exposure to the k-th:
+
+```python
+qex("pca_factor(returns(1), 252, 1)")                   # each stock's beta to the first statistical factor
+qex("""let r = returns(1)
+       in regression_neut(zscore(-returns(5)), pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3))""")
+                                                         # short-term reversal with three statistical factors removed
+```
+
+- **Point in time.** At each refit date (every `refit` rows, the first once `window` rows exist) the fit uses the
+  trailing `window` rows of `x`, ending that day, and its result holds until the next refit. Before the first fit the
+  value is missing (`explain_missing`: short history).
+- **Which names.** A fit includes the names with values on at least 90% of its window (and, inside a universe, the
+  members that day); the missing days count as the name's mean. A name not in a fit has no value until the next one.
+- **Correlation PCA.** Each name is demeaned and divided by its own volatility over the window, so a few volatile
+  stocks don't make up the first components.
+- **The value is a beta.** It is the stock's beta to the k-th eigenportfolio's return, sigma_i * v_i in `x`'s units
+  (v the k-th eigenvector of the correlation matrix): the exposure a position in the stock carries to the factor, which
+  is what `regression_neut` should remove.
+- **Components keep their identity.** Each refit's components are matched to the previous refit's by overlap and
+  signed to agree, so a factor does not swap with a neighbour of similar size or flip sign from one month to the next;
+  k is the k-th largest at the first fit, followed after. The first component is signed long (the market). Where two
+  factors are equally large, any mix of them is equally a component; tracking settles on one as they separate.
+- **Cost.** One SVD of a window x names matrix per refit (about 0.1 s for 252 x 3,000). Every `pca_factor` on the same
+  `x`, `window` and `refit` shares it within a `compute_context`, so components 1 to 5 cost one decomposition. `k` is at
+  most 20.
 
 A day needs at least k + 2 valid names for k regressors. With k + 1 or fewer, the fit (an intercept and k slopes)
 passes through every point, so the residual is rounding noise (around 1e-16) that a `rank` or `zscore` would turn into

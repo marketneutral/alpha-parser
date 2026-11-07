@@ -1,7 +1,7 @@
 """Cross-sectional operations for signals."""
 
 from .signal import Signal
-from .universe import in_universe, finite_in_universe
+from .universe import in_universe, finite_in_universe, universe_members
 
 
 class Rank(Signal):
@@ -226,3 +226,131 @@ class RegressionNeut(Signal):
 def regression_neut(y: Signal, x: Signal, *more: Signal) -> RegressionNeut:
     """Create a RegressionNeut signal: y with its daily cross-sectional fit on x (and any further regressors) removed."""
     return RegressionNeut(y, x, *more)
+
+
+# --- statistical factors -------------------------------------------------------------------------
+
+PCA_MAX_COMPONENTS = 20          # components kept at each refit; pca_factor's k is at most this
+PCA_MIN_COVERAGE = 0.9           # a name enters a fit with values on at least this share of the window's days
+
+
+def _pca_fits(values, window: int, refit: int, members):
+    """The principal components of values (dates x names) refit every `refit` rows on the trailing `window` rows.
+
+    Returns [(position, names, betas)], one per refit position with a fit, in date order; betas is an m x n array,
+    row j the names' betas to the j-th eigenportfolio. Correlation PCA: each name is demeaned and divided by its
+    volatility over the window, missing days count as its mean. Components are tracked across refits (matched to the
+    previous fit's by overlap on the names both share) and signed to agree with it; the first fit is signed so that
+    its betas sum to a positive number (the first component is the market, long).
+    """
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+
+    v = values.to_numpy(dtype=float)
+    v = np.where(np.isfinite(v), v, np.nan)
+    T, N = v.shape
+    fits, prev = [], None                              # prev: (names, unit eigenvectors) of the last fit
+    for p in range(window - 1, T, refit):
+        w = v[p - window + 1:p + 1]
+        ok = np.isfinite(w).sum(axis=0) >= np.ceil(PCA_MIN_COVERAGE * window)
+        if members is not None:
+            ok &= members[p]
+        names = np.flatnonzero(ok)
+        if names.size < 3:
+            continue
+        z = w[:, names]
+        mean = np.nanmean(z, axis=0)
+        sd = np.nanstd(z, axis=0, ddof=1)
+        keep = np.isfinite(sd) & (sd > 0)
+        names, z, mean, sd = names[keep], z[:, keep], mean[keep], sd[keep]
+        if names.size < 3:
+            continue
+        z = np.nan_to_num((z - mean) / sd)
+        _, _, vt = np.linalg.svd(z, full_matrices=False)
+        comps = vt[:min(PCA_MAX_COMPONENTS, vt.shape[0])]
+        if prev is not None:
+            common, ip, inew = np.intersect1d(prev[0], names, return_indices=True)
+            if common.size >= 2:
+                overlap = prev[1][:, ip] @ comps[:, inew].T                       # previous x new
+                rows, cols = linear_sum_assignment(-np.abs(overlap))             # rows: previous slots, sorted
+                order = list(cols) + [j for j in range(comps.shape[0]) if j not in set(cols)]   # unmatched: by variance
+                signs = np.ones(comps.shape[0])
+                signs[:len(rows)] = np.where(overlap[rows, cols] < 0, -1.0, 1.0)
+                comps = comps[order] * signs[:, None]
+            else:
+                prev = None
+        if prev is None:
+            s = np.sign(comps.sum(axis=1))
+            comps = comps * np.where(s == 0, 1, s)[:, None]
+        prev = (names, comps)
+        fits.append((p, names, comps * sd))                                       # beta of x_i: sigma_i * v_i
+    return fits
+
+
+class PcaFactor(Signal):
+    """Each stock's beta to the k-th statistical factor of x: a principal component of x across stocks.
+
+    At each refit date (every `refit` rows, the first once `window` rows exist), qex runs a principal component analysis
+    of the trailing `window` rows of x, across the names with values on at least 90% of those days (and, inside a
+    universe, in it that day). It is a correlation PCA: each name is demeaned and scaled by its own volatility over the
+    window, so a few volatile stocks don't make up the first components. The value is each name's beta to the k-th
+    eigenportfolio's return, sigma_i * v_i in x's units, with v the k-th eigenvector of the correlation matrix: the
+    exposure a position in that stock carries to the factor. It is held until the next refit.
+
+    Components keep their identity across refits: each refit's components are matched to the previous ones by overlap,
+    and signed to agree with them, so k is the k-th largest at the first fit, followed after; the first component is
+    signed long the market. A name not in a fit has no value until it enters one.
+
+        regression_neut(r, pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3))
+                                           r with three statistical factors removed, r = returns(1)
+
+    Every pca_factor on the same x, window and refit shares one decomposition per refit in a compute_context.
+    Cost: one SVD of a window x names matrix per refit, about 0.1 s for 252 x 3,000.
+    """
+
+    def __init__(self, signal: Signal, window: int, k: int, refit: int = 21):
+        for name, val, low in (("window", window, 3), ("k", k, 1), ("refit", refit, 1)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < low:
+                raise ValueError(f"pca_factor() {name} must be a whole number of at least {low} (got {val!r}).")
+        if k > PCA_MAX_COMPONENTS:
+            raise ValueError(f"pca_factor() keeps the first {PCA_MAX_COMPONENTS} components; k = {k} is beyond them.")
+        self.signal = signal
+        self.window = window
+        self.k = k
+        self.refit = refit
+
+    def _basis(self, data):
+        from .context import get_context
+        from .universe import universe_token
+        values = self.signal.evaluate(data)
+        members = universe_members(values.index, values.columns)
+        ctx = get_context()
+        key = ('PcaBasis', self.signal._cache_key(), self.window, self.refit, universe_token())
+        if ctx is not None:
+            ctx.check(data)
+            if key not in ctx.cache:
+                ctx.cache[key] = _pca_fits(values, self.window, self.refit, members)
+            return values, ctx.cache[key]
+        return values, _pca_fits(values, self.window, self.refit, members)
+
+    def _compute(self, data):
+        import numpy as np
+        import pandas as pd
+        values, fits = self._basis(data)
+        T, N = values.shape
+        out = np.full((T, N), np.nan)
+        for i, (p, names, betas) in enumerate(fits):
+            end = fits[i + 1][0] if i + 1 < len(fits) else T
+            if self.k <= betas.shape[0]:
+                out[p:end, names] = betas[self.k - 1]
+        frame = pd.DataFrame(out, index=values.index, columns=values.columns)
+        return in_universe(frame)
+
+    def _cache_key(self):
+        return ('PcaFactor', self.signal._cache_key(), self.window, self.k, self.refit)
+
+
+def pca_factor(signal: Signal, window: int, k: int, refit: int = 21) -> PcaFactor:
+    """Create a PcaFactor signal: each stock's beta to the k-th principal component of signal over a trailing window,
+    refit every `refit` days (default 21) and held in between."""
+    return PcaFactor(signal, window, k, refit)
