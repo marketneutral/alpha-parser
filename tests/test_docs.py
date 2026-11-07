@@ -4,7 +4,8 @@
 - every ```qex block parses: a block is one or more expressions separated by blank lines, and each is either one
   multi-line expression or a list of one-line expressions, one per line (a `#` comment may end a line);
 - every ```python block is valid Python, and every qex("...") string literal in it parses;
-- the worked pages run end to end on synthetic data.
+- the worked pages run end to end on synthetic data;
+- every ```toy block in the operator reference evaluates on the toy data (docs/hooks/toy.py renders them at build).
 """
 
 import ast
@@ -13,6 +14,8 @@ import textwrap
 import io
 import re
 from pathlib import Path
+
+import importlib.util
 
 import pytest
 
@@ -96,3 +99,31 @@ def _complete_dataset():
 ])
 def test_worked_pages_run(page, setup):
     _run(page, _complete_dataset() if setup == "COMPLETE" else setup)
+
+
+def _toy():
+    spec = importlib.util.spec_from_file_location("toy", DOCS / "hooks" / "toy.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+TOY = _toy()
+
+
+@pytest.mark.parametrize("block, inputs", [pytest.param(b, f, id=f"{p.relative_to(DOCS)}:{i}")
+                                           for p in PAGES for i, (b, f) in enumerate(TOY.blocks(p.read_text()))])
+def test_toy_block_renders(block, inputs):
+    out = TOY.render(block, inputs)
+    assert out.count('class="toy-panel') == len([l for l in block.splitlines() if l.strip()])
+
+
+def test_every_family_page_has_an_entry_for_each_of_its_operators():
+    names = set(QexParser().functions)
+    entries = set()
+    for page in (DOCS / "language" / "ops").glob("*.md"):
+        entries |= set(re.findall(r"^### ([a-z_]+)\s*$", page.read_text(), re.M))
+    sig = set()
+    for page in (DOCS / "language" / "ops").glob("*.md"):
+        sig |= set(re.findall(r"<code>([a-z_]+)\(", page.read_text()))
+    assert sorted(names - entries - sig) == []

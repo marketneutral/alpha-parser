@@ -64,7 +64,7 @@ missing day then hides it for a year. When a window's minimum matters, ask for i
 `ts_count_events(x, period)` counts the values `x` has in its window, so it has an answer on every day once `period`
 days have passed. The other event operators (`ts_mean_events`, `ts_std_events`, `ts_sum_events`) look back over the
 last `n` values that exist, however far back, for data such as quarterly earnings. See the
-[operator reference](reference.md#events).
+[operator reference](ops/events.md).
 
 ## Point in time
 

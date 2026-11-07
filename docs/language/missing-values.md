@@ -131,6 +131,6 @@ A group operator gives a stock with no label no value, with the reason *no group
 
 ## See also
 
-- [Operator Reference](reference.md#conditions-and-missing-values): `where`, `coalesce`, `is_valid`, `is_finite`
+- [Operator Reference](ops/logic.md): `where`, `coalesce`, `is_valid`, `is_finite`
   and `None`.
 - [Group Operations](groups.md).

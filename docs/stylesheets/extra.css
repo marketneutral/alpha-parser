@@ -137,3 +137,103 @@ body, .md-typeset {
   font-size: 0.8rem;
   margin: 0;
 }
+
+/* --- Operator reference: signatures and toy panels ---------------------------------------------------------------- */
+
+.md-typeset .sig {
+  margin: -0.4em 0 0.8em;
+}
+
+.md-typeset .sig code {
+  font-size: 0.95em;
+  padding: 0.25em 0.6em;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+}
+
+.md-typeset .toy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+  margin: 1em 0 1.4em;
+}
+
+.md-typeset figure.toy-panel {
+  margin: 0;
+  padding: 0;
+  display: block;
+  width: auto;
+  max-width: none;
+}
+
+.md-typeset .toy-panel figcaption {
+  margin: 0 0 0.35em;
+  max-width: none;
+  text-align: left;
+  font-style: normal;
+}
+
+.md-typeset .toy-panel figcaption code {
+  background: none;
+  padding: 0;
+  font-size: 0.72rem;
+  color: #8b949e;
+}
+
+.md-typeset .toy-result figcaption code {
+  color: var(--md-accent-fg-color);
+}
+
+.md-typeset table.toy-table {
+  display: table;
+  border-collapse: collapse;
+  font-family: var(--md-code-font-family);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #0f141a;
+}
+
+.md-typeset .toy-result table.toy-table {
+  border-color: rgba(0, 255, 65, 0.45);
+}
+
+.md-typeset .toy-panel th,
+.md-typeset .toy-panel td {
+  padding: 0.18em 0.75em;
+  border: none;
+  text-align: right;
+  min-width: 3.2em;
+}
+
+.md-typeset .toy-panel thead th {
+  color: #8b949e;
+  font-weight: 500;
+  background: none;
+  border-bottom: 1px solid #30363d;
+  text-align: right;
+}
+
+.md-typeset .toy-panel tbody th {
+  color: #6e7681;
+  font-weight: 400;
+  text-align: left;
+  padding-right: 1em;
+}
+
+.md-typeset .toy-panel td {
+  color: #c9d1d9;
+}
+
+.md-typeset .toy-panel td.na {
+  color: #3d444d;
+}
+
+.md-typeset .toy-panel tr:nth-child(even) td,
+.md-typeset .toy-panel tr:nth-child(even) th {
+  background: rgba(255, 255, 255, 0.015);
+}

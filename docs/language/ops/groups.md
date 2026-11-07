@@ -1,0 +1,126 @@
+# Groups
+
+Like the cross-sectional operators, but within groups: each stock is compared only with the stocks sharing its label
+that day. In the [toy data](../reference.md#the-toy-data), **A** and **B** are Tech, **C** and **D** are Energy.
+
+`groups` is a group's name (`'sector'`) or any expression giving labels: `quantile(field('mcap'), 5)`,
+`coalesce(group('sector'), 'Other')`, `group_cross(...)`. A stock with no label, or outside the universe, gets no value.
+Labels given on fewer dates than the prices hold from their date until the next, never earlier.
+[Groups and Labels](../groups.md) works through them on an example.
+
+## Labels
+
+### group
+
+<p class="sig"><code>group('name')</code></p>
+
+The labels themselves. Labels can be compared with `==` and `!=`, used as `groups`, and passed through `where` and
+`coalesce`; anything else (arithmetic, `rank`) is refused when the expression is read.
+
+```toy
+group('sector')
+group('sector') == 'Tech'
+```
+
+```qex
+where(group('sector') == 'Financials', None, field('book_to_price'))    # not for banks
+```
+
+### group_cross
+
+<p class="sig"><code>group_cross(a, b, ...)</code></p>
+
+One grouping from several: each stock's labels joined with a bar, such as `'Tech|2'`.
+
+```toy
+group_cross('sector', quantile(returns(1), 2))
+```
+
+```qex
+group_demean(returns(20), group_cross('sector', quantile(field('mcap'), 3)))    # sector- and size-neutral
+```
+
+## Within each group
+
+### group_demean
+
+<p class="sig"><code>group_demean(x, groups)</code></p>
+
+`x` minus its group's mean that day: neutral to the group.
+
+```toy
+returns(1)
+group_demean(returns(1), 'sector')
+```
+
+```qex
+group_demean(returns(20), 'sector')                         # sector-neutral momentum
+group_demean(returns(20), quantile(field('mcap'), 5))       # size-neutral momentum
+```
+
+### group_rank
+
+<p class="sig"><code>group_rank(x, groups)</code></p>
+
+The percentile rank within each group, from `1/n` to 1.
+
+```toy
+returns(1)
+group_rank(returns(1), 'sector')
+```
+
+### group_quantile
+
+<p class="sig"><code>group_quantile(x, groups, n)</code></p>
+
+The bucket 1 to `n` within each group: a dependent double sort.
+
+```qex
+group_quantile(field('value'), quantile(field('mcap'), 3), 3)    # value terciles within size terciles
+```
+
+## Group statistics
+
+Every member of a group gets the group's number, even a member whose own value is missing: **C** has no volume on
+Jan 04 and still gets the Energy sum.
+
+### group_std
+
+<p class="sig"><code>group_std(x, groups)</code></p>
+
+The standard deviation across the group's stocks that day; no value for a group with only one value, as Energy on
+Jan 04.
+
+```toy
+returns(1)
+group_std(returns(1), 'sector')
+```
+
+```qex
+group_demean(returns(5), 'sector') / group_std(returns(5), 'sector')    # a z-score within each sector
+```
+
+### group_sum
+
+<p class="sig"><code>group_sum(x, groups)</code></p>
+
+The sum within the group; no value when the group has no values that day.
+
+```toy
+volume(1)
+group_sum(volume(1), 'sector')
+```
+
+```qex
+volume(1) / group_sum(volume(1), 'sector')     # each stock's share of its sector's volume
+```
+
+### group_count_valid
+
+<p class="sig"><code>group_count_valid(x, groups, period)</code></p>
+
+How many values the group's stocks have had over the last `period` days.
+
+```qex
+where(group_count_valid(field('surprise'), 'sector', 63) >= 5, group_rank(field('surprise'), 'sector'), None)
+```

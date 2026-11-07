@@ -193,11 +193,12 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 ## Documentation
 
 `docs/` (mkdocs, built with `mkdocs build --strict` in CI on every PR) has six sections: Philosophy, Language (pure qex,
-no Python; `language/reference.md` is the one-page operator reference), Examples (pure qex), Python, Data, and Python
+no Python; `language/reference.md` lists every operator in one table, and `language/ops/*.md` give each family's
+operators an entry with worked examples on toy data: ```` ```toy ```` blocks that `docs/hooks/toy.py` evaluates at build time), Examples (pure qex), Python, Data, and Python
 Examples. qex code goes in ```` ```qex ```` blocks, Python in ```` ```python ```` blocks. `tests/test_docs.py` checks that
 every operator has a reference row (two-column `| \`name(args)\` | description |`, the form qexarena's `lang.py`
 parses), that every qex block parses, that every Python block compiles and its `qex("...")` strings parse, and that the
-Quick Start and Backtesting the Examples pages run. A new operator needs a reference row.
+Quick Start and Backtesting the Examples pages run. A new operator needs a reference row and an entry (`### name`) on its family's page.
 
 ## Data Fetching
 

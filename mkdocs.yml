@@ -27,6 +27,9 @@ theme:
   icon:
     repo: fontawesome/brands/github
 
+hooks:
+  - docs/hooks/toy.py
+
 extra_css:
   - stylesheets/extra.css
 
@@ -83,7 +86,16 @@ nav:
     - Groups and Labels: language/groups.md
     - Universes: language/universes.md
     - Adjusted Data and Look-Ahead: language/adjusted-data.md
-    - Operator Reference: language/reference.md
+    - Operator Reference:
+      - All Operators: language/reference.md
+      - Data and Primitives: language/ops/data.md
+      - Math: language/ops/math.md
+      - Time Series: language/ops/time-series.md
+      - Events and State: language/ops/events.md
+      - Cross-Sectional: language/ops/cross-sectional.md
+      - Groups: language/ops/groups.md
+      - Logic and Conditions: language/ops/logic.md
+      - Calendar: language/ops/calendar.md
   - Examples:
     - About the Examples: examples/index.md
     - Momentum: examples/momentum.md

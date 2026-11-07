@@ -196,5 +196,5 @@ Like every cross-sectional operator, a group operator compares only the stocks i
 
 ## See also
 
-- [Operator Reference](reference.md#groups), for the table of every operator.
+- [Groups](ops/groups.md) in the operator reference, with a worked example of each.
 - [Missing values](missing-values.md): `None`, why a value is missing, three-valued logic and `coalesce`.

@@ -30,5 +30,5 @@ ts_count_events(field('surprise'), 252)        # how many in the last year
 Put each event on the day it became known (the announcement date, or the next trading day for an announcement after
 the close), not the period it describes: a fiscal-quarter end date would let the signal see the number weeks early.
 
-The event operators are in the [Operator Reference](../language/reference.md#events); worked signals are in
+The event operators are in the [Operator Reference](../language/ops/events.md); worked signals are in
 [Event-Driven](../examples/event-driven.md).
