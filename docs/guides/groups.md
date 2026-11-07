@@ -21,12 +21,20 @@ H has no sector label (— is missing).
 | `group_rank(x, groups)` | its percentile within its group, in (0, 1] |
 | `group_demean(x, groups)` | `x` minus its group's mean |
 | `group_quantile(x, groups, n)` | its bucket within its group, 1 (lowest) to `n` |
-| `group_sum(x, groups)` | its group's total (every member gets the same number) |
+| `group_sum(x, groups)` | its group's total (every member gets the same number; missing if the group has no values) |
 | `group_std(x, groups)` | the standard deviation of `x` across its group's members that day |
 | `group_count_valid(x, groups, period)` | how many of its group's values are present, over a rolling window |
 
 `groups` is either a group's **name** (`'sector'`, looked up in the data), or any **expression that gives each stock
 a label** (below).
+
+Every group operator works on one day's cross-section, except `group_count_valid`, which counts over a window. Each
+member gets its group's number from that day, even a member whose own value is missing. A stock with no label, or
+outside the universe, gets no value.
+
+**Labels given on fewer dates than the data** (monthly sector labels on daily prices) hold from their date until the
+next row: each day takes the latest label row on or before it, never a later one, and a day before the first row has
+no label. (Before qex 0.12.0 a missing date took the *last* row, a look-ahead.)
 
 Compare each operator with its whole-market version:
 

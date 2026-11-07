@@ -20,6 +20,23 @@ README now use that. `group_count_valid(x, g, w)` keeps its window.
 
 Before adopting this version, check stored expressions for `group_std` (qexarena issue #36).
 
+### The other group operators: three fixes that change numbers, and one that doesn't
+
+Each change touches only the cases named; everywhere else the numbers are identical.
+
+- **Labels are taken as of each date (a look-ahead fix).** When the labels have fewer dates than the data (monthly
+  sector labels on daily prices), a date without a label row took the label frame's *last* row, so a stock was
+  grouped by a label from the future. Now each date takes the latest row on or before it, and a date before the first
+  row has no group. This is in the shared label alignment, so it covers every group operator, `group_cross`,
+  `build_book`'s group neutralization and `explain_missing`. Labels given every day are unaffected.
+- **`group_sum` of a group with no values that day is missing, not 0.** 0 is a value, and a position once a book is
+  built; `group_demean` and `group_rank` already gave NaN there.
+- **Names outside the universe get NaN from `group_sum`, `group_std` and `group_count_valid`,** as every other
+  cross-sectional operator gives them. They used to get their group's number. A member whose own value is missing
+  still does.
+- **`group_count_valid` is vectorized,** with results identical to the old loop (tested against it), which took
+  about 2 s per 150 days of 3,000 names. Its window must now be at least 1.
+
 ### New operators
 
 - `exp(x)`: the inverse of `log`. With it, compounding (`exp(ts_sum(log(1 + r), n)) - 1`), a sigmoid

@@ -268,7 +268,9 @@ active; `latch(on, off)` gives it hysteresis. The [Universes guide](../guides/un
 
 Like cross-sectional, but within groups. `groups` is a group's name (`'sector'`) or any expression that gives each
 stock a label (`quantile(field('mcap'), 5)`, `coalesce(group('sector'), 'Other')`, `group_cross(...)`). A stock with
-no label is in no group and gets no value. The [Group Operations guide](../guides/groups.md) works through each one.
+no label is in no group and gets no value, and so does a stock outside the universe. Labels given on fewer dates than the
+data hold from their date until the next row (never a later row). The [Group Operations guide](../guides/groups.md)
+works through each one.
 
 `group(...)` and `group_cross(...)` give **labels**, not numbers. Labels can be compared (`==`, `!=`), used to group,
 and passed through `coalesce` and `where`; anything else (`rank(group('sector'))`, `group('sector') + 1`) is refused
@@ -282,7 +284,7 @@ when the expression is parsed, with a message saying what to write instead
 | `group_demean(x, groups)` | Demean within each group |
 | `group_quantile(x, groups, n)` | Quantile buckets within each group, 1 to n: a dependent double sort |
 | `group_std(x, groups)` | Standard deviation across the group's members that day (every member gets it) |
-| `group_sum(x, groups)` | Sum within group |
+| `group_sum(x, groups)` | Sum within group (missing when the group has no values that day) |
 | `group_count_valid(x, groups, period)` | Count non-NaN within group |
 | `group_cross(a, b, ...)` | One grouping from several: labels joined with `\|`, `'Technology\|3'` |
 

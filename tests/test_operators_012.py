@@ -237,3 +237,126 @@ def test_new_operators_in_the_adjustment_check():
     with pytest.raises(LookAhead):
         check(qex("rank(ts_quantile(close(), 20, 0.5))"), f)
     check(qex("rank(close() / ts_quantile(close(), 60, 0.5))"), f)           # a ratio over time is fine
+
+
+# --- group operators: labels as of each date, empty groups, the universe, group_count_valid ----
+
+def _moving_labels():
+    """Labels given on days 1 and 4 only; A moves from s1 to s2 on day 4."""
+    idx = pd.bdate_range("2024-01-01", periods=6)
+    # A ranks above B but below C, so its rank tells which group it is in
+    x = pd.DataFrame({"A": [5.0, 6, 7, 8, 9, 10], "B": [1.0, 2, 3, 4, 5, 6], "C": [100.0] * 6}, index=idx)
+    lab = pd.DataFrame({"A": ["s1", "s2"], "B": ["s1", "s1"], "C": ["s2", "s2"]}, index=[idx[0], idx[3]])
+    return {"close": x, "x": x, "g": lab}, idx
+
+
+@pytest.mark.parametrize("op", ["group_demean(field('x'), 'g')", "group_rank(field('x'), 'g')",
+                                "group_sum(field('x'), 'g')", "group_std(field('x'), 'g')",
+                                "group_count_valid(field('x'), 'g', 1)", "group_quantile(field('x'), 'g', 2)"])
+def test_labels_are_taken_as_of_each_date_never_from_later(op):
+    d, idx = _moving_labels()
+    out = _ev(op, d)
+    daily = d["g"].reindex(idx).ffill()                            # what the labels were known to be each day
+    expected = _ev(op, dict(d, g=daily))
+    pd.testing.assert_frame_equal(out, expected)
+    # on days 2 and 3, A is still with B in s1: it is not grouped with C by its day-4 label
+    if op.startswith("group_sum"):
+        assert out.loc[idx[1], "A"] == 6 + 2 and out.loc[idx[2], "A"] == 7 + 3
+    if op.startswith("group_rank"):
+        assert out.loc[idx[1], "A"] == 1.0                         # top of s1 (with B), not bottom of s2 (with C)
+
+
+def test_labels_before_the_first_row_mean_no_group():
+    d, idx = _moving_labels()
+    late = d["g"].iloc[1:]                                         # labels start on day 4
+    out = _ev("group_demean(field('x'), 'g')", dict(d, g=late))
+    assert out.iloc[:3].isna().all().all() and out.iloc[3:].notna().all().all()
+
+
+def test_group_cross_and_book_use_labels_as_of():
+    d, idx = _moving_labels()
+    daily = d["g"].reindex(idx).ffill()
+    size = pd.DataFrame({"A": [1] * 6, "B": [1] * 6, "C": [1] * 6}, index=idx)
+    a = _ev("group_demean(field('x'), group_cross('g', field('size')))", dict(d, size=size))
+    b = _ev("group_demean(field('x'), group_cross('g', field('size')))", dict(d, g=daily, size=size))
+    pd.testing.assert_frame_equal(a, b)
+    from evaluation import BookSettings, build_book
+    s = BookSettings(delay=0, neutralize="g", truncation=None)
+    pd.testing.assert_frame_equal(build_book(qex("field('x')"), d, s), build_book(qex("field('x')"), dict(d, g=daily), s))
+
+
+def test_group_sum_of_a_group_with_no_values_is_missing_not_zero():
+    idx = pd.bdate_range("2024-01-01", periods=2)
+    x = pd.DataFrame({"A": [1.0, NAN], "B": [2.0, NAN], "C": [5.0, 6.0], "D": [NAN, NAN]}, index=idx)
+    g = pd.DataFrame({"A": "s1", "B": "s1", "C": "s2", "D": "s3"}, index=idx)
+    out = _ev("group_sum(field('x'), 'g')", {"close": x.fillna(1), "x": x, "g": g})
+    assert out.loc[idx[0], "A"] == 3 and out.loc[idx[0], "B"] == 3
+    assert out.loc[idx[1], ["A", "B"]].isna().all()                # s1 has no values on day 2
+    assert out["D"].isna().all()                                   # s3 never has one
+    x2 = x.copy()
+    x2.loc[idx[0], "B"] = NAN
+    out2 = _ev("group_sum(field('x'), 'g')", {"close": x.fillna(1), "x": x2, "g": g})
+    assert out2.loc[idx[0], "B"] == 1                              # a member with no value still gets its group's sum
+
+
+@pytest.mark.parametrize("op", ["group_sum(field('x'), 'g')", "group_std(field('x'), 'g')",
+                                "group_count_valid(field('x'), 'g', 1)", "group_demean(field('x'), 'g')",
+                                "group_rank(field('x'), 'g')"])
+def test_names_outside_the_universe_get_no_group_value(op):
+    idx = pd.bdate_range("2024-01-01", periods=3)
+    x = pd.DataFrame({"A": [1.0, 2, 3], "B": [2.0, 4, 6], "C": [4.0, NAN, 5], "D": [7.0, 8, 9]}, index=idx)
+    g = pd.DataFrame({"A": "s", "B": "s", "C": "s", "D": "t"}, index=idx)
+    member = pd.DataFrame(True, index=idx, columns=x.columns)
+    member["B"] = False
+    d = {"close": x.fillna(1), "x": x, "g": g}
+    with compute_context(), cross_section_universe(member):
+        out = qex(op).evaluate(d)
+    assert out["B"].isna().all()                                   # outside the universe
+    if op.startswith(("group_sum", "group_count_valid")):
+        assert out.loc[idx[1], "C"] == (2.0 if op.startswith("group_sum") else 1)   # a member without a value gets it
+    with compute_context(), cross_section_universe(member):        # and B's value is left out of its group's statistics
+        a = qex(op).evaluate(d)
+    with compute_context(), cross_section_universe(member):
+        b = qex(op).evaluate(dict(d, x=x.assign(B=100.0)))
+    pd.testing.assert_frame_equal(a, b)
+
+
+def _count_valid_reference(values, group_df, window):
+    """The pre-0.12.0 loop, for labels given every day."""
+    result = pd.DataFrame(NAN, index=values.index, columns=values.columns)
+    for i, date in enumerate(values.index):
+        window_values = values.iloc[max(0, i - window + 1):i + 1]
+        date_groups = group_df.loc[date]
+        for name in date_groups.unique():
+            if pd.isna(name):
+                continue
+            mask = date_groups == name
+            result.loc[date, mask] = window_values[mask[mask].index].notna().sum().sum()
+    return result
+
+
+@pytest.mark.parametrize("window", [1, 3, 10])
+def test_group_count_valid_matches_the_old_loop(window):
+    rng = np.random.default_rng(9)
+    idx = pd.bdate_range("2023-01-01", periods=40)
+    cols = [f"S{i}" for i in range(9)]
+    x = pd.DataFrame(rng.normal(size=(40, 9)), index=idx, columns=cols).mask(rng.random((40, 9)) < 0.3)
+    x.iloc[5, 2] = np.inf                                           # an infinity counts, as in is_valid
+    g = pd.DataFrame(rng.choice(["a", "b", "c"], size=(40, 9)), index=idx, columns=cols).astype(object)
+    g.iloc[:, 8] = NAN
+    g.iloc[10:20, 0] = NAN
+    out = _ev(f"group_count_valid(field('x'), 'g', {window})", {"close": x.fillna(1), "x": x, "g": g})
+    pd.testing.assert_frame_equal(out, _count_valid_reference(x, g, window))
+
+
+def test_group_count_valid_is_fast_and_checks_its_window():
+    import time
+    rng = np.random.default_rng(10)
+    idx = pd.bdate_range("2010-01-01", periods=1000)
+    x = pd.DataFrame(rng.normal(size=(1000, 2000)), index=idx)
+    g = pd.DataFrame(rng.integers(0, 11, (1000, 2000)).astype(str), index=idx)
+    start = time.perf_counter()
+    _ev("group_count_valid(field('x'), 'g', 5)", {"close": x, "x": x, "g": g})
+    assert time.perf_counter() - start < 10                        # the loop took about 2 s for 150 days of 3,000 names
+    with pytest.raises(ValueError, match="window"):
+        qex("group_count_valid(close(), 'sector', 0)")

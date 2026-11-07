@@ -16,7 +16,10 @@ def _ref_group_apply(values, group_df, fn):
     result = pd.DataFrame(np.nan, index=values.index, columns=values.columns)
     for date in values.index:
         date_values = values.loc[date]
-        date_groups = group_df.loc[date] if date in group_df.index else group_df.iloc[-1]
+        known = group_df.loc[:date]                                  # labels as of the date: the latest row on or before it
+        if known.empty:
+            continue
+        date_groups = known.iloc[-1]
         for group_name in date_groups.unique():
             if pd.isna(group_name):
                 continue
@@ -34,7 +37,7 @@ def ref_group_demean(values, group_df):
 
 
 def ref_group_sum(values, group_df):
-    return _ref_group_apply(values, group_df, lambda g: g.sum())
+    return _ref_group_apply(values, group_df, lambda g: g.sum() if g.notna().any() else np.nan)
 
 
 def ref_decay_linear(values, period):
@@ -86,13 +89,14 @@ def test_group_ops_match_loop(messy_data, name, ref):
     ('group_demean', ref_group_demean),
     ('group_sum', ref_group_sum),
 ])
-def test_group_ops_missing_dates_use_last_row(messy_data, name, ref):
-    """Dates absent from the group frame fall back to its last row, as before."""
-    sector = messy_data['sector'].iloc[::3]                       # two dates in three are missing
+def test_group_ops_missing_dates_use_labels_as_of(messy_data, name, ref):
+    """Dates absent from the group frame take its latest row on or before them, never a later one."""
+    sector = messy_data['sector'].iloc[1::3]                      # two dates in three are missing, and the first
     data = {'close': messy_data['close'], 'sector': sector}
     got = alpha(f"{name}(close(), 'sector')").evaluate(data)
     want = ref(messy_data['close'], sector)
     pd.testing.assert_frame_equal(got, want, check_exact=False, rtol=1e-12, atol=1e-15)
+    assert got.iloc[0].isna().all()                               # before the first label row: no group
 
 
 @pytest.mark.parametrize('period', [1, 2, 5, 10, 59, 60, 61])

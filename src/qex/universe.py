@@ -116,6 +116,15 @@ def in_universe(values: pd.DataFrame) -> pd.DataFrame:
     return values.where(_mask.reindex(index=values.index, columns=values.columns, fill_value=False))
 
 
+def universe_members(index, columns) -> Optional[np.ndarray]:
+    """The current cross-sectional universe as a dates x names boolean array on these dates and names (None when
+    unrestricted). For operators that give a value to names whose own input is missing, such as group_sum, which
+    must still give NaN to names outside the universe."""
+    if _mask is None:
+        return None
+    return _mask.reindex(index=index, columns=columns, fill_value=False).to_numpy(dtype=bool)
+
+
 def finite_in_universe(values: pd.DataFrame) -> pd.DataFrame:
     """in_universe(values) with infinities also set to NaN.
 
