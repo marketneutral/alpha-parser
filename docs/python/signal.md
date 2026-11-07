@@ -1,10 +1,7 @@
-# Signal Class
+# Signals
 
-The base Signal class and evaluation methods.
-
-## Overview
-
-All qex operations produce `Signal` objects. Signals are lazy - they build a computation tree that's evaluated when you call `.evaluate()` or `.to_weights()`.
+`qex()` returns a `Signal`: the expression's tree, not yet computed. It is computed when you call `.evaluate(data)`
+or `.to_weights(data)`, and can be evaluated on any data in the [data format](../data/format.md).
 
 ## Basic Evaluation
 
@@ -17,7 +14,8 @@ signal = qex("rank(returns(20))")
 result = signal.evaluate(data)
 ```
 
-The result is a DataFrame with the same dates and tickers as your input data.
+The result is a DataFrame with the same dates and stocks as the data's `close`. An expression with no data in it,
+such as `qex("2 * 3")`, evaluates to a number.
 
 ## Portfolio Weights
 
@@ -46,11 +44,13 @@ weights = signal.to_weights(data, long_only=True)
 This clips negative weights to zero and normalizes the positive weights to sum to 1.
 
 `to_weights` only scales the signal. For a book with a delay, a universe, neutralization and
-a cap per name, use [`build_book`](evaluation.md#book-settings).
+a cap per name, use [`build_book`](books.md#book-settings).
 
-## Caching
+## Caching: `compute_context`
 
-Signals implement caching through `_cache_key()`:
+Inside a `compute_context`, every part of every expression is computed once and reused: two signals that share
+`returns(20)` compute it once, and so does an expression that uses a `let` name twice. `Backtest`, `build_book` and
+`SignalGraph` open one for you; open your own when you evaluate several signals on the same data.
 
 ```python
 from qex import compute_context
@@ -71,9 +71,13 @@ dates, starts a fresh cache. A value changed in place inside a frame the context
 values would read the whole panel at every node): after changing data in place, call `ctx.clear()` or open a new
 context.
 
+`get_context()` returns the active context, or `None`.
+
 ## Creating Custom Signals
 
-Subclass `Signal` and implement `_compute()` and `_cache_key()`:
+A custom signal is usable from Python (not from qex text, whose operators are fixed). Subclass `Signal` and implement
+`_compute()` and `_cache_key()`; the key must name everything the result depends on, since two signals with the same
+key share a cached result:
 
 ```python
 from qex import Signal

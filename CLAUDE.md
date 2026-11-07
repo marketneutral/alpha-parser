@@ -110,14 +110,14 @@ qex("let mom = returns(20), sharpe = mom / volatility(60) in rank(sharpe) * sign
 ```python
 from qex import FactorRiskModel, DEFAULT_STYLE_FACTORS, PRICE_ONLY_FACTORS
 
-# With fundamental data
-risk_model = FactorRiskModel(factors=DEFAULT_STYLE_FACTORS)
+# With fundamental data (market_cap, book_to_price); style_factors=None means DEFAULT_STYLE_FACTORS
+model = FactorRiskModel(style_factors=DEFAULT_STYLE_FACTORS)
 
 # Price-only (no fundamentals)
-risk_model = FactorRiskModel(factors=PRICE_ONLY_FACTORS)
+model = FactorRiskModel(style_factors=PRICE_ONLY_FACTORS)
 
-# Fit and get results
-results = risk_model.fit(data)
+# fit() returns the model; read factor_returns, factor_covariance, specific_risk, portfolio_risk(w)
+model.fit(data)
 ```
 
 ## Evaluation & Backtesting

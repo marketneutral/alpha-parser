@@ -59,6 +59,8 @@ plugins:
           paths: [src]
           options:
             docstring_style: google
+            docstring_options:
+              warn_missing_types: false
             show_source: false
             show_root_heading: true
             show_root_full_path: false
@@ -94,12 +96,22 @@ nav:
     - Installation: python/installation.md
     - Parsing: python/parsing.md
     - Signals: python/signal.md
+    - Books: python/books.md
     - Evaluation: python/evaluation.md
     - Universes: python/universes.md
     - Diagnostics: python/diagnostics.md
+    - Risk Model: python/risk-model.md
     - Graphs and Dask: python/distributed.md
+    - API Reference: python/api.md
   - Data:
     - Data Format: data/format.md
+    - Labels and Groups: data/labels.md
+    - The Universe Field: data/universe.md
+    - Event Data: data/events.md
+    - Large Datasets: data/lazy.md
+    - Adjusted and As-Traded Prices: data/adjusted.md
+    - Halts, Delistings and Gaps: data/gaps.md
+    - Getting Data: data/getting-data.md
   - Python Examples:
     - Quick Start: python-examples/quickstart.md
     - Backtesting: python-examples/backtesting.md
