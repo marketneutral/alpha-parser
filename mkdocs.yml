@@ -12,7 +12,7 @@ theme:
     primary: black
     accent: green
   font:
-    text: JetBrains Mono
+    text: Inter
     code: JetBrains Mono
   features:
     - navigation.instant

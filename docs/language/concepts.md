@@ -24,7 +24,7 @@ rank
 
 A part used twice, by name with `let` or written out twice, is the same part: qex recognizes it and computes it once.
 
-## Three directions an operator can work in
+## Four kinds of operator
 
 | Kind | Works | Examples | A stock's result depends on |
 |------|-------|----------|-----------------------------|

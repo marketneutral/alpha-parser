@@ -1,4 +1,4 @@
-/* Hacker aesthetic - minimalist, monospace, dark */
+/* Dark and minimal: prose in a proportional font, code in monospace */
 
 :root {
   --md-primary-fg-color: #000000;
@@ -14,9 +14,9 @@
   --md-code-fg-color: #00ff41;
 }
 
-/* Monospace everything */
-body {
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+/* Prose: proportional. Code (code, pre, kbd) keeps the theme's monospace font. */
+body, .md-typeset {
+  font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Hero styling */
