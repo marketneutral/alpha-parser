@@ -130,12 +130,45 @@ sector: the one to buy.
 rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))
 ```
 
+### 7. Long and short
+
+Sheet **Demean**: the rank minus the day's average rank. Above the average is a stock to buy, below it a stock to
+sell short, and the row adds up to zero.
+
+```text
+=Rank!B23-AVERAGE(Rank!$B23:$G23)
+```
+
+In qex: `demean(...)`.
+
+```toy data=excel tail=5
+demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector')))
+```
+
+### 8. Weights
+
+Sheet **Weights**: each number divided by the day's total, ignoring signs, so the sizes add up to 1. These are the
+portfolio weights: a weight of 0.278 on a $10 million book is $2.78 million long, and −0.278 is $2.78 million short.
+Every day the longs add up to 0.5 and the shorts to −0.5, so the book is dollar-neutral: as much bought as sold.
+
+```text
+=Demean!B23/SUMPRODUCT(ABS(Demean!$B23:$G23))
+```
+
+In qex: `scale(...)`. Notice that every day has the same six weights, ±0.278, ±0.167 and ±0.056, because ranks are
+always 1/6 to 1. The signal only decides who gets which.
+
+```toy data=excel tail=5
+scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))
+```
+
 ## The same signal in qex
 
-Now the qex side. Everything you just built, six sheets of formulas, is one line:
+Now the qex side. Everything you just built, from prices to a long-short portfolio in eight sheets of formulas, is
+one line:
 
 ```qex
-rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))
+scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))
 ```
 
 If you prefer to see the steps, give each one a name, the way each sheet has one. This is the same signal:
@@ -145,8 +178,10 @@ let daily   = returns(1),                       # sheet Returns
     week    = returns(5),                       # sheet Return5
     vol     = ts_std(daily, 20),                # sheet Vol
     score   = -week / vol,                      # sheet Score
-    neutral = group_demean(score, 'sector')     # sheet Neutral
-in rank(neutral)                                # sheet Rank
+    neutral = group_demean(score, 'sector'),    # sheet Neutral
+    ranked  = rank(neutral),                    # sheet Rank
+    centered = demean(ranked)                   # sheet Demean
+in scale(centered)                              # sheet Weights
 ```
 
 The numbers are the same too: the workbook's values match qex's to the 15th decimal place.
@@ -164,6 +199,8 @@ This page is about the writing part, and you've just read your first qex express
 | A formula over the last 20 rows, `STDEV.S(B4:B23)` | A time-series operator, `ts_std(x, 20)` |
 | `AVERAGEIFS` over the stocks in the same sector | A group operator, `group_demean(x, 'sector')` |
 | `RANK.AVG` over the day's row | A cross-sectional operator, `rank(x)` |
+| Subtracting the row's `AVERAGE` | `demean(x)` |
+| Dividing by the row's `SUMPRODUCT(ABS(...))` | `scale(x)` |
 | Starting the formulas on row 23, once there is enough history | Automatic: no value until the window has its data |
 
 ## Why write it in qex
@@ -188,7 +225,7 @@ Three small changes to try. Each is one edit to the line above.
     Change the window from 20 days to 60:
 
     ```qex
-    rank(group_demean(-returns(5) / ts_std(returns(1), 60), 'sector'))
+    scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 60), 'sector'))))
     ```
 
 **2. Bet on momentum instead: last month's winners, not last week's losers.**
@@ -197,16 +234,16 @@ Three small changes to try. Each is one edit to the line above.
     Use last month's return, and drop the minus sign, so the biggest gain ranks highest:
 
     ```qex
-    rank(group_demean(returns(20) / ts_std(returns(1), 20), 'sector'))
+    scale(demean(rank(group_demean(returns(20) / ts_std(returns(1), 20), 'sector'))))
     ```
 
 **3. Rank each stock within its own sector, instead of across all six.**
 
 ??? note "Answer"
-    `group_rank` ranks each stock against its own sector only:
+    `group_rank` ranks each stock against its own sector only, in place of `rank(group_demean(...))`:
 
     ```qex
-    group_rank(-returns(5) / ts_std(returns(1), 20), 'sector')
+    scale(demean(group_rank(-returns(5) / ts_std(returns(1), 20), 'sector')))
     ```
 
     Every sector now gets the same ranks each day, 1/3, 2/3 and 1, so the book bets the same amount inside every

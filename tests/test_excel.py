@@ -38,6 +38,8 @@ SHEETS = {
     "Score": SCORE,
     "Neutral": f"group_demean({SCORE}, 'sector')",
     "Rank": f"rank(group_demean({SCORE}, 'sector'))",
+    "Demean": f"demean(rank(group_demean({SCORE}, 'sector')))",
+    "Weights": f"scale(demean(rank(group_demean({SCORE}, 'sector'))))",
 }
 
 

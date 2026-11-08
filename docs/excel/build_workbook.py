@@ -1,6 +1,6 @@
 """Build excel-to-qex.xlsx: the Excel to qex page's signal, one sheet per step, as Excel formulas.
 
-    rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))
+    scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))
 
 The prices are the page's dataset (docs/hooks/toy.py: excel_data). Every sheet has dates down column A from row 3,
 the six stocks across columns B to G, and the sectors in row 2. Run from the repository root:
@@ -39,6 +39,11 @@ STEPS = [
     ("Rank", FIRST + STD_WINDOW,
      lambda c, r: f"=_xlfn.RANK.AVG(Neutral!{c}{r},Neutral!$B{r}:$G{r},1)/COUNT(Neutral!$B{r}:$G{r})", "0.000",
      "rank(...): the day's percentile, 1/n to 1, ties at their average rank"),
+    ("Demean", FIRST + STD_WINDOW, lambda c, r: f"=Rank!{c}{r}-AVERAGE(Rank!$B{r}:$G{r})", "0.000",
+     "demean(...): the rank minus the day's average rank; positive is long, negative is short"),
+    ("Weights", FIRST + STD_WINDOW,
+     lambda c, r: f"=Demean!{c}{r}/SUMPRODUCT(ABS(Demean!$B{r}:$G{r}))", "0.000",
+     "scale(...): the weights, divided by the day's total absolute value so long and short add up to 1"),
 ]
 
 
@@ -67,7 +72,7 @@ def build(path=OUT):
     lines = [
         "Excel to qex",
         "",
-        "rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))",
+        "scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))",
         "",
         "Each sheet is one step of the signal. Dates run down column A from row 3, stocks across columns B to G,",
         "and row 2 holds each stock's sector. Each formula is written once and filled across the grid.",
