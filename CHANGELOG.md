@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.16.0
+
+- **`gaussrank(x)`**: the day's rank mapped through the inverse normal, Φ⁻¹((r − 0.5)/n), exact (scipy's `ndtri`). A
+  z-score's shape without its outliers: robust like `rank` (only the order of x matters), on `zscore`'s scale, with a
+  normal sample's tails. Tied stocks share the average of the scores they occupy, so each day sums to zero exactly.
+  About twice `rank`'s cost (0.7 s on 3,000 stocks over five years); days with ties are averaged separately.
+- **`group_gaussrank(x, groups)`**: the same within each group; a stock alone in its group gets 0.
+- **`ts_match`'s `'path'` and `'coint'` check that their key is daily returns**, which they compound into price
+  paths. `returns(n)` with n above 1 is refused when the expression is read; a key with a value below -1, or whose
+  typical size (median absolute value) is above 0.25, when it is evaluated. That refuses ranks, z-scores, prices and
+  volumes, and accepts any daily-return-like key: `returns(1)`, excess returns, `ts_resid` residuals, PCA residuals.
+  The look-ahead check now says plainly that the key is daily returns, not a price.
+
 ## 0.15.0
 
 `ts_match`, each stock's statistical twin, and the first keyword arguments in qex. Existing expressions are unchanged.

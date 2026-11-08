@@ -143,6 +143,7 @@ Across the stocks in the universe, one day at a time. [Cross-sectional in detail
 |-----------|-------------|
 | `rank(x)` | Percentile rank among the day's stocks, from 1/n to 1, lowest first; ties share their average rank |
 | `zscore(x)` | (x − mean) / standard deviation across the day's stocks; missing when they don't vary |
+| `gaussrank(x)` | The day's rank mapped through the inverse normal, Φ⁻¹((r − 0.5)/n): a z-score's shape without its outliers; ties share the average score, so each day sums to zero |
 | `demean(x)` | x minus the day's mean |
 | `scale(x)` | Divide by the day's sum of absolute values, so they sum to 1 |
 | `quantile(x, n)` | Bucket 1 (lowest) to `n` by percentile rank |
@@ -164,6 +165,7 @@ Within groups of stocks sharing a label, one day at a time. [Groups in detail �
 | `group_cross(a, b, ...)` | One grouping from several: labels joined with a bar, `'Technology\|3'` |
 | `group_demean(x, groups)` | x minus its group's mean |
 | `group_rank(x, groups)` | Percentile rank within each group, from 1/n to 1 |
+| `group_gaussrank(x, groups)` | `gaussrank` within each group: normal scores among the group's stocks that day |
 | `group_quantile(x, groups, n)` | Bucket 1 to `n` within each group: a dependent double sort |
 | `group_std(x, groups)` | Standard deviation across the group's stocks that day; every member gets it |
 | `group_sum(x, groups)` | Sum within the group; every member gets it; missing when the group has no values that day |

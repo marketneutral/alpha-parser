@@ -82,6 +82,23 @@ returns(1)
 group_rank(returns(1), 'sector')
 ```
 
+### group_gaussrank
+
+<p class="sig"><code>group_gaussrank(x, groups)</code></p>
+
+[`gaussrank`](cross-sectional.md#gaussrank) within each group: $\Phi^{-1}((r_i - 0.5)/n)$ with $r_i$ the stock's
+rank and $n$ the number of stocks with a value in its group that day. Normal scores within each sector, summing to
+zero in each; a stock alone in its group gets 0.
+
+```toy
+returns(1)
+group_gaussrank(returns(1), 'sector')
+```
+
+```qex
+group_gaussrank(field('book_to_price'), 'sector') + group_gaussrank(returns(231), 'sector')   # sector-neutral, on one scale
+```
+
 ### group_quantile
 
 <p class="sig"><code>group_quantile(x, groups, n)</code></p>

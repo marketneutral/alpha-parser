@@ -21,6 +21,63 @@ class Rank(Signal):
         return ('Rank', self.signal._cache_key())
 
 
+def _normal_scores(frame: pd.DataFrame, codes=None) -> pd.DataFrame:
+    """Each name's normal score among the names with a value on its day (and, with codes, in its group that day):
+    Phi^-1((r - 0.5) / n) for its rank r from 1 to n. Tied names share the average of the scores they occupy, so each
+    day's (or group's) scores still sum to zero."""
+    from scipy.special import ndtri
+    T, N = frame.shape
+    if codes is None:
+        # the whole day: vectorized ranks, and the ties (if any) averaged on the days that have them
+        first = frame.rank(axis=1, method="first")
+        out = ndtri((first - 0.5).div(frame.count(axis=1), axis=0))
+        tied = (first != frame.rank(axis=1)) & frame.notna()
+        days = np.flatnonzero(tied.any(axis=1).to_numpy())
+        if len(days):
+            out.iloc[days] = _normal_scores_grouped(frame.iloc[days], None)
+        return out
+    return _normal_scores_grouped(frame, codes)
+
+
+def _normal_scores_grouped(frame: pd.DataFrame, codes) -> pd.DataFrame:
+    """_normal_scores by grouping a long table on (day, group): exact with ties, slower."""
+    from scipy.special import ndtri
+    T, N = frame.shape
+    v = frame.to_numpy(dtype=float).ravel()
+    keep = ~np.isnan(v)
+    if codes is not None:
+        keep &= (codes >= 0).ravel()
+    long = pd.DataFrame({"date": np.repeat(np.arange(T), N)[keep],
+                         "group": (np.zeros(T * N, int) if codes is None else codes.ravel())[keep],
+                         "value": v[keep]})
+    by = long.groupby(["date", "group"])["value"]
+    long["score"] = ndtri((by.rank(method="first").to_numpy() - 0.5) / by.transform("count").to_numpy())
+    scores = long.groupby(["date", "group", "value"])["score"].transform("mean").to_numpy()
+    out = np.full(T * N, np.nan)
+    out[keep] = scores
+    return pd.DataFrame(out.reshape(T, N), index=frame.index, columns=frame.columns)
+
+
+class GaussRank(Signal):
+    """Cross-sectional rank mapped through the inverse normal: Phi^-1((r - 0.5) / n).
+
+    Each day, over the names in the universe with a value, r is the rank from 1 to n (ties at their
+    average rank) and the result the normal quantile at (r - 0.5) / n. A z-score's shape without its
+    outliers: the values are those of a normal sample whatever x's distribution, and one extreme name can't
+    take the book. Tied names share the average of the scores they occupy, so every day sums to zero. An
+    infinity ranks first or last, like rank().
+    """
+
+    def __init__(self, signal: Signal):
+        self.signal = signal
+
+    def _compute(self, data):
+        return _normal_scores(in_universe(self.signal.evaluate(data)))
+
+    def _cache_key(self):
+        return ('GaussRank', self.signal._cache_key())
+
+
 class ZScore(Signal):
     """Cross-sectional z-score (standardization)."""
 
@@ -57,6 +114,11 @@ class Demean(Signal):
 def rank(signal: Signal) -> Rank:
     """Create a Rank signal."""
     return Rank(signal)
+
+
+def gaussrank(signal: Signal) -> GaussRank:
+    """Create a GaussRank signal: the day's rank mapped through the inverse normal."""
+    return GaussRank(signal)
 
 
 def zscore(signal: Signal) -> ZScore:

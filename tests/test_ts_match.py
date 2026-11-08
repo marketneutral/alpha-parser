@@ -487,3 +487,31 @@ def test_coint_prefers_the_stock_it_reverts_to_over_a_closer_correlated_decoy():
     by_coint = ev("ts_match(identifier(), returns(1), 504, metric='coint')", d).iloc[-1]
     assert all(by_corr[f"B{k}"] == f"C{k}" for k in range(K))
     assert all(by_coint[f"B{k}"] == f"A{k}" for k in range(K))
+
+
+# --- the key of 'path' and 'coint' is daily returns -------------------------------------------------------------------
+
+@pytest.mark.parametrize("metric", ["path", "coint"])
+def test_multi_day_returns_are_refused_as_a_compounded_key(metric):
+    with pytest.raises(ValueError, match=r"not returns\(5\)"):
+        qex(f"ts_match_score(returns(5), 252, metric='{metric}')")
+    qex("ts_match_score(returns(5), 252)")                              # fine for correlation
+
+
+@pytest.mark.parametrize("key, message", [
+    ("rank(returns(1))", "typical size"),
+    ("zscore(returns(1))", "below -1|typical size"),
+    ("close()", "typical size"),
+    ("returns(1) * 0 - 2", "below -1"),
+])
+def test_keys_that_cannot_be_daily_returns_are_refused(pairs_data, key, message):
+    with pytest.raises(ValueError, match=message):
+        ev(f"ts_match(returns(5), {key}, {LOOK}, metric='coint')", pairs_data)
+
+
+@pytest.mark.parametrize("key", ["returns(1)", "returns(1) - returns(1, 'market')",
+                                 f"ts_resid(returns(1), returns(1, 'market'), {LOOK})",
+                                 "regression_neut(returns(1), pca_factor(returns(1), 60, 1))"])
+def test_daily_return_like_keys_are_accepted(pairs_data, key):
+    out = ev(f"ts_match_score({key}, {LOOK}, metric='coint', min_overlap=40)", pairs_data)
+    assert out.notna().any().any()
