@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.13.0
+
+New operators for the intercept and residual of a rolling regression, and a group prior for shrunk betas. Existing
+expressions keep their values and cache keys.
+
+- **`ts_alpha(y, x, period[, min_periods])`**: the window's intercept, mean(y) − beta × mean(x), both means over the
+  days both series have a value. Written by hand with two `ts_mean`s it is wrong whenever `y` has a gap `x` doesn't.
+- **`ts_resid(y, x, period[, min_periods])`**: today's residual, y − alpha − beta × x, from the window ending today:
+  the part of today's `y` that `x` doesn't explain, the building block of residual momentum and reversal.
+- **`ts_alpha_shrunk` and `ts_resid_shrunk`**: the same with `ts_beta_shrunk`'s slope. For a fixed slope the
+  least-squares intercept is still the line through the means, so alpha_shrunk − alpha = (beta − beta_shrunk) ×
+  mean(x).
+- **A group prior for the shrunk fits**: `ts_beta_shrunk(y, x, period[, min_periods][, groups])`, and the same for
+  `ts_alpha_shrunk` and `ts_resid_shrunk`. With groups, a beta is pulled toward its own group's mean beta by that
+  group's spread; a stock with no group has no value, and a group with fewer than two betas keeps its own. Without
+  groups nothing changes, cache key included.
+
 ## 0.12.2
 
 **Numbers change** for every `Backtest` summary on a signal with a warm-up, for the better.

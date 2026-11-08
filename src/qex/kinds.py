@@ -90,8 +90,12 @@ def _check(s: Signal, seen: dict) -> str:
                 need_numbers(part, name)
         out = NUMBERS
     else:
+        groups = getattr(s, "groups", None)                       # e.g. ts_beta_shrunk's prior, by group
         for part in children(s):
-            need_numbers(part, name)
+            if part is groups:
+                _check(part, seen)
+            else:
+                need_numbers(part, name)
         out = NUMBERS
     seen[key] = out
     return out

@@ -208,7 +208,7 @@ ts_beta(returns(1), returns(1, 'market'), 252, 126)     # no value until 126 day
 
 ### ts_beta_shrunk
 
-<p class="sig"><code>ts_beta_shrunk(y, x, period[, min_periods])</code></p>
+<p class="sig"><code>ts_beta_shrunk(y, x, period[, min_periods][, groups])</code></p>
 
 `ts_beta`, pulled toward the day's average beta in proportion to its own noise (Vasicek 1973). For stock $i$, with
 $\beta_i$ its `ts_beta` from $n_i$ paired days:
@@ -232,8 +232,89 @@ This is the posterior mean of $\beta_i$ under a normal prior $N(\bar\beta, \tau^
 against $\tau^2$) keeps its own beta; a beta from a short or noisy history moves most of the way to the average.
 [Market Beta](../../examples/market-beta.md#shrinking-beta) discusses when it helps.
 
+**A prior for each group.** With `groups` (a group's name or any labels expression), $\bar\beta$ and $\tau^2$ are the
+mean and variance of the betas in the stock's own group that day: a utility's beta is pulled toward the utilities',
+not toward the market's average. A stock with no group has no value. A group with fewer than two betas that day has
+no spread to shrink by, so its stocks keep their own betas. `groups` comes last, after `min_periods` when there is
+one.
+
 ```qex
-ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
+ts_beta_shrunk(returns(1), returns(1, 'market'), 252)                  # toward the day's average beta
+ts_beta_shrunk(returns(1), returns(1, 'market'), 252, 'sector')        # toward each sector's
+ts_beta_shrunk(returns(1), returns(1, 'market'), 252, 126, 'sector')   # and a value only from 126 paired days
+```
+
+### ts_alpha
+
+<p class="sig"><code>ts_alpha(y, x, period[, min_periods])</code></p>
+
+The intercept of the same regression: the $\alpha$ of $y_t = \alpha + \beta x_t + \varepsilon_t$ over the window. A
+least-squares line goes through the two means, so over the window's paired days
+
+$$
+\alpha = \bar y - \beta \, \bar x
+$$
+
+Both means are over the days both series have a value, the same days as the beta. (Writing it by hand with two
+`ts_mean`s gets this wrong whenever `y` has a gap in the window that `x` doesn't.) Part of the window, with
+`ts_beta`'s minimum. For a stock's daily return on the market's it is the daily alpha, Jensen's alpha without the
+risk-free rate; times 252 for a year.
+
+```qex
+ts_alpha(returns(1), returns(1, 'market'), 252) * 252     # each stock's alpha over the last year, annualized
+```
+
+### ts_alpha_shrunk
+
+<p class="sig"><code>ts_alpha_shrunk(y, x, period[, min_periods][, groups])</code></p>
+
+The intercept that goes with `ts_beta_shrunk`'s slope. For a fixed slope, the least-squares intercept is still the
+line through the means:
+
+$$
+\alpha^{\text{shrunk}} = \bar y - \beta^{\text{shrunk}} \, \bar x
+$$
+
+It differs from `ts_alpha` by exactly what the shrinkage took off the beta, times the average of `x`:
+
+$$
+\alpha^{\text{shrunk}} - \alpha = (\beta - \beta^{\text{shrunk}}) \, \bar x
+$$
+
+In a rising market, a low beta shrunk up toward the average lowers the stock's alpha: part of what looked like alpha
+was low beta. `groups` is as in `ts_beta_shrunk`.
+
+```qex
+ts_alpha_shrunk(returns(1), returns(1, 'market'), 252, 'sector') * 252
+```
+
+### ts_resid
+
+<p class="sig"><code>ts_resid(y, x, period[, min_periods])</code></p>
+
+Today's residual from the window's fit, with $\alpha$ and $\beta$ from the window ending today:
+
+$$
+\varepsilon_t = y_t - \alpha - \beta \, x_t
+$$
+
+The part of today's `y` that `x` doesn't explain: for a stock's return on the market's, its idiosyncratic return. No
+value on a day `y` or `x` is missing. The fit includes today, as any rolling regression's last residual does; it
+uses nothing after today.
+
+```qex
+ts_sum(ts_resid(returns(1), returns(1, 'market'), 252), 20)       # last month's return beyond what beta explains
+```
+
+### ts_resid_shrunk
+
+<p class="sig"><code>ts_resid_shrunk(y, x, period[, min_periods][, groups])</code></p>
+
+Today's residual from `ts_beta_shrunk`'s fit: $y_t - \alpha^{\text{shrunk}} - \beta^{\text{shrunk}} x_t$. `groups` is
+as in `ts_beta_shrunk`.
+
+```qex
+-ts_sum(ts_resid_shrunk(returns(1), returns(1, 'market'), 252, 'sector'), 5)   # idiosyncratic reversal
 ```
 
 ## Exponentially weighted

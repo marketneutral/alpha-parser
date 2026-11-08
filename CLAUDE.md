@@ -51,6 +51,7 @@ PYTHONPATH=src pytest tests/ -v
 - `None` is the literal for "no value here, on purpose" (`where(cond, x, None)`); `0` is a value, and a position once a book demeans the signal. `explain_missing(signal, data, universe=...)` (`missing.py`) traces each missing cell to its reason and the node where it began
 - Every group operator works on one day's cross-section; `group_std(x, g)` is the day's spread within each group (since 0.12.0; the old `group_std(x, g, n)` window form is refused). `group_count_valid(x, g, w)` alone still counts over a window
 - `pca_factor(x, window, k[, refit=21])` is each stock's beta to the k-th statistical factor (correlation PCA across stocks, refit every `refit` rows and held, components tracked across refits); its input is an internal `PcaBasis` node (the decomposition, value a `PcaFits` list, not a frame), shared by every pca_factor on the same x, window and refit; `missing.py`, `adjust.py` and `distributed.py` special-case it
+- `ts_alpha`/`ts_resid` are the intercept and today's residual of `ts_beta`'s window fit (paired days); the `_shrunk` versions use `ts_beta_shrunk`'s slope, and all three shrunk fits take an optional group prior last, `(y, x, period[, min_periods][, groups])`; without groups `TsBetaShrunk`'s cache key is unchanged (since 0.13.0)
 - `regression_neut(y, x1, x2, ...)` with several regressors is one joint least-squares fit; with one regressor its cache key is unchanged (downstream tools hash expressions by their cache key, so keys must stay stable)
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 
@@ -63,7 +64,7 @@ PYTHONPATH=src pytest tests/ -v
 `log(x)`, `exp(x)`, `abs(x)`, `sign(x)`, `sqrt(x)`, `power(x, n)`, `max(x, y)`, `min(x, y)`
 
 ### Time-Series
-`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `ts_quantile`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ewma_var`, `ewma_cov`, `ts_beta`, `ts_beta_ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
+`ts_mean`, `ts_std`, `ts_sum`, `ts_max`, `ts_min`, `ts_var`, `ts_quantile`, `delay`, `delta`, `ts_rank`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ewma_var`, `ewma_cov`, `ts_beta`, `ts_beta_shrunk`, `ts_beta_ewma`, `ts_alpha`, `ts_alpha_shrunk`, `ts_resid`, `ts_resid_shrunk`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`
 
 ### Event-Based (for sparse data)
 `ts_mean_events`, `ts_std_events`, `ts_sum_events`, `ts_count_events`
@@ -185,6 +186,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
+- `test_ts_alpha_resid.py` - ts_alpha, ts_resid, their shrunk versions and the group prior, against direct regressions
 - `test_backtest_warmup.py` - Backtest starts on the first day the book holds a position (0.12.2)
 - `test_excel.py` - The Excel to qex workbook: its formulas are current and its values match qex
 - `test_docs.py` - The documentation: every operator documented, every qex block parses, Python blocks compile, worked pages run

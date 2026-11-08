@@ -96,7 +96,11 @@ Each stock's own history. Each operator follows one of three [window rules](ops/
 | `ts_corr(x, y, period[, min_periods])` | Correlation of `x` and `y` over the window. Part of the window |
 | `ts_cov(x, y, period[, min_periods])` | Covariance over the window. Part of the window |
 | `ts_beta(y, x, period[, min_periods])` | Least-squares slope of `y` on `x`, cov(y, x) / var(x), over the window. Part of the window |
-| `ts_beta_shrunk(y, x, period[, min_periods])` | `ts_beta`, pulled toward the day's average beta in proportion to its noise (Vasicek). Part of the window |
+| `ts_beta_shrunk(y, x, period[, min_periods][, groups])` | `ts_beta`, pulled toward the day's average beta (or with `groups`, its group's) in proportion to its noise (Vasicek). Part of the window |
+| `ts_alpha(y, x, period[, min_periods])` | Intercept of `y` on `x` over the window, mean(y) − beta × mean(x) on the paired days. Part of the window |
+| `ts_alpha_shrunk(y, x, period[, min_periods][, groups])` | The intercept that goes with `ts_beta_shrunk`'s slope. Part of the window |
+| `ts_resid(y, x, period[, min_periods])` | Today's residual, y − alpha − beta × x, from the window's fit: the part of today's `y` that `x` doesn't explain. Part of the window |
+| `ts_resid_shrunk(y, x, period[, min_periods][, groups])` | Today's residual from `ts_beta_shrunk`'s fit. Part of the window |
 
 ### Exponentially weighted
 

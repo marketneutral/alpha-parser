@@ -338,13 +338,19 @@ class TsBetaShrunk(Signal):
 
     The mean and variance are over the names with a beta that day, within the cross-sectional
     universe when one is set (see qex.universe). Every name keeps its own shrunk beta.
+
+    With groups (a group's name or any labels expression), the prior is each group's: a stock's beta
+    is pulled toward the mean beta of its own group that day, by that group's spread of betas. A
+    stock with no group has no value; a group with fewer than two betas that day has no spread to
+    shrink by, so its stocks keep their own betas.
     """
 
-    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None, groups=None):
         self.signal1 = signal1
         self.signal2 = signal2
         self.period = period
         self.min_periods = max(_get_min_periods(period, min_periods), 3)
+        self.groups = groups
 
     def _compute(self, data):
         y = self.signal1.evaluate(data)
@@ -358,13 +364,130 @@ class TsBetaShrunk(Signal):
         b = cov / vx
         resid = (vy - cov * b).clip(lower=0) * (n - 1) / (n - 2)
         se2 = resid / ((n - 1) * vx)
+        if self.groups is not None:
+            return _shrink_within_groups(b, se2, self.groups, data)
         cs = in_universe(b)                                    # the prior comes from the universe
         tau2 = cs.var(axis=1)
         w = (1 / (1 + se2.div(tau2.where(tau2 > 0), axis=0))).where(b.notna())
         return w * b + (1 - w).mul(cs.mean(axis=1), axis=0)
 
     def _cache_key(self):
-        return ('TsBetaShrunk', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
+        key = ('TsBetaShrunk', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
+        if self.groups is None:
+            return key                                          # unchanged since 0.5: expressions are hashed by it
+        from .groups import _groups_key
+        return key + (_groups_key(self.groups),)
+
+
+def _shrink_within_groups(b: pd.DataFrame, se2: pd.DataFrame, groups, data) -> pd.DataFrame:
+    """Vasicek shrinkage with each group's prior: the mean and variance of the day's betas within the stock's group
+    (members of the universe only). No group: no value. A group with fewer than two betas: the stock's own beta."""
+    from .groups import _get_group_data, _group_codes, _group_totals
+    cs = in_universe(b)
+    codes, n_groups = _group_codes(cs, _get_group_data(data, groups))
+    v = cs.to_numpy(dtype=float)
+    key, sums, counts = _group_totals(v, codes, n_groups)
+    ok = (codes >= 0) & ~np.isnan(v)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        means = sums / counts
+        dev = np.zeros(v.shape)
+        dev[ok] = (v[ok] - means[key[ok]]) ** 2
+        tau2 = np.bincount(key[ok], weights=dev[ok], minlength=sums.size) / np.where(counts >= 2, counts - 1, np.nan)
+    has = codes >= 0
+    prior_mean, prior_var = np.full(v.shape, np.nan), np.full(v.shape, np.nan)
+    prior_mean[has], prior_var[has] = means[key[has]], tau2[key[has]]
+    beta, s2 = b.to_numpy(dtype=float), se2.to_numpy(dtype=float)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        w = 1 / (1 + s2 / np.where(prior_var > 0, prior_var, np.nan))
+        out = w * beta + (1 - w) * prior_mean
+    out = np.where(has & ~(prior_var > 0), beta, out)             # no spread in the group: nothing to shrink by
+    out[~has] = np.nan
+    return pd.DataFrame(out, index=b.index, columns=b.columns)
+
+
+def _paired_means(y, x, period: int, min_periods: int):
+    """y and x on their paired days, and each one's rolling mean over those days."""
+    y, x = _paired(y, x)
+    roll = lambda v: v.rolling(period, min_periods=min_periods).mean()
+    return y, x, roll(y), roll(x)
+
+
+class TsAlpha(Signal):
+    """Rolling intercept of signal1 on signal2: the alpha of y = alpha + beta * x over the window.
+
+    Fitted on the days both have a value, like ts_beta: alpha = mean(y) - beta * mean(x), both means over
+    those paired days. Part of the window, with ts_beta's minimum. In y's units per day: for daily returns
+    on the market, the daily alpha (times 252 for a year).
+    """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
+        self.signal1 = signal1
+        self.signal2 = signal2
+        self.period = period
+        self.min_periods = _get_min_periods(period, min_periods)
+
+    def beta(self) -> Signal:
+        """The slope this fit uses; evaluated in the same compute context, so a ts_beta written alongside is shared."""
+        return TsBeta(self.signal1, self.signal2, self.period, self.min_periods)
+
+    def _fit(self, data):
+        b = self.beta().evaluate(data)
+        y, x, my, mx = _paired_means(self.signal1.evaluate(data), self.signal2.evaluate(data),
+                                     self.period, self.min_periods)
+        return y, x, b, my - b * mx
+
+    def _compute(self, data):
+        return self._fit(data)[3]
+
+    def _cache_key(self):
+        return (type(self).__name__, self.signal1._cache_key(), self.signal2._cache_key(), self.period,
+                self.min_periods)
+
+
+class TsAlphaShrunk(TsAlpha):
+    """The intercept that goes with ts_beta_shrunk's slope: alpha = mean(y) - beta_shrunk * mean(x), over the paired
+    days. For a fixed slope this is the least-squares intercept. It differs from ts_alpha by
+    (beta - beta_shrunk) * mean(x): what the shrinkage takes off the beta, the alpha picks up.
+
+    With groups, the beta is shrunk toward each group's mean, as in ts_beta_shrunk(y, x, period, groups).
+    """
+
+    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None, groups=None):
+        self.signal1 = signal1
+        self.signal2 = signal2
+        self.period = period
+        self.min_periods = max(_get_min_periods(period, min_periods), 3)
+        self.groups = groups
+
+    def beta(self) -> Signal:
+        return TsBetaShrunk(self.signal1, self.signal2, self.period, self.min_periods, self.groups)
+
+    def _cache_key(self):
+        key = super()._cache_key()
+        if self.groups is None:
+            return key
+        from .groups import _groups_key
+        return key + (_groups_key(self.groups),)
+
+
+class TsResid(TsAlpha):
+    """Today's residual of y on x from the window's fit: y - alpha - beta * x, with alpha and beta from ts_alpha and
+    ts_beta over the window ending today. The part of today's y that x doesn't explain: for a stock's return on the
+    market's, its idiosyncratic return. No value where y or x is missing today.
+    """
+
+    def _compute(self, data):
+        y, x, b, a = self._fit(data)
+        return y - a - b * x
+
+
+class TsResidShrunk(TsAlphaShrunk):
+    """Today's residual from ts_beta_shrunk's fit: y - alpha_shrunk - beta_shrunk * x. With groups, the beta is
+    shrunk toward each group's mean."""
+
+    def _compute(self, data):
+        y, x, b, a = self._fit(data)
+        return y - a - b * x
 
 
 class TsBetaEwma(Signal):
@@ -643,9 +766,52 @@ def ts_beta(signal1: Signal, signal2: Signal, period: int, min_periods: int = No
     return TsBeta(signal1, signal2, period, min_periods)
 
 
-def ts_beta_shrunk(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsBetaShrunk:
-    """Create a TsBetaShrunk signal (rolling beta, Vasicek-shrunk toward the day's cross-sectional mean)."""
-    return TsBetaShrunk(signal1, signal2, period, min_periods)
+def _shrunk_args(name: str, rest: tuple):
+    """min_periods and groups from the arguments after the period: (y, x, period[, min_periods][, groups])."""
+    from .groups import _as_groups
+    rest = list(rest)
+    min_periods = groups = None
+    if rest and isinstance(rest[0], (int, float)) and not isinstance(rest[0], bool):
+        min_periods = rest.pop(0)
+    if rest:
+        groups = rest.pop(0)
+        if isinstance(groups, (int, float)):
+            raise ValueError(f"{name}()'s last argument is its groups, a group's name ('sector') or an expression "
+                             f"giving labels, not the number {groups!r}: write {name}(y, x, period, min_periods, "
+                             f"groups)")
+        groups = _as_groups(groups)
+    if rest:
+        raise ValueError(f"{name}() takes y, x, a period, and optionally min_periods and groups "
+                         f"({name}(y, x, period[, min_periods][, groups])), not {3 + len(rest) + 2} arguments")
+    return min_periods, groups
+
+
+def ts_beta_shrunk(signal1: Signal, signal2: Signal, period: int, *rest) -> TsBetaShrunk:
+    """Create a TsBetaShrunk signal: the rolling beta, Vasicek-shrunk toward the day's mean beta, or with groups toward
+    each group's: ts_beta_shrunk(y, x, period[, min_periods][, groups])."""
+    return TsBetaShrunk(signal1, signal2, period, *_shrunk_args("ts_beta_shrunk", rest))
+
+
+def ts_alpha(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsAlpha:
+    """Create a TsAlpha signal: the rolling intercept of y on x, mean(y) - beta * mean(x) over the paired days."""
+    return TsAlpha(signal1, signal2, period, min_periods)
+
+
+def ts_alpha_shrunk(signal1: Signal, signal2: Signal, period: int, *rest) -> TsAlphaShrunk:
+    """Create a TsAlphaShrunk signal: the intercept that goes with ts_beta_shrunk's slope,
+    ts_alpha_shrunk(y, x, period[, min_periods][, groups])."""
+    return TsAlphaShrunk(signal1, signal2, period, *_shrunk_args("ts_alpha_shrunk", rest))
+
+
+def ts_resid(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsResid:
+    """Create a TsResid signal: today's y - alpha - beta * x, from the window's fit."""
+    return TsResid(signal1, signal2, period, min_periods)
+
+
+def ts_resid_shrunk(signal1: Signal, signal2: Signal, period: int, *rest) -> TsResidShrunk:
+    """Create a TsResidShrunk signal: today's residual from ts_beta_shrunk's fit,
+    ts_resid_shrunk(y, x, period[, min_periods][, groups])."""
+    return TsResidShrunk(signal1, signal2, period, *_shrunk_args("ts_resid_shrunk", rest))
 
 
 def ts_beta_ewma(signal1: Signal, signal2: Signal, halflife: int) -> TsBetaEwma:

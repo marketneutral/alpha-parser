@@ -77,6 +77,7 @@ _FREE_TS = ("TsRank", "TsArgmax", "TsArgmin", "TsCorr", "TsSkew", "TsKurt", "TsC
 _SQUARE = ("TsVar", "EwmaVar")
 _PAIR_SUM = ("TsCov", "EwmaCov")
 _PAIR_DIFF = ("TsBeta", "TsBetaShrunk", "TsBetaEwma")
+_PAIR_FIRST = ("TsAlpha", "TsAlphaShrunk", "TsResid", "TsResidShrunk")    # in y's units: y - alpha - beta * x
 _CALENDAR = ("DayOfWeek", "DayOfMonth", "MonthOfYear")
 
 
@@ -237,6 +238,9 @@ def _walk(s, fields, seen, found, mode):
     elif name in _SQUARE:
         v = w(kids[0])
         out = UNKNOWN if v.e is None or v.log else V(2 * v.e, False, None)
+    elif name in _PAIR_FIRST:
+        a, b = w(s.signal1), w(s.signal2)
+        out = UNKNOWN if a.e is None or b.e is None or a.log or b.log else V(a.e, False, None)
     elif name in _PAIR_SUM or name in _PAIR_DIFF:
         a, b = w(s.signal1), w(s.signal2)
         if a.e is None or b.e is None or a.log or b.log:

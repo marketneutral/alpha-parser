@@ -140,11 +140,36 @@ neutralization sees.
 
 - The prior variance `var(b)` is the spread of the *estimated* betas, which includes their
   noise, so it overstates the true spread and the shrinkage is a little weaker than the ideal.
-- There is one prior for all stocks. To shrink toward each sector's mean instead, compute
-  that by hand with `group_demean`, or accept the common prior.
+- By default there is one prior for all stocks. To shrink toward each sector's average beta
+  instead, give the groups: `ts_beta_shrunk(returns(1), returns(1, 'market'), 252, 'sector')`.
 - Shrinkage reduces noise in the estimate; it does not fix bias. Asynchronous trading and
   outliers still need the multi-day returns and the clipping above, and they combine:
   `ts_beta_shrunk(min(max(r, -4 * s), 4 * s), returns(1, 'market'), 252)`.
+
+## Alpha and the residual
+
+The same regression gives two more numbers. `ts_alpha` is its intercept: the return a stock earned beyond what its
+beta to the market explains, on average over the window. `ts_resid` is today's leftover: today's return minus what
+the fit predicts from today's market move.
+
+```qex
+ts_alpha(returns(1), returns(1, 'market'), 252) * 252        # last year's alpha, annualized
+ts_resid(returns(1), returns(1, 'market'), 252)              # today's idiosyncratic return
+```
+
+Residuals make better momentum and reversal signals than raw returns: a stock that rose with a rising market only
+did what its beta said, and a signal built on the residual doesn't load up on beta. Residual momentum over the past
+year, skipping the last month, scaled by the residuals' own volatility, after Blitz, Huij and Martens (2011), who
+take out three factors where this takes out the market alone:
+
+```qex
+let e = ts_resid_shrunk(returns(1), returns(1, 'market'), 252, 'sector')
+in delay(ts_sum(e, 231), 21) / ts_std(e, 252)
+```
+
+The `_shrunk` versions use the shrunk beta, and its alpha changes with it: what the shrinkage takes off the beta,
+the alpha picks up, times the market's average return over the window
+([`ts_alpha_shrunk`](../language/ops/time-series.md#ts_alpha_shrunk)).
 
 ## Taking beta out of a signal
 
@@ -202,6 +227,8 @@ truncation is undoing the hedge (rank first).
 
 ## References
 
+- Blitz, D., Huij, J. and Martens, M. (2011). Residual momentum. *Journal of Empirical
+  Finance* 18(3), 506-521.
 - Blume, M. (1971). On the assessment of risk. *Journal of Finance* 26(1), 1-10.
 - Vasicek, O. (1973). A note on using cross-sectional information in Bayesian estimation of
   security betas. *Journal of Finance* 28(5), 1233-1239.
