@@ -86,7 +86,8 @@ from .groups import (
 
 # Parser
 from .match import ts_match, ts_match_score, TsMatch, TsMatchScore, MatchSelection
-from .groups import identifier, Identifier
+from .groups import identifier, Identifier, group_gaussrank, GroupGaussRank
+from .crosssection import gaussrank, GaussRank
 from .parser import QexParser, qex, AlphaParser, alpha, compute_weights
 
 # Distributed (optional - graphviz for visualization, dask for distributed)
@@ -304,6 +305,10 @@ __all__ = [
     'ts_match_score',
     'TsMatchScore',
     'identifier',
+    'gaussrank',
+    'GaussRank',
+    'group_gaussrank',
+    'GroupGaussRank',
     'Identifier',
     'TsMatch',
     'MatchSelection',

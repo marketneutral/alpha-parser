@@ -44,6 +44,46 @@ returns(1)
 zscore(returns(1))
 ```
 
+### gaussrank
+
+<p class="sig"><code>gaussrank(x)</code></p>
+
+The day's rank mapped through the inverse of the normal distribution: a z-score's shape without its outliers. With
+$r_i$ the stock's rank from 1 to $n$ among the day's stocks with a value,
+
+$$
+\operatorname{gaussrank}(x)_i = \Phi^{-1}\!\left(\frac{r_i - 0.5}{n}\right)
+$$
+
+```toy
+returns(1)
+gaussrank(returns(1))
+```
+
+With four stocks the values are always $\Phi^{-1}$ of 1/8, 3/8, 5/8 and 7/8: ±1.150 and ±0.319. On Jan 04, with
+three, they are ±0.967 and 0.
+
+How it compares with its neighbors:
+
+| | `rank(x)` | `zscore(x)` | `gaussrank(x)` |
+|---|---|---|---|
+| Shape | uniform, from 1/n to 1 | whatever x's shape is | normal, whatever x's shape is |
+| One extreme stock | takes the top rank, no more | can dominate the day | takes the top score, no more |
+| Uses x's values | only their order | their sizes | only their order |
+| Sums to zero | no (centered on about ½) | yes | yes |
+
+So `gaussrank` keeps `rank`'s robustness (only the order matters, so any increasing transform of `x` gives the same
+result) and gives values on `zscore`'s scale, with the weight in the tails a normal sample has: the extremes count
+more than in `rank`, and no single outlier counts more than a normal sample's extreme would. That makes it the natural
+way to put several signals on one scale before combining them:
+
+```qex
+gaussrank(field('book_to_price')) + gaussrank(returns(231)) + gaussrank(-volatility(63))
+```
+
+Tied stocks share the average of the scores they occupy, so every day still sums to zero. An infinity ranks first or
+last, as in `rank`.
+
 ### demean
 
 <p class="sig"><code>demean(x)</code></p>

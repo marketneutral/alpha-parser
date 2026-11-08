@@ -182,6 +182,24 @@ class GroupRank(Signal):
         return ('GroupRank', self.signal._cache_key(), _groups_key(self.groups))
 
 
+class GroupGaussRank(Signal):
+    """gaussrank within each group: Phi^-1((r - 0.5) / n), with r the rank and n the number of names with a value
+    in the stock's group that day."""
+
+    def __init__(self, signal: Signal, groups: GroupsArg):
+        self.signal = signal
+        self.groups = _as_groups(groups)
+
+    def _compute(self, data):
+        from .crosssection import _normal_scores
+        values = in_universe(self.signal.evaluate(data))
+        codes, _ = _group_codes(values, _get_group_data(data, self.groups))
+        return _normal_scores(values, codes)
+
+    def _cache_key(self):
+        return ('GroupGaussRank', self.signal._cache_key(), _groups_key(self.groups))
+
+
 class GroupDemean(Signal):
     """Demean within groups (subtract group mean)."""
 
@@ -210,6 +228,11 @@ class GroupDemean(Signal):
 def group_rank(signal: Signal, groups: GroupsArg) -> GroupRank:
     """Create a GroupRank signal."""
     return GroupRank(signal, groups)
+
+
+def group_gaussrank(signal: Signal, groups: GroupsArg) -> GroupGaussRank:
+    """Create a GroupGaussRank signal: gaussrank within each group."""
+    return GroupGaussRank(signal, groups)
 
 
 def group_demean(signal: Signal, groups: GroupsArg) -> GroupDemean:

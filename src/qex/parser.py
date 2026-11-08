@@ -19,11 +19,11 @@ from .timeseries import (
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 from .match import ts_match, ts_match_score
-from .crosssection import (rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, pca_factor,
+from .crosssection import (gaussrank, rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, pca_factor,
     regression_alpha, regression_beta)
 from .conditional import where, coalesce
 from .groups import (group, group_rank, group_demean, group_count_valid, group_std, group_sum, group_quantile,
-                     group_cross, identifier)
+                     group_cross, identifier, group_gaussrank)
 from .operators import log, exp, abs_, sign, sqrt, power, max_, min_
 
 
@@ -112,6 +112,8 @@ class QexParser:
             'ts_match': ts_match,
             'ts_match_score': ts_match_score,
             'identifier': identifier,
+            'gaussrank': gaussrank,
+            'group_gaussrank': group_gaussrank,
             'pca_factor': pca_factor,
 
             # Conditional

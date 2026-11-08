@@ -74,10 +74,10 @@ PYTHONPATH=src pytest tests/ -v
 `ts_mean_events`, `ts_std_events`, `ts_sum_events`, `ts_count_events`
 
 ### Cross-Sectional
-`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`, `regression_neut`, `pca_factor`
+`rank`, `gaussrank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`, `regression_neut`, `regression_alpha`, `regression_beta`, `pca_factor`
 
 ### Group
-`group`, `group_rank`, `group_demean`, `group_std`, `group_sum`, `group_count_valid`
+`group`, `identifier`, `group_rank`, `group_gaussrank`, `group_demean`, `group_std`, `group_sum`, `group_count_valid`
 
 ### Sector Filtering
 Use `group()` with `where()` to filter signals by sector membership:
@@ -190,6 +190,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
+- `test_gaussrank.py` - gaussrank/group_gaussrank: the normal scores, ties averaged (each day sums to zero), the universe, groups
 - `test_ts_match.py` - ts_match semantics (point in time, no self-match, reciprocal exclusive pairs, holding, universe exits), every metric against its definition, the shared selection, identifier(), keyword arguments
 - `test_regression_coefs.py` - regression_alpha/regression_beta against per-day least squares, planted premia, the universe
 - `test_sharing.py` - Six overlapping complex signals in one context, SignalGraph and Dask: each node computed once, results as alone; contexts in parallel threads

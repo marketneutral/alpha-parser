@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0
+
+- **`gaussrank(x)`**: the day's rank mapped through the inverse normal, Φ⁻¹((r − 0.5)/n), exact (scipy's `ndtri`). A
+  z-score's shape without its outliers: robust like `rank` (only the order of x matters), on `zscore`'s scale, with a
+  normal sample's tails. Tied stocks share the average of the scores they occupy, so each day sums to zero exactly.
+  About twice `rank`'s cost (0.7 s on 3,000 stocks over five years); days with ties are averaged separately.
+- **`group_gaussrank(x, groups)`**: the same within each group; a stock alone in its group gets 0.
+
 ## 0.15.0
 
 `ts_match`, each stock's statistical twin, and the first keyword arguments in qex. Existing expressions are unchanged.
