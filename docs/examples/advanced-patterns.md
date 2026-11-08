@@ -196,7 +196,9 @@ in where(is_dd, sig * 0.5, sig)
 ```
 
 `delay(sig, 1) * returns(1)` is yesterday's position in the stock times today's return: the
-daily P&L of that one position, per unit of signal. Its trailing one-year sum is compared
+daily P&L of that one position, per unit of signal. The `delay` is the P&L accounting that
+`Backtest` does automatically (each day's weights earn the next day's return); it is needed
+here only because the P&L is built inside the expression. Its trailing one-year sum is compared
 with its peak in absolute terms (a percentage of a peak fails when the peak is near zero or
 negative). This works stock by stock; the P&L of the whole book is not visible inside an
 expression.

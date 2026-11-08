@@ -183,7 +183,9 @@ Using the same day's return would be cheating, trading on prices you couldn't ha
 =Weights!B23*Returns!B24
 ```
 
-In qex this is `delay(weights, 1) * returns(1)`: yesterday's weights times today's returns. A positive number made
+In qex this is `delay(weights, 1) * returns(1)`: yesterday's weights times today's returns. You write this pairing
+only because this page builds the P&L by hand; `Backtest` does it for you, pairing each day's weights with the next
+day's return, so a signal never needs a `delay` to be honest. A positive number made
 money, whichever side the position was on: a short (negative weight) in a falling stock (negative return) is a
 gain.
 

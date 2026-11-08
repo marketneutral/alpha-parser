@@ -50,7 +50,18 @@ Each operation snaps together like lego. Cross-sectional ranks, validity masks, 
 
 ### No lookahead by construction
 
-A common source of backtest errors is accidentally using future data. qex rules this out by design: every operation looks only backward in time, and `delay()` refuses a negative lag. There's no way to write an expression that peeks at tomorrow's price.
+A common source of backtest errors is accidentally using future data. qex rules this out by design: every operation looks only backward in time, and `delay()` refuses a negative lag. There's no way to write an expression that peeks at tomorrow's price. (One exception lives in the data rather than
+the language: an adjusted price *level* carries later corporate actions, and `qex.adjust.check` flags it; see
+[Adjusted Data and Look-Ahead](language/adjusted-data.md).) `Backtest` pairs each day's weights with the *next*
+day's return, so you never lag a signal to keep it honest.
+
+You will still see `delay` in examples, for other reasons:
+
+- **Measurement.** A factor's daily return regresses today's returns on characteristics known at yesterday's close
+  (`regression_beta(returns(1), delay(z, 1))`): what a portfolio formed before the day earned during it.
+- **Conventions.** Momentum skips the last month, `delay(returns(252), 20)`.
+- **Hand-built P&L.** Inside an expression, `delay(w, 1) * returns(1)` is a position's P&L, the pairing `Backtest`
+  does on its own.
 
 One thing the language cannot decide for you is *when* you trade on a value. A signal computed from today's close can't be traded at that same close in practice; build the book with `delay=1` (see [Backtesting](python-examples/backtesting.md#book-settings-finding-alphas)) so that today's weights use only yesterday's data.
 

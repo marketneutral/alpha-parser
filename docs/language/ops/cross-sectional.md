@@ -265,8 +265,10 @@ let z    = zscore(delay(field('book_to_price'), 1)),
 in sign(ts_mean(prem, 126)) * z                        # factor momentum: lean into value while it pays
 ```
 
-Lag the characteristics (`delay(..., 1)`): regressed on characteristics from the same day, the slope rewards
-whatever moved with today's return, which is look-ahead. [Factor Premia and Timing](../../examples/factor-premia.md)
+Lag the characteristics (`delay(..., 1)`): a characteristic's return is what a portfolio formed before the day
+earned during it. Regressed on the same day's characteristics, the slope mostly measures how they move with today's
+price (today's book-to-price falls when today's price rises), not what they earned. The lag is about what is
+measured; the engine already rules out look-ahead. [Factor Premia and Timing](../../examples/factor-premia.md)
 builds factor momentum, volatility-managed blends, Fama-MacBeth weights and beta timing from these.
 
 `regression_alpha` and every `regression_beta` on the same `y` and regressors read one internal fit node, computed
