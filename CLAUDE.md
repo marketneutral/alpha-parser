@@ -193,12 +193,12 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 
 ## Documentation
 
-`docs/` (mkdocs, built with `mkdocs build --strict` in CI on every PR) has seven sections: Philosophy, Excel to qex
-(one signal as a workbook and as qex; `docs/excel/build_workbook.py --recalc` rebuilds `excel-to-qex.xlsx`, and
-`tests/test_excel.py` checks it against qex), Language (pure qex,
+`docs/` (mkdocs, built with `mkdocs build --strict` in CI on every PR) has seven sections: Philosophy, Language (pure qex,
 no Python; `language/reference.md` lists every operator in one table, and `language/ops/*.md` give each family's
 operators an entry with worked examples on toy data: ```` ```toy ```` blocks that `docs/hooks/toy.py` evaluates at build time), Examples (pure qex), Python, Data, and Python
-Examples. qex code goes in ```` ```qex ```` blocks, Python in ```` ```python ```` blocks. `tests/test_docs.py` checks that
+Examples, and last Excel to qex (a friendly walkthrough: one signal as a workbook and as qex;
+`docs/excel/build_workbook.py --recalc` rebuilds `excel-to-qex.xlsx`, and `tests/test_excel.py` checks it against
+qex). qex code goes in ```` ```qex ```` blocks, Python in ```` ```python ```` blocks. `tests/test_docs.py` checks that
 every operator has a reference row (two-column `| \`name(args)\` | description |`, a stable form that tools can parse), that every qex block parses, that every Python block compiles and its `qex("...")` strings parse, and that the
 Quick Start and Backtesting the Examples pages run. A new operator needs a reference row and an entry (`### name`) on its family's page.
 

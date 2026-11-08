@@ -90,7 +90,6 @@ validation:
 nav:
   - Home: index.md
   - Philosophy: philosophy.md
-  - Excel to qex: excel-to-qex.md
   - Language:
     - Syntax: language/syntax.md
     - How qex Evaluates: language/concepts.md
@@ -143,6 +142,7 @@ nav:
     - Backtesting the Examples: python-examples/example-backtests.md
     - Checking a Book's Beta: python-examples/beta-check.md
     - Example Scripts: python-examples/scripts.md
+  - Excel to qex: excel-to-qex.md
 
 extra:
   social:
