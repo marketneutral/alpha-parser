@@ -18,6 +18,7 @@ from .timeseries import (
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear, ts_quantile,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
+from .match import ts_match
 from .crosssection import (rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, pca_factor,
     regression_alpha, regression_beta)
 from .conditional import where, coalesce
@@ -107,6 +108,7 @@ class QexParser:
             'regression_neut': regression_neut,
             'regression_alpha': regression_alpha,
             'regression_beta': regression_beta,
+            'ts_match': ts_match,
             'pca_factor': pca_factor,
 
             # Conditional
@@ -336,15 +338,13 @@ class QexParser:
             func_name = node.func.id
             if func_name not in self.functions:
                 raise ValueError(f"Unknown function: {func_name}")
-            if node.keywords:
-                raise ValueError(f"{func_name}() takes its arguments by position, not by name: write "
-                                 f"{func_name}(x, 20), not {func_name}(x, {node.keywords[0].arg or '...'}=20)")
             if any(isinstance(a, ast.Starred) for a in node.args):
                 raise ValueError(f"{func_name}() takes its arguments written out, not *unpacked")
+            kwargs = self._keywords(func_name, node)
 
             args = _check_args(func_name, [self._visit_arg(arg) for arg in node.args])
 
-            return self.functions[func_name](*args)
+            return self.functions[func_name](*args, **kwargs)
 
         elif isinstance(node, (ast.Constant, ast.Num)):
             value = node.value if isinstance(node, ast.Constant) else node.n
@@ -364,6 +364,32 @@ class QexParser:
 
         else:
             raise ValueError(_unsupported(node))
+
+    def _keywords(self, func_name: str, node: ast.Call) -> dict:
+        """A call's keyword arguments: only operators listed in KEYWORDS take them, and only the names listed."""
+        if not node.keywords:
+            return {}
+        allowed = KEYWORDS.get(func_name)
+        first = node.keywords[0].arg
+        if allowed is None:
+            raise ValueError(f"{func_name}() takes its arguments by position, not by name: write "
+                             f"{func_name}(x, 20), not {func_name}(x, {first or '...'}=20)")
+        out = {}
+        for kw in node.keywords:
+            if kw.arg is None:
+                raise ValueError(f"{func_name}() takes its arguments written out, not **unpacked")
+            if kw.arg not in allowed:
+                raise ValueError(f"{func_name}() has no argument named {kw.arg!r}; by name it takes "
+                                 f"{', '.join(allowed)}")
+            if kw.arg in out:
+                raise ValueError(f"{func_name}()'s {kw.arg} is given twice")
+            out[kw.arg] = self._visit_arg(kw.value)
+        positional = len(node.args)
+        order = POSITIONAL_ORDER.get(func_name, ())
+        for name in out:
+            if name in order and order.index(name) < positional:
+                raise ValueError(f"{func_name}()'s {name} is given both by position and by name")
+        return out
 
     def _visit_arg(self, node: ast.AST) -> Any:
         """Visit argument node - could be Signal, variable, or literal."""
@@ -426,6 +452,15 @@ def _collapse_whitespace(expression: str) -> str:
 # What each operator's constant arguments must be, by position: a window of days (a whole number, at least 1), a lag
 # (whole, at least 0), a count (whole, at least 1), a name (a quoted string), a half-life (a number above 0), a level in
 # [0, 1], a winsorizing level in [0, 0.5], a positive number. "x" is an expression and is not checked here.
+# Operators that take keyword arguments, and the names they take by name. Every other operator takes its arguments by
+# position only. (Since 0.15.0; ts_match's five options would be unreadable by position.)
+KEYWORDS = {
+    "ts_match": ("metric", "within", "matching", "rebalance", "min_overlap"),
+}
+POSITIONAL_ORDER = {
+    "ts_match": ("value", "key", "lookback", "metric", "within", "matching", "rebalance", "min_overlap"),
+}
+
 _ARG_RULES = {
     "returns": ("window", "name"), "volatility": ("window", "name"), "volume": ("window",), "adv": ("window",),
     "field": ("name",), "group": ("name",),

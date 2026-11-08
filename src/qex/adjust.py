@@ -238,6 +238,19 @@ def _walk(s, fields, seen, found, mode):
     elif name in _SQUARE:
         v = w(kids[0])
         out = UNKNOWN if v.e is None or v.log else V(2 * v.e, False, None)
+    elif name == "MatchSelection":
+        # similarity by correlation (or of ranks, or cosine) ignores each stock's scale, so a key may be an adjusted
+        # level; a distance compares levels across stocks, so then the key must not be one
+        k = w(s.key)
+        if s.metric in ("euclidean", "manhattan"):
+            need_free(k, s.key, "ts_match()'s distance")
+        if isinstance(s.groups, Signal):
+            w(s.groups)
+        out = UNKNOWN
+    elif name == "TsMatch":                                     # another stock's value, read into this one's column
+        w(s.selection)
+        need_free(w(s.value), s.value, "ts_match()")
+        out = FREE
     elif name in ("TsFit", "RegressionFit"):                    # an internal fit: its inputs are walked
         for k in kids:
             w(k)

@@ -38,11 +38,12 @@ from . import groups as _gr
 from . import primitives as _pr
 from . import timeseries as _ts
 from . import universe as _uni
+from . import match as _match
 from .context import compute_context, get_context
 from .operators import Constant, NoneValue
 from .signal import Signal
 
-PRESENT, NO_DATA, OUTSIDE, HISTORY, EXCLUDED, NO_GROUP, CALC, INFINITE, TOO_FEW = range(9)
+PRESENT, NO_DATA, OUTSIDE, HISTORY, EXCLUDED, NO_GROUP, CALC, INFINITE, TOO_FEW, NO_MATCH = range(10)
 REASONS = {
     NO_DATA: "no data",
     OUTSIDE: "outside the universe",
@@ -52,6 +53,7 @@ REASONS = {
     CALC: "calculation error",
     INFINITE: "infinite value",
     TOO_FEW: "too few names",
+    NO_MATCH: "no twin",
 }
 _CROSS = tuple(c for c in vars(_cs).values() if isinstance(c, type) and issubclass(c, Signal) and c.__module__ == _cs.__name__)
 _GROUP_OPS = tuple(c for c in vars(_gr).values() if isinstance(c, type) and issubclass(c, Signal)
@@ -103,6 +105,15 @@ def label(signal: Signal, nested: bool = False) -> str:
         if name == "RegressionBeta":
             args.append(str(signal.j))
         return f"{_snake(name)}({', '.join(args)})"
+    if name in ("TsMatch", "MatchSelection"):            # written ts_match(value, key, lookback, options); the selection is internal
+        sel = signal.selection if name == "TsMatch" else signal
+        args = ([label(signal.value)] if name == "TsMatch" else []) + [label(sel.key), str(sel.lookback)]
+        defaults = {"metric": "corr", "within": None, "matching": "nearest", "rebalance": 21, "min_overlap": sel.lookback}
+        for opt, v in (("metric", sel.metric), ("within", sel.groups), ("matching", sel.matching),
+                       ("rebalance", sel.rebalance), ("min_overlap", sel.min_overlap)):
+            if v != defaults[opt] if not isinstance(v, Signal) else True:
+                args.append(f"{opt}={label(v) if isinstance(v, Signal) else repr(v)}")
+        return f"{'ts_match' if name == 'TsMatch' else 'match_selection'}({', '.join(args)})"
     if name in ("PcaFactor", "PcaBasis"):               # written pca_factor(x, window, k[, refit]); the basis is internal
         basis = signal.basis if name == "PcaFactor" else signal
         args = [label(basis.signal), str(basis.window)] + ([str(signal.k)] if name == "PcaFactor" else [])
@@ -286,6 +297,17 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
                     own(mask, EXCLUDED)                                     # the where that chose None
                 else:
                     inherit(mask, res)
+            own(missing, CALC)
+        elif isinstance(s, _match.TsMatch):
+            # no twin, or the twin's value is missing (its reason, read from the twin's cell)
+            peers = s.selection.evaluate(data).peers
+            own(missing & (peers < 0), NO_MATCH)
+            rv = results[s.value._cache_key()]
+            rows = np.arange(shape[0])[:, None]
+            col = np.maximum(peers, 0)
+            twin_code, twin_cause, twin_origin = rv[0][rows, col], rv[1][rows, col], rv[2][rows, col]
+            take = missing & (peers >= 0) & (code == PRESENT) & (twin_code != PRESENT)
+            code[take], cause[take], origin[take] = twin_code[take], twin_cause[take], twin_origin[take]
             own(missing, CALC)
         elif isinstance(s, (_cs.RegressionAlpha,)):
             # one number per day for every name: missing only on a day with no fit, for too few names
