@@ -151,8 +151,9 @@ in rank(neutral)                                # sheet Rank
 
 The numbers are the same too: the workbook's values match qex's to the 15th decimal place.
 
-You don't type this into Excel. You hand it to qex together with your price data, and qex fills in every stock and
-every day. The [Quick Start](python-examples/quickstart.md) shows how.
+You don't type this into Excel. The line is the whole idea, written down; running it on real prices takes a few
+lines of Python, which the [Quick Start](python-examples/quickstart.md) shows, or a colleague who already runs qex.
+This page is about the writing part, and you've just read your first qex expression.
 
 ## The translation
 
@@ -165,21 +166,56 @@ every day. The [Quick Start](python-examples/quickstart.md) shows how.
 | `RANK.AVG` over the day's row | A cross-sectional operator, `rank(x)` |
 | Starting the formulas on row 23, once there is enough history | Automatic: no value until the window has its data |
 
-## What qex does for you
+## Why write it in qex
 
-The workbook works because its data is clean. Real data isn't, and this is where a spreadsheet gets hard:
+The workbook works because its data is tidy. Real data isn't, and that's where writing the idea in qex pays off:
 
-- **A stock that didn't trade.** A blank price breaks `=B23/B22-1`. qex leaves that day's return empty, and the next
-  day's return spans the gap. See [Missing Values](language/missing-values.md).
-- **Looking ahead by accident.** One formula that points a row down uses tomorrow's price, and the backtest looks
-  wonderful. qex has no way to refer to the future.
-- **Size.** 3,000 stocks over 20 years is 15 million cells a sheet. qex evaluates the expression in seconds.
-- **Changing your mind.** A 60-day volatility, or industries instead of sectors, is one edit in qex, not a rebuilt
+- **A stock that didn't trade.** A blank price breaks `=B23/B22-1`. In qex, that day's return is simply missing, and
+  the next day's return spans the gap. See [Missing Values](language/missing-values.md).
+- **Looking ahead by accident.** In a spreadsheet, one formula that points a row down quietly uses tomorrow's price.
+  The qex language has no way to say "tomorrow".
+- **Size.** 3,000 stocks over 20 years is 15 million cells a sheet. The qex line stays one line.
+- **Changing your mind.** A 60-day volatility, or industries instead of sectors, is one edit, not a rebuilt
   workbook.
 
-## Next
+## Your turn
 
+Three small changes to try. Each is one edit to the line above.
+
+**1. Use three months of volatility instead of one.**
+
+??? note "Answer"
+    Change the window from 20 days to 60:
+
+    ```qex
+    rank(group_demean(-returns(5) / ts_std(returns(1), 60), 'sector'))
+    ```
+
+**2. Bet on momentum instead: last month's winners, not last week's losers.**
+
+??? note "Answer"
+    Use last month's return, and drop the minus sign, so the biggest gain ranks highest:
+
+    ```qex
+    rank(group_demean(returns(20) / ts_std(returns(1), 20), 'sector'))
+    ```
+
+**3. Rank each stock within its own sector, instead of across all six.**
+
+??? note "Answer"
+    `group_rank` ranks each stock against its own sector only:
+
+    ```qex
+    group_rank(-returns(5) / ts_std(returns(1), 20), 'sector')
+    ```
+
+    Every sector now gets the same ranks each day, 1/3, 2/3 and 1, so the book bets the same amount inside every
+    sector. In the original, a sector whose stocks moved far apart from each other gets the most extreme ranks, and
+    the biggest bets. Both are sensible; they answer "how much should a big move inside a sector count?" differently.
+
+## Where to go next
+
+- [Syntax](language/syntax.md): the handful of rules the language has.
+- [Operator Reference](language/reference.md): every operator, most with a small worked example like the tables above.
+- [Examples](examples/index.md): momentum, mean reversion, pairs, earnings and more, each explained in plain words.
 - [Philosophy](philosophy.md): why signals are written this way.
-- [Syntax](language/syntax.md) and the [Operator Reference](language/reference.md): the whole language, with a worked
-  example for most operators.
-- [Examples](examples/index.md): momentum, mean reversion, pairs, earnings and more, written in qex.
