@@ -203,11 +203,15 @@ Three small changes to try. Each is one edit to the line above.
 **3. Rank each stock within its own sector, instead of across all six.**
 
 ??? note "Answer"
-    `group_rank` ranks within each sector and does the sector-neutral step at the same time:
+    `group_rank` ranks each stock against its own sector only:
 
     ```qex
     group_rank(-returns(5) / ts_std(returns(1), 20), 'sector')
     ```
+
+    Every sector now gets the same ranks each day, 1/3, 2/3 and 1, so the book bets the same amount inside every
+    sector. In the original, a sector whose stocks moved far apart from each other gets the most extreme ranks, and
+    the biggest bets. Both are sensible; they answer "how much should a big move inside a sector count?" differently.
 
 ## Where to go next
 
