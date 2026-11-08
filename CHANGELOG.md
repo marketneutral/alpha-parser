@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.15.0
+
+`ts_match`, each stock's statistical twin, and the first keyword arguments in qex. Existing expressions are unchanged.
+
+- **`ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21,
+  min_overlap=None)`**: for each stock, the stock whose `key` over the last `lookback` days was most alike, and that
+  twin's `value`. Twins are chosen every `rebalance` days from the days before (point in time), among stocks in the
+  universe and, with `within`, in the same group; never the stock itself; held in between, and ended when either
+  stock leaves the universe. Metrics: `'corr'` (who moves with the stock) and `'euclidean'` (who is closest on the
+  key, such as z-scored fundamentals), each over the pair's shared days; `'path'`, Gatev, Goetzmann and
+  Rouwenhorst's distance between price paths compounded from 100 at each window's start; and `'coint'`, Engle-Granger:
+  the Dickey-Fuller t of the pair's spread, so pairs are chosen by evidence that they revert to each other (pairs
+  with a non-positive hedge ratio are not considered). For `'path'` and `'coint'` the key is daily returns. In a test
+  against decoys that correlate more closely day to day but drift away, `'coint'` found every true partner and
+  `'corr'` none. `'exclusive'` pairs the group off into mutual twins. Designed and tested as a
+  mock in qexarena's notebook "ts_match: mocking up a new operator in Python"; the semantics tests are ported.
+- **The selection is one internal node**, `MatchSelection`, shared by every `ts_match` and `ts_match_score` on the
+  same key and options whatever its value: a twin's return, volume, identifier and score cost one selection.
+- **`ts_match_score(key, lookback, ...)`**: how alike each stock and its twin were when chosen, `ts_match`'s
+  arguments without the value. It reads the same selection, so it costs nothing more: the correlation, the distance,
+  or for `'coint'` the Dickey-Fuller t, or with `stat=` the pair's hedge ratio, half-life or spread width; held
+  between rebalances, none without a twin.
+- **`identifier()`**: each stock's own identifier, as a label. `ts_match(identifier(), key, 252)` is each stock's
+  twin's identifier, the way to see and check the twins; `ts_match` gathers labels as labels.
+- **Keyword arguments**, for `ts_match` and `ts_match_score` only: their options can be given by name, in any order. Every other operator
+  still takes its arguments by position. Writing an option at its default is the same expression (and cache key) as
+  leaving it out.
+- A missing cell with no twin is reported as "no twin"; a missing twin value, with the twin's own reason.
+
 ## 0.14.0
 
 The coefficients of the cross-sectional regression, and the graph and caching fixes found while testing many signals

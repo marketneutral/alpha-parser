@@ -47,6 +47,7 @@ qex records why each missing value is missing, and the node of the expression wh
 | calculation error | NaN from finite inputs: `0 / 0`, `log` or `sqrt` of a negative, a z-score with no spread |
 | infinite value | a division by zero |
 | too few names | a day with too few names for a cross-sectional fit: `regression_neut` with k regressors needs k + 2 |
+| no twin | `ts_match` (or `ts_match_score`) found no twin for the stock: no eligible stock, too short a shared history, or left out of the pairing |
 
 A missing input passes its reason on; a node gives its own reason only where all its inputs had values. From Python,
 `explain_missing` gives the report ([Diagnostics](../python/diagnostics.md#why-a-value-is-missing-explain_missing)).

@@ -164,7 +164,7 @@ def _walk(s, fields, seen, found, mode):
             out = V(d["adjustment"], False, UNITS.get(d.get("unit")))
     elif name in _CALENDAR:
         out = FREE
-    elif isinstance(s, (gr.Group, gr.GroupCross)):
+    elif isinstance(s, (gr.Group, gr.GroupCross, gr.Identifier)):
         out = UNKNOWN
     elif isinstance(s, pr.Returns) or isinstance(s, pr.Volatility):
         out = FREE
@@ -238,6 +238,22 @@ def _walk(s, fields, seen, found, mode):
     elif name in _SQUARE:
         v = w(kids[0])
         out = UNKNOWN if v.e is None or v.log else V(2 * v.e, False, None)
+    elif name == "MatchSelection":
+        # similarity by correlation ignores each stock's scale, so a key may be an adjusted
+        # level; a distance compares levels across stocks, so then the key must not be one
+        k = w(s.key)
+        if s.metric in ("euclidean", "path", "coint"):            # 'path' and 'coint' compound the key: returns
+            need_free(k, s.key, "ts_match()'s distance")
+        if isinstance(s.groups, Signal):
+            w(s.groups)
+        out = UNKNOWN
+    elif name == "TsMatchScore":                                # a similarity: a pure number
+        w(s.selection)
+        out = FREE
+    elif name == "TsMatch":                                     # another stock's value, read into this one's column
+        w(s.selection)
+        need_free(w(s.value), s.value, "ts_match()")
+        out = FREE
     elif name in ("TsFit", "RegressionFit"):                    # an internal fit: its inputs are walked
         for k in kids:
             w(k)

@@ -1,0 +1,429 @@
+# Statistical Twins
+
+Every other cross-sectional operator compares a stock with a **crowd**: the market (`demean`), its sector
+(`group_demean`), all its peers at once (`rank`). `ts_match` compares a stock with **one particular other stock**: its
+closest relative, chosen from history, and `ts_match_score` says how close.
+
+**Reference.** Gatev, E., Goetzmann, W. N. and Rouwenhorst, K. G. (2006). Pairs trading: Performance of a
+relative-value arbitrage rule. *Review of Financial Studies* 19(3), 797-827. The panels on this page run on the
+[Excel to qex dataset](../../excel-to-qex.md): six stocks over 30 days, AAA, BBB and CCC in Tech, DDD, EEE and FFF in
+Energy.
+
+### ts_match
+
+<p class="sig"><code>ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)</code></p>
+
+For each stock, find the stock whose history of `key` over the last `lookback` days is most similar (its **twin**),
+and return the twin's `value`. Like every operator it gives an ordinary dates × stocks table: the cell for a stock
+holds its twin's value that day.
+
+```toy data=excel tail=5
+returns(5)
+ts_match(returns(5), returns(1), 15, within='sector', rebalance=5)
+```
+
+Read the result column by column. AAA's twin is BBB, so AAA's cell holds BBB's five-day return; CCC's twin is AAA, so
+CCC's cell holds AAA's. The windows here are short so the toy data has twins; in practice `lookback` is a year.
+
+## Arguments
+
+`ts_match` and `ts_match_score` are the qex operators that take **arguments by name**: after the first three, write
+any option as `name=value`, in any order, and leave out the ones you don't need. Writing an option at its default is the same
+expression as leaving it out.
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `value` | | What to read from the twin: any expression, numbers or labels |
+| `key` | | The expression whose history decides who is alike |
+| `lookback` | | How many days of `key` to compare, at least 2 |
+| `metric` | `'corr'` | How to measure alike: `'corr'`, `'euclidean'`, `'path'`, `'coint'` |
+| `within` | `None` | A group the twin must share: a group's name (`'sector'`) or any labels expression |
+| `matching` | `'nearest'` | `'nearest'`: each stock's closest; `'exclusive'`: reciprocal pairs that don't overlap |
+| `rebalance` | `21` | Choose twins every this many days, and hold them in between |
+| `min_overlap` | `lookback` | The fewest days a pair must share for it to be compared, at least 2 |
+
+```qex
+ts_match(returns(5), returns(1), 252)                                            # the defaults
+ts_match(returns(5), returns(1), 252, within='sector', matching='exclusive')     # options by name
+ts_match(returns(5), returns(1), 504, metric='coint', rebalance=63, min_overlap=480)
+```
+
+The options can also go by position, in the order above, but a name says what it is.
+
+## How a twin is chosen
+
+1. **On a rebalance day.** The first is the day `lookback` days of data exist; then every `rebalance` days.
+2. **From the past only.** The window is the `lookback` days *before* the rebalance day: twins used on day $t$ are
+   chosen from `key` up to day $t - 1$, so a twin can't be chosen for having moved with the stock on the day it is
+   used.
+3. **Among the eligible stocks.** A candidate must be in the universe that day ([Universes](../universes.md)), share
+   the stock's group when `within` is given (the group on the rebalance day), and have at least `min_overlap` days in
+   the window on which both it and the stock have a value of `key`. A stock is never its own twin.
+4. **The most similar**, by `metric` (below), and by `matching`: the stock's closest, or a pairing of the whole
+   group.
+5. **Held until the next rebalance.** A twin doesn't change between rebalances, except that a match ends the day
+   either stock leaves the universe.
+
+Then each day, the stock's cell is its twin's `value` **that day**: today's value, like any other input.
+
+## Measuring alike: the metric
+
+Each pair is compared over the days in the window on which both have a value, $n$ of them. With $x$ and $y$ the two
+stocks' `key` on those days:
+
+| `metric` | Similarity | Compares |
+|---|---|---|
+| `'corr'` | $\displaystyle \frac{\sum (x - \bar x)(y - \bar y)}{\sqrt{\sum (x - \bar x)^2 \sum (y - \bar y)^2}}$ | how they move together, whatever their size |
+| `'euclidean'` | $\displaystyle -\sqrt{\tfrac{1}{n} \sum (x - y)^2}$ | how far apart they are, day by day |
+| `'path'` | $\displaystyle -\sqrt{\tfrac{1}{n} \sum (P^x_t - P^y_t)^2}$, with $P_t = 100 \prod_{s \le t} (1 + x_s)$ | how far apart their prices travelled from a common start: the key is daily returns, compounded from 100 at the window's start ([below](#pairs-by-distance-gatev-goetzmann-and-rouwenhorst)) |
+| `'coint'` | the Dickey-Fuller $t$ of their spread, negated | whether their spread reverts: the key is daily returns, compounded into log prices; Engle-Granger ([below](#pairs-that-revert-to-each-other-coint)) |
+
+Higher is closer, so the distances (and the $t$) are negated. They are divided by $n$, so a pair with a few gaps isn't
+favored over one with none.
+
+Each metric answers a different question, and `ts_match` has two jobs:
+
+- **Peers**: who is this stock most like, so its information can be read. `'corr'` asks who moves with it, day by day,
+  whatever their size. `'euclidean'` asks who is closest on whatever the key holds: on z-scored fundamentals
+  (value, leverage, margins), the nearest firm in characteristic space; on raw returns it mostly finds quiet stocks,
+  which is rarely the question.
+- **Pairs**: whose spread with it reverts, so the spread can be traded. `'coint'` tests that directly; `'path'` is the
+  classic proxy for it.
+
+## Nearest or exclusive: the matching
+
+With `'nearest'`, each stock picks its single closest stock. That choice isn't mutual: CCC's closest stock can be AAA
+while AAA's closest is BBB. A popular stock can be several stocks' twin at once.
+
+With `'exclusive'`, the group is paired off: the closest pair is matched first, then the closest pair among the
+stocks still free, and so on. Every twin is mutual, no stock is in two pairs, and in a group with an odd number of
+stocks one is left without a twin:
+
+```toy data=excel tail=5 inputs
+ts_match(identifier(), returns(1), 15, within='sector', rebalance=5)
+ts_match(identifier(), returns(1), 15, within='sector', rebalance=5, matching='exclusive')
+```
+
+In the first, CCC chose AAA, which chose BBB. In the second the pairs are mutual, and CCC and FFF, one stock too many
+in each sector, have none.
+
+Exclusive pairs make **self-contained trades**: in `returns(5) - ts_match(returns(5), …, matching='exclusive')`, each
+pair's two values are equal and opposite, so every pair is a dollar-neutral bet before the book is built. The price is
+some closeness (a stock whose best match is taken settles for its second choice) and some stability (one changed
+pair can rearrange others).
+
+## What the result holds, and when it has no value
+
+- **The twin's value today.** Not the value on the rebalance day: the twin is fixed, its value is live.
+- **No value without a twin**: no eligible stock (a group of one, too short a history, outside the universe), or the
+  pairing left the stock out.
+- **No value when the twin's value is missing**, for example a halted twin. The stock doesn't pick another twin until
+  the next rebalance.
+- **Labels gather as labels.** `ts_match(group('sector'), …)` is the twin's sector. What you can do with the result
+  depends on what `value` is, like `where` and `coalesce`.
+
+[Missing Values](../missing-values.md) reports a cell with no twin as **no twin**, and a missing twin value with the
+twin's own reason.
+
+## Seeing the twins: `identifier()`
+
+`identifier()` is each stock's own identifier, as a label. Read through `ts_match`, it is each stock's twin's
+identifier: the matches themselves, as an ordinary table.
+
+```toy data=excel tail=5 inputs
+identifier()
+ts_match(identifier(), returns(1), 15, within='sector', rebalance=5)
+```
+
+This is how to see and check the twins in a research notebook. It reads the same cached selection as every other
+`ts_match` with the same `key` and options, so looking costs nothing extra. Because the result is labels, it can be
+compared exactly:
+
+```qex
+let key = delay(returns(1), 5)
+in ts_match(identifier(), key, 252, within='sector') == ts_match(identifier(), key, 126, within='sector')
+```
+
+That is 1 where a year and its last half pick the same twin, 0 where they don't: a direct check that a match isn't one
+window's accident.
+
+### ts_match_score
+
+<p class="sig"><code>ts_match_score(key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)</code></p>
+
+How alike each stock and its twin were when the twin was chosen. It takes `ts_match`'s arguments without the `value`,
+and with the same `key` and options it reads the same selection: the score was computed while choosing, so it costs
+nothing more.
+
+```toy data=excel tail=5 inputs
+ts_match(identifier(), returns(1), 15, within='sector', rebalance=5)
+ts_match_score(returns(1), 15, within='sector', rebalance=5)
+```
+
+AAA and BBB are each other's twins, with one score, their correlation over the matching window; CCC's twin is AAA, a
+weaker match. The score is in the metric's own units:
+
+| `metric` | The score |
+|---|---|
+| `'corr'` | the correlation, from −1 to 1, higher is closer |
+| `'euclidean'`, `'path'` | the distance, 0 or more, **smaller** is closer (for `'path'`, in index points of paths that start at 100) |
+| `'coint'` | the Dickey-Fuller $t$ of the pair's spread, **more negative** is stronger reversion; or, with `stat=`, `'hedge'`, `'half_life'` or `'spread_vol'` ([below](#reading-a-pair-stat)) |
+
+Like the twin, the score is fixed at the rebalance and held until the next, and there is no score without a twin. It
+says how good the match was when chosen; whether the pair still moves together is a different question, asked of the
+recent past, `ts_corr(r, ts_match(r, key, 252), 63)`. Both are useful, and they can disagree.
+
+## Choosing the key
+
+The key decides who is alike; anything you want to compare goes into it, as ordinary qex.
+
+- **Exclude the move you trade.** To trade the last five days, match on returns that stop five days ago,
+  `delay(returns(1), 5)`; otherwise the stocks that moved together this week are chosen as twins for having done so.
+- **Take out what everyone shares.** Matching on raw returns finds stocks that share the market. Match on residuals
+  to find stocks that share something besides it:
+  `ts_resid(returns(1), returns(1, 'market'), 252)`.
+- **Put stocks on one scale** before a distance: `returns(1) / ts_std(returns(1), 63)`.
+
+## Holding and discontinuities
+
+A twin is held between rebalances, so the result is continuous between them. At a rebalance the twin can change, and
+the result jumps to a different stock's series. A rolling operator on the result, such as `ts_mean(twin, 20)` or
+`ts_corr(r, twin, 63)`, mixes two stocks across a change. That is often fine, and sometimes the point (`ts_corr(r,
+twin, 63)` checks whether the current twin still moves with the stock), but it is never one stock's history.
+
+## Sharing and cost
+
+Choosing twins is the expensive part; reading a value from them is a lookup. qex keeps the choice in an internal node
+of its own, shared by every `ts_match` and `ts_match_score` with the same `key`, `lookback`, `metric`, `within`,
+`matching`, `rebalance` and `min_overlap`, whatever its `value`. The twin's return, its volume, its identifier and the
+match's score cost one selection
+([Graphs and Dask](../../python/distributed.md#what-is-shared) shows the node).
+
+Each rebalance compares every pair within each group over the window: about $\text{lookback} \times m^2$ for a group
+of $m$ stocks. Measured on 1,500 stocks over five years with a 252-day window and monthly rebalancing:
+
+| | `within='sector'` | no groups |
+|---|---|---|
+| `'nearest'` | 1.1 s | 4.6 s |
+| `'exclusive'` | 2.3 s | 26 s |
+
+`within` is the biggest saving, and usually what you want anyway; a longer `rebalance` divides the cost. Every metric,
+`'coint'` included, is a few matrix products per group, so they cost about the same.
+
+## Look-ahead
+
+- The window ends the day before the rebalance, so a twin is chosen only from the past.
+- The result is another stock's value, compared with this stock's: like any comparison across stocks, it must not be
+  an adjusted price level ([Adjusted Data and Look-Ahead](../adjusted-data.md)). The look-ahead check flags
+  `ts_match(close(), …)`, as it flags `rank(close())`; `ts_match(returns(5), …)` is fine.
+- A key may be an adjusted price level for `'corr'`, which ignores each stock's scale, but not for `'euclidean'`,
+  which compares levels across stocks, nor for `'path'` and `'coint'`, whose key is returns.
+
+## Trading on twins
+
+**The twin that fell behind.** Pair stocks on returns that stop five days ago, and bet that a stock which outran its
+twin over the last week gives some of it back:
+
+```qex
+let key  = delay(returns(1), 5),
+    twin = ts_match(returns(5), key, 252, within='sector', matching='exclusive')
+in -(returns(5) - twin)
+```
+
+With exclusive pairs each pair is long one stock and short the other in equal measure.
+
+**In the pair's own noise.** A gap of 3% means more for two utilities than for two biotechs. Divide by the spread's
+recent volatility:
+
+```qex
+let key  = delay(returns(1), 5),
+    r    = returns(1),
+    twin = ts_match(r, key, 252, within='sector', matching='exclusive'),
+    gap  = returns(5) - ts_match(returns(5), key, 252, within='sector', matching='exclusive')
+in -gap / ts_std(r - twin, 63)
+```
+
+Both `ts_match`s share one selection.
+
+**Weighting by the match.** Trade the closest pairs hardest: weight each pair's bet by how alike it was when chosen.
+
+```qex
+let key   = delay(returns(1), 5),
+    twin  = ts_match(returns(5), key, 252, within='sector', matching='exclusive'),
+    score = ts_match_score(key, 252, within='sector', matching='exclusive')
+in -(returns(5) - twin) * max(score, 0)
+```
+
+`max(score, 0)` gives a pair that was negatively correlated no weight. With exclusive matching both stocks of a pair
+have the same score, so the pair stays dollar-neutral.
+
+**Weighting robust pairs.** A twin found by a year of correlation can be an accident. Three checks, each one line:
+the pair still moves together (`near`), the last half-year picks the same twin (`agree`), and the twin trades within a
+factor of three of the stock's volume (`liquid`). Used as weights rather than a gate, so no pair is dropped and robust
+pairs trade bigger:
+
+```qex
+let key    = delay(returns(1), 5),
+    r      = returns(1),
+    twin   = ts_match(r, key, 252, within='sector', matching='exclusive'),
+    near   = ts_corr(r, twin, 63) > 0.5,
+    agree  = ts_match(identifier(), key, 252, within='sector', matching='exclusive')
+          == ts_match(identifier(), key, 126, within='sector', matching='exclusive'),
+    liquid = abs(log(adv(20) / ts_match(adv(20), key, 252, within='sector', matching='exclusive'))) < log(3),
+    gap    = returns(5) - ts_match(returns(5), key, 252, within='sector', matching='exclusive')
+in -gap / ts_std(r - twin, 63) * (1 + near + agree + liquid)
+```
+
+Gating on all three checks at once (`where(near & agree & liquid, …, None)`) keeps only the best pairs, and usually
+too few of them: breadth is part of the edge. [Pairs Trading](../../examples/pairs-trading.md) has more pairs
+strategies, with fixed pairs.
+
+## Pairs by distance: Gatev, Goetzmann and Rouwenhorst
+
+The classic way to find pairs (Gatev, Goetzmann and Rouwenhorst, 2006): over a formation period, turn each stock's
+total returns into a price path starting at 100, and pair the stocks whose paths stayed closest, by the sum of
+squared differences day by day. That is `metric='path'`, with the key daily returns:
+
+$$
+P^i_t = 100 \prod_{s \le t} \left(1 + r^i_s\right),
+\qquad
+d_{ij} = \sqrt{\tfrac{1}{n} \sum_t \left(P^i_t - P^j_t\right)^2}
+$$
+
+over the window's days on which both have a return (a missing day is a flat day inside a path). The square root and
+the $1/n$ don't change which pairs are closest: the order is the paper's sum of squared differences.
+
+**Why it is a metric, not a key.** The paths start at 100 at the start of *each* formation window, and that start
+moves with every rebalance. A key is one series through time, so no key makes "growth of 100 since this window
+began" for every window at once: prices compare levels ($40 against $120), and an index from the start of the data
+carries each stock's whole past. The rebasing happens inside `ts_match`, window by window.
+
+The paper's procedure, in qex: a year of formation, pairs that don't overlap (`'exclusive'` pairs the closest first,
+exactly their ranking by distance), only the closest pairs traded, and a bet that a pair which has drifted apart
+comes back:
+
+```qex
+let r       = returns(1),
+    twin    = ts_match(returns(21), r, 252, metric='path', within='sector', matching='exclusive', rebalance=126),
+    dist    = ts_match_score(r, 252, metric='path', within='sector', matching='exclusive', rebalance=126),
+    nearest = rank(-dist) > 0.8
+in where(nearest, -(returns(21) - twin), None)
+```
+
+`rebalance=126` re-forms the pairs every six months, as the paper does; `ts_match_score` is each pair's distance, and
+`nearest` keeps the closest fifth. One part is not the paper's: it opens a trade when the two *normalized*
+prices diverge by two standard deviations since the trading period began, a spread that also restarts at each
+rebalance. Here the divergence is the last month's return gap.
+
+**Path or correlation?** They find different twins. Correlation asks whether two stocks move together day by day;
+path asks whether their prices ended up travelling together. On pairs whose prices really track each other they agree:
+in a test with twelve planted pairs differing by 0.2% of noise a day, both find all twelve. On looser pairs (0.4% a
+day of their own), correlation still finds every pair and path finds under half: the small daily differences compound
+into a wide gap over a year, and two unrelated stocks that happened to end up close look just as good. Path favors
+pairs of quiet stocks and genuine near-substitutes (share classes, close competitors); correlation finds co-movement
+at any volatility. A robust choice uses both: `path` to choose, and `ts_corr(r, twin, 63)` to check.
+
+**What no metric here finds: a leader.** Take a stock whose price follows a sine wave around 100 and one that
+follows the cosine, a quarter cycle ahead. Their daily returns are uncorrelated (one rises fastest when the other is
+at its peak), so correlation never pairs them. Their prices never drift apart, yet `path` doesn't pair them either:
+a quarter cycle apart, their gap swings by $\pm\sqrt{2}A$ for an amplitude $A$, an RMS distance of $A$, while a stock
+that simply stays flat is only $A/\sqrt{2}$ from each. What they share is a lag: today's return of one matches the
+other's from a quarter cycle earlier (a correlation of 0.97 in a test at five days). That is a lead-lag relationship,
+not a twin.
+
+## Pairs that revert to each other: coint
+
+From first principles, a good pair is two stocks that wander but keep coming back to each other: a spread that
+behaves like a rubber band. That asks four things of a pair:
+
+1. **The spread reverts.** Each log price wanders like a random walk, but a combination,
+   $\log P^A - \beta \log P^B$, is stationary: the two are *cointegrated*.
+2. **Fast enough to trade.** A half-life of days to weeks, not years.
+3. **Wide enough to pay.** A spread that reverts but barely moves earns less than it costs to trade.
+4. **Likely to keep reverting.** An economic tie (same industry, customers, inputs, balance sheet) is what says the
+   band will hold next year; one year of statistics can't.
+
+Correlation measures daily co-movement, which none of these is: two stocks can correlate at 0.9 day to day and still
+drift apart for good. `path` approximates the first, and favors spreads too tight to pay. `metric='coint'` tests the
+first two directly (Engle and Granger, 1987).
+
+**The difference, in a test.** Give each stock B two candidates: a true partner, bound to it by a noisy spread that
+reverts within days (daily correlation with B 0.78), and a decoy that shares B's moves but carries a slow drift of its
+own, so it wanders off for good (daily correlation 0.93). Over two years of formation, on four datasets of eight such
+triples:
+
+| `metric` | B's twin is the true partner | the decoy |
+|---|---|---|
+| `'corr'` | 0% | 100% |
+| `'path'` | 91% | 9% |
+| `'coint'` | 100% | 0% |
+
+Correlation always takes the decoy: it moves with B more closely, day by day. Cointegration always takes the stock B
+actually comes back to.
+
+**The test.** The key is daily returns, compounded over the window into log prices $L^A$ and $L^B$. For stock $A$ on
+its candidate $B$:
+
+$$
+L^A_t = a + \beta L^B_t + e_t,
+\qquad
+\Delta e_t = \gamma\, e_{t-1} + u_t,
+\qquad
+t = \frac{\hat\gamma}{\operatorname{se}(\hat\gamma)}
+$$
+
+The first regression gives the hedge ratio $\beta$ and the spread $e$; the second asks whether the spread is pulled
+back toward zero ($\gamma < 0$), and $t$ is the evidence that it is: the more negative, the stronger. The regression
+of $A$ on $B$ and of $B$ on $A$ give different answers, so a pair's score is the mean of the two $t$s, the same for
+both stocks. A pair whose hedge ratio is not positive either way is not a long-short pair, and is not considered. All
+of it comes from a few cross-product matrices of the paths, so it costs about what correlation costs.
+
+**Use two years, not one.** A random walk looks mean-reverting over a few months: the regression of a price on its own
+lag is biased toward reversion in short samples (the Dickey-Fuller bias), and choosing each stock's best of many
+candidates finds chance pairs. In a test with ten planted cointegrated pairs (two random walks bound by a spread with
+a half-life of about ten days) among independent stocks, `'coint'` found the true partner for about 60% of stocks with
+a year of formation and for all of them with two, across five datasets. Restricting candidates by economics,
+`within='industry'` or a fundamental grouping, cuts the chance pairs further.
+
+### Reading a pair: `stat=`
+
+With `metric='coint'`, `ts_match_score` also reads what you need to trade the pair, from the same selection:
+
+| `stat` | For each stock and its twin, when chosen |
+|---|---|
+| `'t'` (the default) | the Dickey-Fuller $t$ of the spread: the evidence that it reverts |
+| `'hedge'` | $\beta$: units of the twin's log price per unit of the stock's, the hedge ratio |
+| `'half_life'` | $\ln 0.5 / \ln(1 + \gamma)$: days for the spread to close half its gap |
+| `'spread_vol'` | the spread's standard deviation over the window, in log points: how wide it swings |
+
+A pairs book that chooses by evidence, keeps only the tradable pairs, and bets the spread back:
+
+```qex
+let r    = returns(1),
+    t    = ts_match_score(r, 504, metric='coint', within='sector', matching='exclusive'),
+    hl   = ts_match_score(r, 504, metric='coint', within='sector', matching='exclusive', stat='half_life'),
+    twin = ts_match(returns(10), r, 504, metric='coint', within='sector', matching='exclusive'),
+    good = (t < -3.5) & (hl > 2) & (hl < 30)
+in where(good, -(returns(10) - twin), None)
+```
+
+All four read one selection. `t < -3.5` sits between the Engle-Granger critical values for two series, about −3.34
+at 5% and −3.90 at 1% (MacKinnon); choosing each stock's best of many candidates makes chance pairs likelier than
+those levels say, which is one more reason to restrict candidates by `within`.
+
+**Reference.** Engle, R. F. and Granger, C. W. J. (1987). Co-integration and error correction: Representation,
+estimation, and testing. *Econometrica* 55(2), 251-276.
+
+## Errors
+
+Every mistake is refused when the expression is read, with a message that says what to write:
+
+| Written | Refused because |
+|---|---|
+| `ts_match(r, key, 252, metrc='corr')` | there is no option `metrc`; the options are listed |
+| `ts_match(r, key, 252, 'corr', metric='corr')` | `metric` is given twice, by position and by name |
+| `ts_match(r, key, 252, metric='pearson')` | the metrics are `'corr'`, `'euclidean'`, `'path'`, `'coint'` |
+| `ts_match_score(r, 252, stat='hedge')` | `stat=` is for `metric='coint'` |
+| `ts_match(r, key, 252, min_overlap=300)` | `min_overlap` can't be more than `lookback` |
+| `rank(ts_match(identifier(), key, 252))` | the result is labels, and `rank` needs numbers |
+| `ts_mean(r, period=20)` | only `ts_match` takes arguments by name |

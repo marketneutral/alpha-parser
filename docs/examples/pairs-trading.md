@@ -90,3 +90,18 @@ let r = returns(1),
     spread = group_demean(returns(5), 'pair')
 in where(corr > 0.7, -spread, None)
 ```
+
+## Pairs Found from the Data
+
+Everything above uses pairs given in the data, a `'pair'` label. `ts_match` finds them instead: each stock's
+statistical twin, chosen from history, point in time ([Statistical Twins](../language/ops/matching.md)). With
+`matching='exclusive'` the twins are mutual pairs, and the reversal above becomes:
+
+```qex
+let key  = delay(returns(1), 5),
+    twin = ts_match(returns(5), key, 252, within='sector', matching='exclusive')
+in -(returns(5) - twin)
+```
+
+The pairs are re-chosen every month from the year before, so they follow how stocks actually trade together, at the
+cost of a pair that can change at a rebalance.

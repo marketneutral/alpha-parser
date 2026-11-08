@@ -22,7 +22,8 @@ PYTHONPATH=src pytest tests/ -v
   - `operators.py` - Arithmetic (`Add`, `Sub`, `Mul`, `Div`), comparison, validity (`is_valid`), and math ops (`log`, `abs`, `sign`, `sqrt`, `power`, `max`, `min`)
   - `timeseries.py` - Rolling operations (`ts_mean`, `ts_std`, `delay`, `fill_forward`, `ts_corr`, `ts_cov`, `ewma`, `ts_argmax`, `ts_argmin`, `ts_skew`, `ts_kurt`, `decay_linear`)
   - `crosssection.py` - Cross-sectional operations (`rank`, `zscore`, `demean`, `quantile`, `winsorize`, `scale`, `truncate`)
-  - `groups.py` - Group data access (`group`) and group-neutral operations (`group_rank`, `group_demean`, `group_std`, `group_count_valid`)
+  - `match.py` - `ts_match` (statistical twins) and its `MatchSelection` node
+  - `groups.py` - Group data access (`group`, `identifier`) and group-neutral operations (`group_rank`, `group_demean`, `group_std`, `group_count_valid`)
   - `primitives.py` - Basic signals (`returns`, `volatility`, `volume`, `adv`) and `price_returns`/`forward_returns`, the one rule for turning prices into returns
   - `data.py` - Data field access (`close`, `open`, `high`, `low`, `field`) and `LazyData`
   - `conditional.py` - Conditional logic (`where`)
@@ -53,6 +54,7 @@ PYTHONPATH=src pytest tests/ -v
 - `pca_factor(x, window, k[, refit=21])` is each stock's beta to the k-th statistical factor (correlation PCA across stocks, refit every `refit` rows and held, components tracked across refits); its input is an internal `PcaBasis` node (the decomposition, value a `PcaFits` list, not a frame), shared by every pca_factor on the same x, window and refit; `missing.py`, `adjust.py` and `distributed.py` special-case it
 - `ts_alpha`/`ts_resid` are the intercept and today's residual of a rolling time-series fit per stock, `(y, x1, ..., xk, period[, min_periods])`: one regressor uses `ts_beta`'s fit on the paired days, several are one joint fit (`timeseries.py: _multi_fit`, at least k + 2 days); the `_shrunk` versions (one regressor) use `ts_beta_shrunk`'s slope, and all three shrunk fits take an optional group prior last, `(y, x, period[, min_periods][, groups])`; without groups `TsBetaShrunk`'s cache key is unchanged (since 0.13.0)
 - `regression_alpha(y, x1, ...)`/`regression_beta(y, x1, ..., j)` are the intercept and j-th slope of regression_neut's daily cross-sectional fit, one number per day for every stock (Fama-MacBeth factor returns); they read one internal `RegressionFit` node, as `ts_alpha`/`ts_resid` read a `TsFit` node (its slope is the `ts_beta` node) and `pca_factor` a `PcaBasis` (since 0.14.0). Internal nodes set `value_is_frame = False`; `missing.py` passes their inputs' reasons through and labels the readers as written
+- `ts_match(value, key, lookback, metric=, within=, matching=, rebalance=, min_overlap=)` (`match.py`) is each stock's statistical twin's value; the selection is an internal `MatchSelection` node shared across values, and `ts_match_score(key, lookback, ...)` reads the chosen pair's similarity from it; `identifier()` (labels) read through ts_match shows the twins. They are the only operators with keyword arguments (`parser.py: KEYWORDS`) (since 0.15.0)
 - `SignalGraph` takes a node's inputs as every attribute that is a signal (`missing.children`); a `compute_context` is per thread (a `ContextVar`), so Dask's threaded workers never share one (since 0.14.0)
 - `regression_neut(y, x1, x2, ...)` with several regressors is one joint least-squares fit; with one regressor its cache key is unchanged (downstream tools hash expressions by their cache key, so keys must stay stable)
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
@@ -188,6 +190,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
+- `test_ts_match.py` - ts_match semantics (point in time, no self-match, reciprocal exclusive pairs, holding, universe exits), every metric against its definition, the shared selection, identifier(), keyword arguments
 - `test_regression_coefs.py` - regression_alpha/regression_beta against per-day least squares, planted premia, the universe
 - `test_sharing.py` - Six overlapping complex signals in one context, SignalGraph and Dask: each node computed once, results as alone; contexts in parallel threads
 - `test_ts_alpha_resid.py` - ts_alpha, ts_resid, their shrunk versions and the group prior, against direct regressions

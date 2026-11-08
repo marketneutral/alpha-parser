@@ -67,10 +67,13 @@ def _check(s: Signal, seen: dict) -> str:
         out = EITHER
     elif isinstance(s, op.Constant):
         out = LABELS if isinstance(s.value, str) else NUMBERS
-    elif isinstance(s, (gr.Group, gr.GroupCross)):
+    elif isinstance(s, (gr.Group, gr.GroupCross, gr.Identifier)):
         for part in children(s):
             _check(part, seen)                            # a crossed grouping's parts may be labels or numbers
         out = LABELS
+    elif type(s).__name__ == "TsMatch":
+        _check(s.selection, seen)                         # the key is numbers; within, labels
+        out = _check(s.value, seen)                       # a twin's value is of its own kind: ts_match(identifier(), ...)
     elif isinstance(s, cond.Coalesce):
         out = _join(_check(s.x, seen), _check(s.y, seen), s)
     elif isinstance(s, cond.Where):

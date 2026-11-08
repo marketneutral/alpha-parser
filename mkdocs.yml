@@ -105,6 +105,7 @@ nav:
       - Events and State: language/ops/events.md
       - Cross-Sectional: language/ops/cross-sectional.md
       - Groups: language/ops/groups.md
+      - Statistical Twins: language/ops/matching.md
       - Logic and Conditions: language/ops/logic.md
       - Calendar: language/ops/calendar.md
   - Examples:
