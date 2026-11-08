@@ -16,6 +16,7 @@ print(result.summary())
 | Section | For |
 |---------|-----|
 | [Philosophy](https://marketneutral.github.io/alpha-parser/philosophy/) | why signals are written this way |
+| [Excel to qex](https://marketneutral.github.io/alpha-parser/excel-to-qex/) | one signal built in a spreadsheet and in qex, step by step |
 | [Language](https://marketneutral.github.io/alpha-parser/language/syntax/) | the language: syntax, evaluation, missing values, groups, universes, look-ahead, and the [operator reference](https://marketneutral.github.io/alpha-parser/language/reference/) |
 | [Examples](https://marketneutral.github.io/alpha-parser/examples/) | signals written in qex |
 | [Python](https://marketneutral.github.io/alpha-parser/python/installation/) | parsing, books, backtests, diagnostics, the risk model, Dask |

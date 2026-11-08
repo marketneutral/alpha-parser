@@ -111,10 +111,10 @@ def _toy():
 TOY = _toy()
 
 
-@pytest.mark.parametrize("block, inputs", [pytest.param(b, f, id=f"{p.relative_to(DOCS)}:{i}")
-                                           for p in PAGES for i, (b, f) in enumerate(TOY.blocks(p.read_text()))])
-def test_toy_block_renders(block, inputs):
-    out = TOY.render(block, inputs)
+@pytest.mark.parametrize("block, options", [pytest.param(b, o, id=f"{p.relative_to(DOCS)}:{i}")
+                                            for p in PAGES for i, (b, o) in enumerate(TOY.blocks(p.read_text()))])
+def test_toy_block_renders(block, options):
+    out = TOY.render(block, options)
     assert out.count('class="toy-panel') == len([l for l in block.splitlines() if l.strip()])
 
 

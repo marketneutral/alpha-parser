@@ -185,6 +185,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
+- `test_excel.py` - The Excel to qex workbook: its formulas are current and its values match qex
 - `test_docs.py` - The documentation: every operator documented, every qex block parses, Python blocks compile, worked pages run
 - `test_bugfixes_052.py` - Regression tests for the 0.5.2 fixes (paired betas, infinities in cross-sections, risk model, ts_rank, math of numbers)
 - `test_distributed.py` - Distributed evaluation and graph visualization tests
@@ -192,7 +193,9 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 
 ## Documentation
 
-`docs/` (mkdocs, built with `mkdocs build --strict` in CI on every PR) has six sections: Philosophy, Language (pure qex,
+`docs/` (mkdocs, built with `mkdocs build --strict` in CI on every PR) has seven sections: Philosophy, Excel to qex
+(one signal as a workbook and as qex; `docs/excel/build_workbook.py --recalc` rebuilds `excel-to-qex.xlsx`, and
+`tests/test_excel.py` checks it against qex), Language (pure qex,
 no Python; `language/reference.md` lists every operator in one table, and `language/ops/*.md` give each family's
 operators an entry with worked examples on toy data: ```` ```toy ```` blocks that `docs/hooks/toy.py` evaluates at build time), Examples (pure qex), Python, Data, and Python
 Examples. qex code goes in ```` ```qex ```` blocks, Python in ```` ```python ```` blocks. `tests/test_docs.py` checks that

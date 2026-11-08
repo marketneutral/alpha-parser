@@ -78,6 +78,11 @@ plugins:
             separate_signature: true
             show_signature_annotations: true
 
+exclude_docs: |
+  excel/build_workbook.py
+  __pycache__/
+  hooks/
+
 validation:
   anchors: warn
   unrecognized_links: warn
@@ -85,6 +90,7 @@ validation:
 nav:
   - Home: index.md
   - Philosophy: philosophy.md
+  - Excel to qex: excel-to-qex.md
   - Language:
     - Syntax: language/syntax.md
     - How qex Evaluates: language/concepts.md

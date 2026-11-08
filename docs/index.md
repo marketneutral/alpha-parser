@@ -41,6 +41,7 @@ in 0.7 * mom + 0.3 * rev
 | Section | For |
 |---------|-----|
 | [Philosophy](philosophy.md) | why signals are written this way, and how to go from an idea to an expression |
+| [Excel to qex](excel-to-qex.md) | one signal built in a spreadsheet and in qex, step by step, with the workbook |
 | [Language](language/syntax.md) | qex itself, with no Python: syntax, how expressions are evaluated, missing values, groups, universes, look-ahead, and the [operator reference](language/reference.md) |
 | [Examples](examples/index.md) | signals written in qex: momentum, mean reversion, pairs, events, market beta, technical indicators |
 | [Python](python/installation.md) | installing qex, parsing and evaluating, books, backtests, diagnostics, the risk model, Dask |
