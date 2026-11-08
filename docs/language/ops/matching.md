@@ -396,6 +396,7 @@ share with everyone:
 ts_match_score(returns(1), 504, metric='coint')                                             # prices
 ts_match_score(returns(1) - returns(1, 'market'), 504, metric='coint')                      # excess over the market
 ts_match_score(ts_resid(returns(1), returns(1, 'market'), 252), 504, metric='coint')        # net of each stock's beta
+
 ts_match_score(regression_neut(returns(1), pca_factor(returns(1), 252, 1),
                                pca_factor(returns(1), 252, 2)), 504, metric='coint')        # net of two statistical factors
 ```
