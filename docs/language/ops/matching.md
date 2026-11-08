@@ -2,7 +2,7 @@
 
 Every other cross-sectional operator compares a stock with a **crowd**: the market (`demean`), its sector
 (`group_demean`), all its peers at once (`rank`). `ts_match` compares a stock with **one particular other stock**: its
-closest relative, chosen from history. The panels on this page run on the
+closest relative, chosen from history, and `ts_match_score` says how close. The panels on this page run on the
 [Excel to qex dataset](../../excel-to-qex.md): six stocks over 30 days, AAA, BBB and CCC in Tech, DDD, EEE and FFF in
 Energy.
 
@@ -24,8 +24,8 @@ CCC's cell holds AAA's. The windows here are short so the toy data has twins; in
 
 ## Arguments
 
-`ts_match` is the one qex operator that takes **arguments by name**: after the first three, write any option as
-`name=value`, in any order, and leave out the ones you don't need. Writing an option at its default is the same
+`ts_match` and `ts_match_score` are the qex operators that take **arguments by name**: after the first three, write
+any option as `name=value`, in any order, and leave out the ones you don't need. Writing an option at its default is the same
 expression as leaving it out.
 
 | Argument | Default | Meaning |
@@ -99,7 +99,7 @@ ts_match(identifier(), returns(1), 15, within='sector', rebalance=5)
 ts_match(identifier(), returns(1), 15, within='sector', rebalance=5, matching='exclusive')
 ```
 
-On the left, CCC chose AAA, which chose BBB. On the right the pairs are mutual, and CCC and FFF, one stock too many
+In the first, CCC chose AAA, which chose BBB. In the second the pairs are mutual, and CCC and FFF, one stock too many
 in each sector, have none.
 
 Exclusive pairs make **self-contained trades**: in `returns(5) - ts_match(returns(5), …, matching='exclusive')`, each
@@ -142,6 +142,31 @@ in ts_match(identifier(), key, 252, within='sector') == ts_match(identifier(), k
 That is 1 where correlation and Spearman pick the same twin, 0 where they don't: a direct check that a match isn't one
 metric's accident.
 
+### ts_match_score
+
+<p class="sig"><code>ts_match_score(key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)</code></p>
+
+How alike each stock and its twin were when the twin was chosen. It takes `ts_match`'s arguments without the `value`,
+and with the same `key` and options it reads the same selection: the score was computed while choosing, so it costs
+nothing more.
+
+```toy data=excel tail=5 inputs
+ts_match(identifier(), returns(1), 15, within='sector', rebalance=5)
+ts_match_score(returns(1), 15, within='sector', rebalance=5)
+```
+
+AAA and BBB are each other's twins, with one score, their correlation over the matching window; CCC's twin is AAA, a
+weaker match. The score is in the metric's own units:
+
+| `metric` | The score |
+|---|---|
+| `'corr'`, `'spearman'`, `'cosine'` | the correlation (or cosine), from −1 to 1, higher is closer |
+| `'euclidean'`, `'manhattan'` | the distance, 0 or more, **smaller** is closer |
+
+Like the twin, the score is fixed at the rebalance and held until the next, and there is no score without a twin. It
+says how good the match was when chosen; whether the pair still moves together is a different question, asked of the
+recent past, `ts_corr(r, ts_match(r, key, 252), 63)`. Both are useful, and they can disagree.
+
 ## Choosing the key
 
 The key decides who is alike; anything you want to compare goes into it, as ordinary qex.
@@ -163,8 +188,9 @@ twin, 63)` checks whether the current twin still moves with the stock), but it i
 ## Sharing and cost
 
 Choosing twins is the expensive part; reading a value from them is a lookup. qex keeps the choice in an internal node
-of its own, shared by every `ts_match` with the same `key`, `lookback`, `metric`, `within`, `matching`, `rebalance`
-and `min_overlap`, whatever its `value`. The twin's return, its volume and its identifier cost one selection
+of its own, shared by every `ts_match` and `ts_match_score` with the same `key`, `lookback`, `metric`, `within`,
+`matching`, `rebalance` and `min_overlap`, whatever its `value`. The twin's return, its volume, its identifier and the
+match's score cost one selection
 ([Graphs and Dask](../../python/distributed.md#what-is-shared) shows the node).
 
 Each rebalance compares every pair within each group over the window: about $\text{lookback} \times m^2$ for a group
@@ -212,6 +238,18 @@ in -gap / ts_std(r - twin, 63)
 ```
 
 Both `ts_match`s share one selection.
+
+**Weighting by the match.** Trade the closest pairs hardest: weight each pair's bet by how alike it was when chosen.
+
+```qex
+let key   = delay(returns(1), 5),
+    twin  = ts_match(returns(5), key, 252, within='sector', matching='exclusive'),
+    score = ts_match_score(key, 252, within='sector', matching='exclusive')
+in -(returns(5) - twin) * max(score, 0)
+```
+
+`max(score, 0)` gives a pair that was negatively correlated no weight. With exclusive matching both stocks of a pair
+have the same score, so the pair stays dollar-neutral.
 
 **Weighting robust pairs.** A twin found by a year of correlation can be an accident. Three checks, each one line:
 the pair still moves together (`near`), another metric picks the same twin (`agree`), and the twin trades within a

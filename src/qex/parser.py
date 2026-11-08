@@ -18,7 +18,7 @@ from .timeseries import (
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear, ts_quantile,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
-from .match import ts_match
+from .match import ts_match, ts_match_score
 from .crosssection import (rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, pca_factor,
     regression_alpha, regression_beta)
 from .conditional import where, coalesce
@@ -110,6 +110,7 @@ class QexParser:
             'regression_alpha': regression_alpha,
             'regression_beta': regression_beta,
             'ts_match': ts_match,
+            'ts_match_score': ts_match_score,
             'identifier': identifier,
             'pca_factor': pca_factor,
 
@@ -458,9 +459,11 @@ def _collapse_whitespace(expression: str) -> str:
 # position only. (Since 0.15.0; ts_match's five options would be unreadable by position.)
 KEYWORDS = {
     "ts_match": ("metric", "within", "matching", "rebalance", "min_overlap"),
+    "ts_match_score": ("metric", "within", "matching", "rebalance", "min_overlap"),
 }
 POSITIONAL_ORDER = {
     "ts_match": ("value", "key", "lookback", "metric", "within", "matching", "rebalance", "min_overlap"),
+    "ts_match_score": ("key", "lookback", "metric", "within", "matching", "rebalance", "min_overlap"),
 }
 
 _ARG_RULES = {

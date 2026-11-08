@@ -85,7 +85,7 @@ from .groups import (
 )
 
 # Parser
-from .match import ts_match, TsMatch, MatchSelection
+from .match import ts_match, ts_match_score, TsMatch, TsMatchScore, MatchSelection
 from .groups import identifier, Identifier
 from .parser import QexParser, qex, AlphaParser, alpha, compute_weights
 
@@ -301,6 +301,8 @@ __all__ = [
     'regression_alpha',
     'regression_beta',
     'ts_match',
+    'ts_match_score',
+    'TsMatchScore',
     'identifier',
     'Identifier',
     'TsMatch',

@@ -37,7 +37,7 @@ DAG shows:
 | `PcaBasis` | every `pca_factor` on the same `x`, `window` and `refit` (one decomposition per refit) |
 | `TsFit` | `ts_alpha`, `ts_resid` and their shrunk versions on the same `y`, regressors, window and prior; with one regressor its slope is a `ts_beta` (or `ts_beta_shrunk`) node, the same node as a `ts_beta` written alongside |
 | `RegressionFit` | `regression_alpha` and every `regression_beta(..., j)` on the same `y` and regressors |
-| `MatchSelection` | every `ts_match` on the same `key` and options, whatever its `value`: the twins are chosen once |
+| `MatchSelection` | every `ts_match` and `ts_match_score` on the same `key` and options, whatever its `value`: the twins are chosen once |
 
 A node's inputs are every attribute that is a signal. (Before 0.14.0 the graph looked for a fixed list of attribute
 names and drew the pair operators, `latch` and `power` with an expression exponent without their inputs.)

@@ -11,11 +11,14 @@
   stock leaves the universe. Metrics: correlation, Spearman, cosine, root mean squared and mean absolute distance,
   each over the pair's shared days. `'exclusive'` pairs the group off into mutual twins. Designed and tested as a
   mock in qexarena's notebook "ts_match: mocking up a new operator in Python"; the semantics tests are ported.
-- **The selection is one internal node**, `MatchSelection`, shared by every `ts_match` on the same key and options
-  whatever its value: a twin's return, volume and identifier cost one selection.
+- **The selection is one internal node**, `MatchSelection`, shared by every `ts_match` and `ts_match_score` on the
+  same key and options whatever its value: a twin's return, volume, identifier and score cost one selection.
+- **`ts_match_score(key, lookback, ...)`**: how alike each stock and its twin were when chosen, `ts_match`'s
+  arguments without the value. It reads the same selection, so it costs nothing more: a correlation (or cosine) for
+  the similarity metrics, the distance itself for the distance metrics; held between rebalances, none without a twin.
 - **`identifier()`**: each stock's own identifier, as a label. `ts_match(identifier(), key, 252)` is each stock's
   twin's identifier, the way to see and check the twins; `ts_match` gathers labels as labels.
-- **Keyword arguments**, for `ts_match` only: its options can be given by name, in any order. Every other operator
+- **Keyword arguments**, for `ts_match` and `ts_match_score` only: their options can be given by name, in any order. Every other operator
   still takes its arguments by position. Writing an option at its default is the same expression (and cache key) as
   leaving it out.
 - A missing cell with no twin is reported as "no twin"; a missing twin value, with the twin's own reason.

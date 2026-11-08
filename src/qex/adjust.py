@@ -247,6 +247,9 @@ def _walk(s, fields, seen, found, mode):
         if isinstance(s.groups, Signal):
             w(s.groups)
         out = UNKNOWN
+    elif name == "TsMatchScore":                                # a similarity: a pure number
+        w(s.selection)
+        out = FREE
     elif name == "TsMatch":                                     # another stock's value, read into this one's column
         w(s.selection)
         need_free(w(s.value), s.value, "ts_match()")

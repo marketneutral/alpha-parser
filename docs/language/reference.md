@@ -176,6 +176,7 @@ Each stock's statistical twin: one particular other stock, chosen from history. 
 | Operation | Description |
 |-----------|-------------|
 | `ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)` | The `value` of each stock's twin: the stock whose `key` over the last `lookback` days was most alike, chosen every `rebalance` days from the past only; options by name |
+| `ts_match_score(key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)` | How alike each stock and its twin were when chosen: a correlation, or a distance for the distance metrics; reads the same selection as `ts_match`; options by name |
 
 ## Logic and conditions
 

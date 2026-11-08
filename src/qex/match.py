@@ -87,12 +87,13 @@ def _exclusive(s: np.ndarray) -> np.ndarray:
 
 
 class MatchResult:
-    """A MatchSelection's value: each stock's twin's column on each date (-1: none), and the dates and names."""
+    """A MatchSelection's value: each stock's twin's column on each date (-1: none), the similarity of the stock and
+    its twin when chosen (higher is closer; NaN without a twin), and the dates and names."""
 
-    __slots__ = ("peers", "index", "columns")
+    __slots__ = ("peers", "scores", "index", "columns")
 
-    def __init__(self, peers: np.ndarray, index, columns):
-        self.peers, self.index, self.columns = peers, index, columns
+    def __init__(self, peers: np.ndarray, scores: np.ndarray, index, columns):
+        self.peers, self.scores, self.index, self.columns = peers, scores, index, columns
 
 
 class MatchSelection(Signal):
@@ -126,21 +127,27 @@ class MatchSelection(Signal):
             codes, _ = _group_codes(key, _get_group_data(data, self.groups))
         choose = _nearest if self.matching == "nearest" else _exclusive
         peers = np.full((T, N), -1)
+        scores = np.full((T, N), np.nan)
         current = np.full(N, -1)
+        current_score = np.full(N, np.nan)
         for t in range(self.lookback, T):
             if (t - self.lookback) % self.rebalance == 0:
                 window = values[t - self.lookback:t]                  # up to t - 1: point in time
                 current = np.full(N, -1)
+                current_score = np.full(N, np.nan)
                 for g in np.unique(codes[t][eligible[t] & (codes[t] >= 0)]):
                     columns = np.flatnonzero(eligible[t] & (codes[t] == g))
                     if len(columns) < 2:
                         continue
-                    chosen = choose(similarity(window[:, columns], self.metric, self.min_overlap))
-                    found = chosen >= 0
+                    s = similarity(window[:, columns], self.metric, self.min_overlap)
+                    chosen = choose(s)
+                    found = np.flatnonzero(chosen >= 0)
                     current[columns[found]] = columns[chosen[found]]
+                    current_score[columns[found]] = s[found, chosen[found]]
             held = (current >= 0) & eligible[t] & eligible[t, np.maximum(current, 0)]     # leaving ends a match
             peers[t] = np.where(held, current, -1)
-        return MatchResult(peers, key.index, key.columns)
+            scores[t] = np.where(held, current_score, np.nan)
+        return MatchResult(peers, scores, key.index, key.columns)
 
     def _cache_key(self):
         from .groups import _groups_key
@@ -175,10 +182,54 @@ class TsMatch(Signal):
         return ('TsMatch', self.value._cache_key(), self.selection._cache_key())
 
 
+class TsMatchScore(Signal):
+    """How alike each stock and its twin were when the twin was chosen: the score of ts_match's selection, in the
+    metric's own units (a correlation for 'corr', 'spearman' and 'cosine'; the distance, positive, smaller is closer,
+    for 'euclidean' and 'manhattan'). Held until the next rebalance; no value without a twin. Reads the same internal
+    MatchSelection node as every ts_match on the same key and options."""
+
+    def __init__(self, selection: MatchSelection):
+        self.selection = selection
+
+    def _compute(self, data):
+        sel = self.selection.evaluate(data)
+        scores = -sel.scores if self.selection.metric in ("euclidean", "manhattan") else sel.scores
+        return pd.DataFrame(scores, index=sel.index, columns=sel.columns)
+
+    def _cache_key(self):
+        return ('TsMatchScore', self.selection._cache_key())
+
+
 def _whole(name: str, what: str, v, low: int) -> int:
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not float(v).is_integer() or v < low:
         raise ValueError(f"ts_match()'s {name} must be a whole number, at least {low} (got {v!r}): {what}")
     return int(v)
+
+
+def _selection(name: str, key, lookback, metric, within, matching, rebalance, min_overlap) -> MatchSelection:
+    """A MatchSelection from ts_match's (or ts_match_score's) arguments, each checked."""
+    from .operators import NoneValue
+    from .groups import _as_groups
+    if not isinstance(key, Signal):
+        raise ValueError(f"{name}()'s key is an expression, such as returns(1), not {key!r}")
+    lookback = _whole("lookback", "the days of key to compare", lookback, 2)
+    if metric not in METRICS:
+        raise ValueError(f"{name}()'s metric is one of {', '.join(repr(m) for m in METRICS)}, not {metric!r}")
+    if matching not in MATCHINGS:
+        raise ValueError(f"{name}()'s matching is 'nearest' (each stock's closest) or 'exclusive' (reciprocal "
+                         f"pairs), not {matching!r}")
+    rebalance = _whole("rebalance", "how many days the matches are held", rebalance, 1)
+    if isinstance(min_overlap, NoneValue):
+        min_overlap = None
+    min_overlap = lookback if min_overlap is None else _whole(
+        "min_overlap", "the fewest days a pair must share", min_overlap, 2)
+    if min_overlap > lookback:
+        raise ValueError(f"{name}()'s min_overlap ({min_overlap}) can't be more than its lookback ({lookback})")
+    if isinstance(within, NoneValue):
+        within = None
+    if within is not None:
+        within = _as_groups(within)
+    return MatchSelection(key, lookback, metric, within, matching, rebalance, min_overlap)
 
 
 def ts_match(value: Signal, key: Signal, lookback: int, metric: str = 'corr', within=None,
@@ -187,26 +238,13 @@ def ts_match(value: Signal, key: Signal, lookback: int, metric: str = 'corr', wi
 
     ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)
     """
-    from .operators import NoneValue
-    from .groups import _as_groups
-    for name, s in (("value", value), ("key", key)):
-        if not isinstance(s, Signal):
-            raise ValueError(f"ts_match()'s {name} is an expression, such as returns(5), not {s!r}")
-    lookback = _whole("lookback", "the days of key to compare", lookback, 2)
-    if metric not in METRICS:
-        raise ValueError(f"ts_match()'s metric is one of {', '.join(repr(m) for m in METRICS)}, not {metric!r}")
-    if matching not in MATCHINGS:
-        raise ValueError(f"ts_match()'s matching is 'nearest' (each stock's closest) or 'exclusive' (reciprocal "
-                         f"pairs), not {matching!r}")
-    rebalance = _whole("rebalance", "how many days the matches are held", rebalance, 1)
-    if isinstance(min_overlap, NoneValue):
-        min_overlap = None
-    min_overlap = lookback if min_overlap is None else _whole(
-        "min_overlap", "the fewest days a pair must share", min_overlap, 2)
-    if min_overlap > lookback:
-        raise ValueError(f"ts_match()'s min_overlap ({min_overlap}) can't be more than its lookback ({lookback})")
-    if isinstance(within, NoneValue):
-        within = None
-    if within is not None:
-        within = _as_groups(within)
-    return TsMatch(value, MatchSelection(key, lookback, metric, within, matching, rebalance, min_overlap))
+    if not isinstance(value, Signal):
+        raise ValueError(f"ts_match()'s value is an expression, such as returns(5), not {value!r}")
+    return TsMatch(value, _selection("ts_match", key, lookback, metric, within, matching, rebalance, min_overlap))
+
+
+def ts_match_score(key: Signal, lookback: int, metric: str = 'corr', within=None, matching: str = 'nearest',
+                   rebalance: int = 21, min_overlap: Optional[int] = None) -> TsMatchScore:
+    """Create a TsMatchScore signal: how alike each stock and its twin were when chosen, ts_match's arguments without
+    the value."""
+    return TsMatchScore(_selection("ts_match_score", key, lookback, metric, within, matching, rebalance, min_overlap))

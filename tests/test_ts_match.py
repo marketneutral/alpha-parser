@@ -272,3 +272,67 @@ def test_a_twins_labels_are_gathered_as_labels(pairs_data):
 def test_identifiers_group_and_compare():
     qex(f"group_demean(returns(5), ts_match(identifier(), returns(1), {LOOK}, matching='exclusive'))")
     qex(f"where(ts_match(identifier(), returns(1), {LOOK}) == 'S01', returns(5), None)")
+
+
+# --- ts_match_score: how alike each stock and its twin were --------------------------------------------------------
+
+@pytest.mark.parametrize("metric", ["corr", "euclidean", "manhattan"])
+def test_the_score_is_the_pairs_similarity_at_selection(pairs_data, metric):
+    d = pairs_data
+    score = ev(f"ts_match_score(returns(1), {LOOK}, metric='{metric}', min_overlap=40)", d)
+    p = peers(f", metric='{metric}', min_overlap=40", d)
+    r = ev("returns(1)", d)
+    for t in range(LOOK, len(r), 21):                                  # each rebalance day
+        window = r.iloc[t - LOOK:t]
+        for i in range(24):
+            j = p.iloc[t, i]
+            if j < 0:
+                assert np.isnan(score.iloc[t, i])
+                continue
+            both = window.iloc[:, [i, j]].dropna()
+            a, b = both.iloc[:, 0].to_numpy(), both.iloc[:, 1].to_numpy()
+            expected = {"corr": lambda: np.corrcoef(a, b)[0, 1],
+                        "euclidean": lambda: np.sqrt(np.mean((a - b) ** 2)),
+                        "manhattan": lambda: np.mean(np.abs(a - b))}[metric]()
+            assert score.iloc[t, i] == pytest.approx(expected, abs=1e-10)
+
+
+def test_the_score_is_held_and_missing_without_a_twin(pairs_data):
+    d = pairs_data
+    score = ev(f"ts_match_score(returns(1), {LOOK}, matching='exclusive')", d)
+    twin = ev(f"ts_match(identifier(), returns(1), {LOOK}, matching='exclusive')", d)
+    assert (score.isna() == twin.isna()).all().all()
+    block = score.iloc[LOOK:LOOK + 21]
+    assert (block.nunique(dropna=True) <= 1).all()                     # constant between rebalances
+    sector = d["sector"].copy()
+    sector["S00"] = "alone"
+    report = explain_missing(qex(f"ts_match_score(returns(1), {LOOK}, within='sector')"), dict(d, sector=sector))
+    assert report.text(int(report.codes["S00"].iloc[-1])) == "no twin"
+
+
+def test_the_score_reads_the_same_selection(pairs_data):
+    g = SignalGraph()
+    g.add_signal(qex(f"ts_match(returns(5), returns(1), {LOOK}, within='sector')"), name="twin")
+    g.add_signal(qex(f"ts_match_score(returns(1), {LOOK}, within='sector')"), name="score")
+    assert sum(1 for k in g.nodes if k[0] == "MatchSelection") == 1
+    calls = []
+    original = MatchSelection._compute
+    MatchSelection._compute = lambda self, data: calls.append(1) or original(self, data)
+    try:
+        with compute_context():
+            for e in (f"ts_match(returns(5), returns(1), {LOOK}, within='sector')",
+                      f"ts_match_score(returns(1), {LOOK}, within='sector')"):
+                qex(e).evaluate(pairs_data)
+    finally:
+        MatchSelection._compute = original
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("expr, message", [
+    ("ts_match_score(returns(1), 60, metrc='corr')", "no argument named 'metrc'"),
+    ("ts_match_score(returns(1), 60, metric='pearson')", "metric is one of"),
+    ("ts_match_score(group('sector'), 60)", "gives labels, not numbers"),
+])
+def test_bad_score_arguments(expr, message):
+    with pytest.raises(ValueError, match=message):
+        qex(expr)

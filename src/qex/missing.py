@@ -105,15 +105,15 @@ def label(signal: Signal, nested: bool = False) -> str:
         if name == "RegressionBeta":
             args.append(str(signal.j))
         return f"{_snake(name)}({', '.join(args)})"
-    if name in ("TsMatch", "MatchSelection"):            # written ts_match(value, key, lookback, options); the selection is internal
-        sel = signal.selection if name == "TsMatch" else signal
+    if name in ("TsMatch", "TsMatchScore", "MatchSelection"):   # written as typed; the selection is internal
+        sel = signal if name == "MatchSelection" else signal.selection
         args = ([label(signal.value)] if name == "TsMatch" else []) + [label(sel.key), str(sel.lookback)]
         defaults = {"metric": "corr", "within": None, "matching": "nearest", "rebalance": 21, "min_overlap": sel.lookback}
         for opt, v in (("metric", sel.metric), ("within", sel.groups), ("matching", sel.matching),
                        ("rebalance", sel.rebalance), ("min_overlap", sel.min_overlap)):
             if v != defaults[opt] if not isinstance(v, Signal) else True:
                 args.append(f"{opt}={label(v) if isinstance(v, Signal) else repr(v)}")
-        return f"{'ts_match' if name == 'TsMatch' else 'match_selection'}({', '.join(args)})"
+        return f"{ {'TsMatch': 'ts_match', 'TsMatchScore': 'ts_match_score'}.get(name, 'match_selection')}({', '.join(args)})"
     if name in ("PcaFactor", "PcaBasis"):               # written pca_factor(x, window, k[, refit]); the basis is internal
         basis = signal.basis if name == "PcaFactor" else signal
         args = [label(basis.signal), str(basis.window)] + ([str(signal.k)] if name == "PcaFactor" else [])
@@ -297,6 +297,9 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
                     own(mask, EXCLUDED)                                     # the where that chose None
                 else:
                     inherit(mask, res)
+            own(missing, CALC)
+        elif isinstance(s, _match.TsMatchScore):
+            own(missing & (s.selection.evaluate(data).peers < 0), NO_MATCH)
             own(missing, CALC)
         elif isinstance(s, _match.TsMatch):
             # no twin, or the twin's value is missing (its reason, read from the twin's cell)
