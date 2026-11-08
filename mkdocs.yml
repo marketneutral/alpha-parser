@@ -114,6 +114,7 @@ nav:
     - Pairs Trading: examples/pairs-trading.md
     - Event-Driven: examples/event-driven.md
     - Market Beta: examples/market-beta.md
+    - Factor Premia and Timing: examples/factor-premia.md
     - Technical Indicators: examples/technical-indicators.md
     - Advanced Patterns: examples/advanced-patterns.md
   - Python:

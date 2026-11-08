@@ -1,7 +1,7 @@
 # About the Examples
 
-These pages are signals written in qex: momentum, mean reversion, pairs, events, market beta, technical indicators,
-and patterns that combine them. Every code block is a qex expression, not Python; paste one into
+These pages are signals written in qex: momentum, mean reversion, pairs, events, market beta, factor premia and
+timing, technical indicators, and patterns that combine them. Every code block is a qex expression, not Python; paste one into
 `qex("...")`. Each page explains the idea, gives the expression, says how it reads, and covers
 variants and what to watch for.
 

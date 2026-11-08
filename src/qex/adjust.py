@@ -238,9 +238,19 @@ def _walk(s, fields, seen, found, mode):
     elif name in _SQUARE:
         v = w(kids[0])
         out = UNKNOWN if v.e is None or v.log else V(2 * v.e, False, None)
+    elif name in ("TsFit", "RegressionFit"):                    # an internal fit: its inputs are walked
+        for k in kids:
+            w(k)
+        out = UNKNOWN
     elif name in _PAIR_FIRST:
-        a, xs = w(s.signal1), [w(k) for k in kids[1:]]          # every regressor is walked, however many
+        w(s.fit)
+        a, xs = w(s.fit.y), [w(x) for x in s.fit.xs]             # every regressor is walked, however many
         out = UNKNOWN if a.e is None or a.log or any(x.e is None or x.log for x in xs) else V(a.e, False, None)
+    elif name in ("RegressionAlpha", "RegressionBeta"):         # like regression_neut: compared across stocks
+        w(s.fit)
+        for k in (s.fit.y,) + s.fit.xs:
+            need_free(w(k), k, f"{label(s).split('(')[0]}()")
+        out = FREE
     elif name in _PAIR_SUM or name in _PAIR_DIFF:
         a, b = w(s.signal1), w(s.signal2)
         if a.e is None or b.e is None or a.log or b.log:

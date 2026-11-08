@@ -1,5 +1,8 @@
 """Cross-sectional operations for signals."""
 
+import numpy as np
+import pandas as pd
+
 from .signal import Signal
 from .universe import in_universe, finite_in_universe, universe_members
 
@@ -221,6 +224,129 @@ class RegressionNeut(Signal):
     def _cache_key(self):
         more = tuple(s._cache_key() for s in self.more) if self.more else ()
         return ('RegressionNeut', self.y._cache_key(), self.x._cache_key()) + more
+
+
+class RegressionFitResult:
+    """The cross-sectional fit's value: per day, the intercept and the k slopes (NaN on a day with no fit), and the
+    dates and names to give them to."""
+
+    __slots__ = ("index", "columns", "alpha", "betas")
+
+    def __init__(self, index, columns, alpha, betas):
+        self.index, self.columns, self.alpha, self.betas = index, columns, alpha, betas
+
+    def broadcast(self, values) -> pd.DataFrame:
+        """One number per day, given to every name."""
+        return pd.DataFrame(np.repeat(values[:, None], len(self.columns), axis=1), index=self.index,
+                            columns=self.columns)
+
+
+class RegressionFit(Signal):
+    """The cross-sectional regression behind regression_alpha and regression_beta: an internal node, so the intercept
+    and every slope of the same fit share it, in a compute_context, in SignalGraph and on Dask, and the DAG shows it
+    shared. Each day, over the names in the universe where y and every x are valid (at least k + 2), it fits
+    y_i = a + sum_j b_j x_ij + e_i by least squares, as regression_neut does. Its value is a RegressionFitResult."""
+
+    value_is_frame = False
+
+    def __init__(self, y: Signal, xs: tuple):
+        self.y = y
+        self.xs = tuple(xs)
+
+    def _compute(self, data):
+        y = finite_in_universe(self.y.evaluate(data))
+        xs = [finite_in_universe(s.evaluate(data).reindex_like(y)) for s in self.xs]
+        Y = y.to_numpy(dtype=float)
+        X = np.stack([x.to_numpy(dtype=float) for x in xs], axis=2)          # dates x names x regressors
+        valid = np.isfinite(Y) & np.isfinite(X).all(axis=2)
+        k = X.shape[2]
+        alpha, betas = np.full(Y.shape[0], np.nan), np.full((Y.shape[0], k), np.nan)
+        for t in range(Y.shape[0]):
+            ok = valid[t]
+            if ok.sum() < k + 2:                                             # regression_neut's minimum
+                continue
+            ym, xm = Y[t, ok].mean(), X[t, ok, :].mean(axis=0)
+            b = np.linalg.lstsq(X[t, ok, :] - xm, Y[t, ok] - ym, rcond=None)[0]
+            alpha[t], betas[t] = ym - b @ xm, b
+        return RegressionFitResult(y.index, y.columns, alpha, betas)
+
+    def _cache_key(self):
+        return ('RegressionFit', self.y._cache_key(), tuple(x._cache_key() for x in self.xs))
+
+
+class RegressionAlpha(Signal):
+    """The intercept of the day's cross-sectional fit (regression_neut's): one number per day, given to every stock.
+
+    A property of the day, not of a stock: it is given to every name, in the universe or not, so its history is the
+    same for all (NaN for every name on a day with no fit). With today's returns on characteristics known at
+    yesterday's close, it is the return of a stock with none of them: on betas, the zero-beta portfolio's return
+    (Fama-MacBeth). Its input is a RegressionFit node, shared with regression_beta on the same y and regressors.
+    """
+
+    def __init__(self, y: Signal, x: Signal, *more: Signal):
+        self.fit = RegressionFit(y, (x,) + tuple(more))
+
+    y = property(lambda self: self.fit.y)
+    x = property(lambda self: self.fit.xs[0])
+    more = property(lambda self: self.fit.xs[1:] or None)
+
+    def _compute(self, data):
+        f = self.fit.evaluate(data)
+        return f.broadcast(f.alpha)
+
+    def _cache_key(self):
+        more = tuple(s._cache_key() for s in self.more) if self.more else ()
+        return ('RegressionAlpha', self.y._cache_key(), self.x._cache_key()) + more
+
+
+class RegressionBeta(RegressionAlpha):
+    """The j-th slope of the day's cross-sectional fit: one number per day, given to every stock.
+
+    With today's returns on characteristics known at yesterday's close, it is the day's return to the j-th
+    characteristic, net of the others: a factor return, whose average over time is its premium (Fama-MacBeth).
+    """
+
+    def __init__(self, y: Signal, x: Signal, *more: Signal, j: int = 1):
+        super().__init__(y, x, *more)
+        self.j = j
+
+    def _compute(self, data):
+        f = self.fit.evaluate(data)
+        return f.broadcast(f.betas[:, self.j - 1])
+
+    def _cache_key(self):
+        return ('RegressionBeta',) + super()._cache_key()[1:] + (self.j,)
+
+
+def regression_alpha(y: Signal, x: Signal, *more: Signal) -> RegressionAlpha:
+    """Create a RegressionAlpha signal: the day's intercept of y on the regressors across stocks, for every stock."""
+    for s in (x,) + more:
+        if not isinstance(s, Signal):
+            raise ValueError(f"regression_alpha() takes y and one or more regressors, each an expression, not {s!r}: "
+                             f"regression_alpha(y, x1, ..., xk)")
+    return RegressionAlpha(y, x, *more)
+
+
+def regression_beta(y: Signal, *args) -> RegressionBeta:
+    """Create a RegressionBeta signal: the day's slope of y on the j-th regressor across stocks, for every stock,
+    regression_beta(y, x1, ..., xk, j); with one regressor j may be left out."""
+    usage = "regression_beta(y, x1, ..., xk, j)"
+    args = list(args)
+    j = None
+    if args and not isinstance(args[-1], Signal):
+        j = args.pop()
+    regs = args
+    if not regs or not all(isinstance(r, Signal) for r in regs):
+        raise ValueError(f"regression_beta() takes y, one or more regressors, and which slope to give: {usage}")
+    if j is None:
+        if len(regs) > 1:
+            raise ValueError(f"regression_beta() with {len(regs)} regressors needs to know which slope to give, "
+                             f"1 to {len(regs)}, as its last argument: {usage}")
+        j = 1
+    if isinstance(j, bool) or not isinstance(j, (int, float)) or not float(j).is_integer() or not 1 <= j <= len(regs):
+        raise ValueError(f"regression_beta()'s last argument says which regressor's slope to give: a whole number "
+                         f"from 1 to {len(regs)}, not {j!r} ({usage})")
+    return RegressionBeta(y, regs[0], *regs[1:], j=int(j))
 
 
 def regression_neut(y: Signal, x: Signal, *more: Signal) -> RegressionNeut:

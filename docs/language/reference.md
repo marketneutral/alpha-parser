@@ -149,6 +149,8 @@ Across the stocks in the universe, one day at a time. [Cross-sectional in detail
 | `winsorize(x, limit)` | Clip at the day's `limit` and 1 − `limit` quantiles: `winsorize(x, 0.05)` caps at the 5th and 95th percentiles |
 | `truncate(x, max)` | Clip each value to [−max, max] (element by element, not across stocks) |
 | `regression_neut(y, x1, x2, ...)` | One regression per day, across the stocks (not through time): `y` with its least-squares fit on the regressors (and an intercept) taken out |
+| `regression_alpha(y, x1, ..., xk)` | The intercept of `regression_neut`'s fit: one number per day, the same for every stock |
+| `regression_beta(y, x1, ..., xk, j)` | The `j`-th slope of `regression_neut`'s fit: one number per day, the same for every stock; with one regressor `j` may be left out |
 | `pca_factor(x, window, k[, refit])` | Each stock's beta to the k-th statistical factor of `x`, from a principal component analysis across stocks, refit every `refit` days (default 21) |
 
 ## Groups

@@ -11,6 +11,7 @@ data in place, call ``ctx.clear()`` or open a new context.
 """
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Optional
 
 
@@ -48,21 +49,23 @@ class ComputeContext:
         self._data = ()
 
 
-_context: Optional[ComputeContext] = None
+# The active context, per thread (and per asyncio task). A plain module global was shared by every thread: two
+# threads entering and leaving contexts at overlapping times (Dask's threaded workers, each task in its own context)
+# could leave one thread's context active for the whole process, so later evaluations read a stale cache.
+_current: ContextVar[Optional[ComputeContext]] = ContextVar("qex_compute_context", default=None)
 
 
 @contextmanager
 def compute_context():
-    """Context manager for alpha computations with shared cache."""
-    global _context
-    old_context = _context
-    _context = ComputeContext()
+    """Context manager for alpha computations with shared cache. The context is the current thread's: other threads
+    see their own (or none), so contexts in parallel threads never mix."""
+    token = _current.set(ComputeContext())
     try:
-        yield _context
+        yield _current.get()
     finally:
-        _context = old_context
+        _current.reset(token)
 
 
 def get_context() -> Optional[ComputeContext]:
-    """Get current compute context."""
-    return _context
+    """The current thread's compute context, or None."""
+    return _current.get()

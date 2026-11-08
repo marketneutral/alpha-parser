@@ -183,6 +183,56 @@ in regression_neut(zscore(-returns(5)), beta, size)
 
 The signal is exactly neutral; a book built from it is close to neutral, since a book's caps and scaling come after.
 
+### regression_alpha
+
+<p class="sig"><code>regression_alpha(y, x1, ..., xk)</code></p>
+
+The intercept $\hat a$ of `regression_neut`'s fit, the same regression across the day's stocks:
+
+$$
+y_i = a + \sum_{j=1}^{k} b_j \, x_{ij} + \varepsilon_i
+\qquad\Longrightarrow\qquad
+\hat a = \bar y - \sum_{j=1}^{k} \hat b_j \, \bar x_j
+$$
+
+**One number per day, the same for every stock.** The intercept belongs to the day's cross-section, not to a stock,
+so every stock gets it, in the universe or not, and its history is the same for all. On a day with too few stocks
+for a fit (fewer than k + 2), every stock has no value.
+
+With today's returns as `y` and characteristics known at yesterday's close as the regressors, it is the return of a
+stock with none of the characteristics: with betas, the zero-beta portfolio's return.
+
+```qex
+let b = delay(ts_beta_shrunk(returns(1), returns(1, 'market'), 252), 1)
+in ts_mean(regression_alpha(returns(1), b), 252)       # the zero-beta portfolio's average daily return
+```
+
+### regression_beta
+
+<p class="sig"><code>regression_beta(y, x1, ..., xk, j)</code></p>
+
+The `j`-th slope $\hat b_j$ of the same fit (`j` from 1 to k; with one regressor it may be left out). Like the
+intercept, one number per day for every stock. With today's returns on characteristics known at yesterday's close,
+it is the day's **return to the j-th characteristic**, net of the others; its average over time is the
+characteristic's premium (Fama and MacBeth, 1973).
+
+A day's slope is the same for every stock, so on its own it is not a signal: a book demeans it away. Signals multiply a
+characteristic by something learned from its premium's history:
+
+```qex
+let z    = zscore(delay(field('book_to_price'), 1)),
+    prem = regression_beta(returns(1), z, 1)
+in sign(ts_mean(prem, 126)) * z                        # factor momentum: lean into value while it pays
+```
+
+Lag the characteristics (`delay(..., 1)`): regressed on characteristics from the same day, the slope rewards
+whatever moved with today's return, which is look-ahead. [Factor Premia and Timing](../../examples/factor-premia.md)
+builds factor momentum, volatility-managed blends, Fama-MacBeth weights and beta timing from these.
+
+`regression_alpha` and every `regression_beta` on the same `y` and regressors read one internal fit node, computed
+once. `regression_neut` on the same inputs fits the same regression on its own, and its residual is exactly
+$y - \hat a - \sum_j \hat b_j x_j$.
+
 ### pca_factor
 
 <p class="sig"><code>pca_factor(x, window, k[, refit])</code></p>

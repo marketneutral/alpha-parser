@@ -76,38 +76,16 @@ class SignalGraph:
         return cache_key
 
     def _get_children(self, signal: Signal) -> List[Signal]:
-        """Extract child signals from a signal node."""
-        children = []
-
-        # Check common attribute patterns
-        if hasattr(signal, 'left') and isinstance(signal.left, Signal):
-            children.append(signal.left)
-        if hasattr(signal, 'right') and isinstance(signal.right, Signal):
-            children.append(signal.right)
-        if hasattr(signal, 'signal') and isinstance(signal.signal, Signal):
-            children.append(signal.signal)
-        if hasattr(signal, 'x') and isinstance(signal.x, Signal):
-            children.append(signal.x)
-        if hasattr(signal, 'y') and isinstance(signal.y, Signal):
-            children.append(signal.y)
-        if hasattr(signal, 'basis') and isinstance(signal.basis, Signal):    # pca_factor's shared decomposition
-            children.append(signal.basis)
-        more = getattr(signal, 'more', None)                 # regression_neut's regressors after the first
-        if isinstance(more, tuple):
-            children.extend(m for m in more if isinstance(m, Signal))
-        if hasattr(signal, 'condition') and isinstance(signal.condition, Signal):
-            children.append(signal.condition)
-        if hasattr(signal, 'if_true') and isinstance(signal.if_true, Signal):
-            children.append(signal.if_true)
-        if hasattr(signal, 'if_false') and isinstance(signal.if_false, Signal):
-            children.append(signal.if_false)
-        groups = getattr(signal, 'groups', None)             # a group operator's labels, when an expression gives them
-        if isinstance(groups, Signal):
-            children.append(groups)
-        elif isinstance(groups, tuple):
-            children.extend(g for g in groups if isinstance(g, Signal))
-
-        return children
+        """A node's inputs: every attribute that is a signal (or a tuple of them), as qex.missing.children finds them,
+        each once. Before 0.13.0 a fixed list of attribute names missed the pair operators' signal1 and signal2,
+        latch's conditions and power's exponent, so the DAG drew them without inputs."""
+        from .missing import children
+        out, seen = [], set()
+        for c in children(signal):
+            if id(c) not in seen:
+                seen.add(id(c))
+                out.append(c)
+        return out
 
     def _format_key(self, key: tuple) -> str:
         """Convert cache key tuple to readable string."""

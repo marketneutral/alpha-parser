@@ -52,6 +52,8 @@ PYTHONPATH=src pytest tests/ -v
 - Every group operator works on one day's cross-section; `group_std(x, g)` is the day's spread within each group (since 0.12.0; the old `group_std(x, g, n)` window form is refused). `group_count_valid(x, g, w)` alone still counts over a window
 - `pca_factor(x, window, k[, refit=21])` is each stock's beta to the k-th statistical factor (correlation PCA across stocks, refit every `refit` rows and held, components tracked across refits); its input is an internal `PcaBasis` node (the decomposition, value a `PcaFits` list, not a frame), shared by every pca_factor on the same x, window and refit; `missing.py`, `adjust.py` and `distributed.py` special-case it
 - `ts_alpha`/`ts_resid` are the intercept and today's residual of a rolling time-series fit per stock, `(y, x1, ..., xk, period[, min_periods])`: one regressor uses `ts_beta`'s fit on the paired days, several are one joint fit (`timeseries.py: _multi_fit`, at least k + 2 days); the `_shrunk` versions (one regressor) use `ts_beta_shrunk`'s slope, and all three shrunk fits take an optional group prior last, `(y, x, period[, min_periods][, groups])`; without groups `TsBetaShrunk`'s cache key is unchanged (since 0.13.0)
+- `regression_alpha(y, x1, ...)`/`regression_beta(y, x1, ..., j)` are the intercept and j-th slope of regression_neut's daily cross-sectional fit, one number per day for every stock (Fama-MacBeth factor returns); they read one internal `RegressionFit` node, as `ts_alpha`/`ts_resid` read a `TsFit` node (its slope is the `ts_beta` node) and `pca_factor` a `PcaBasis` (since 0.14.0). Internal nodes set `value_is_frame = False`; `missing.py` passes their inputs' reasons through and labels the readers as written
+- `SignalGraph` takes a node's inputs as every attribute that is a signal (`missing.children`); a `compute_context` is per thread (a `ContextVar`), so Dask's threaded workers never share one (since 0.14.0)
 - `regression_neut(y, x1, x2, ...)` with several regressors is one joint least-squares fit; with one regressor its cache key is unchanged (downstream tools hash expressions by their cache key, so keys must stay stable)
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 
@@ -186,6 +188,8 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
+- `test_regression_coefs.py` - regression_alpha/regression_beta against per-day least squares, planted premia, the universe
+- `test_sharing.py` - Six overlapping complex signals in one context, SignalGraph and Dask: each node computed once, results as alone; contexts in parallel threads
 - `test_ts_alpha_resid.py` - ts_alpha, ts_resid, their shrunk versions and the group prior, against direct regressions
 - `test_backtest_warmup.py` - Backtest starts on the first day the book holds a position (0.12.2)
 - `test_excel.py` - The Excel to qex workbook: its formulas are current and its values match qex
