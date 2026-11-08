@@ -431,7 +431,8 @@ _ARG_RULES = {
     # ts_quantile, pca_factor, group_quantile and group_count_valid check their own arguments, with their own messages
     "ts_quantile": ("x", "x", "x", "count"),
     "delay": ("x", "lag"), "delta": ("x", "lag"),
-    **{f: ("x", "x", "window", "count") for f in ("ts_corr", "ts_cov", "ts_beta", "ts_alpha", "ts_resid")},
+    **{f: ("x", "x", "window", "count") for f in ("ts_corr", "ts_cov", "ts_beta")},
+    # ts_alpha and ts_resid take any number of regressors, (y, x1, ..., xk, period[, min_periods]): checked there
     # the shrunk fits take (y, x, period[, min_periods][, groups]): a 4th argument is min_periods or the groups
     **{f: ("x", "x", "window", "count_or_groups", "groups")
        for f in ("ts_beta_shrunk", "ts_alpha_shrunk", "ts_resid_shrunk")},

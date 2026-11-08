@@ -5,11 +5,15 @@
 New operators for the intercept and residual of a rolling regression, and a group prior for shrunk betas. Existing
 expressions keep their values and cache keys.
 
-- **`ts_alpha(y, x, period[, min_periods])`**: the window's intercept, mean(y) − beta × mean(x), both means over the
-  days both series have a value. Written by hand with two `ts_mean`s it is wrong whenever `y` has a gap `x` doesn't.
-- **`ts_resid(y, x, period[, min_periods])`**: today's residual, y − alpha − beta × x, from the window ending today:
-  the part of today's `y` that `x` doesn't explain, the building block of residual momentum and reversal.
-- **`ts_alpha_shrunk` and `ts_resid_shrunk`**: the same with `ts_beta_shrunk`'s slope. For a fixed slope the
+- **`ts_alpha(y, x1, ..., xk, period[, min_periods])`**: the window's intercept. With one regressor, mean(y) − beta
+  × mean(x), both means over the days both series have a value; written by hand with two `ts_mean`s it is wrong
+  whenever `y` has a gap `x` doesn't. With several, one joint least-squares fit over the days all have a value (at
+  least k + 2), a multi-factor alpha: `ts_alpha(returns(1), field('mkt'), field('smb'), field('hml'), 252)`.
+  Duplicated regressors get the minimum-norm fit. Three factors on 3,000 stocks over five years take a few seconds.
+- **`ts_resid(y, x1, ..., xk, period[, min_periods])`**: today's residual, y − alpha − Σ beta_j × x_j, from the
+  window ending today: the part of today's `y` the regressors don't explain, the building block of residual momentum
+  and reversal.
+- **`ts_alpha_shrunk` and `ts_resid_shrunk`**: the same with `ts_beta_shrunk`'s slope (one regressor). For a fixed slope the
   least-squares intercept is still the line through the means, so alpha_shrunk − alpha = (beta − beta_shrunk) ×
   mean(x).
 - **A group prior for the shrunk fits**: `ts_beta_shrunk(y, x, period[, min_periods][, groups])`, and the same for

@@ -46,7 +46,7 @@ The direction matters most for regressions, because qex has both kinds, and they
 | One fit for | each stock, on each day | each day |
 | Its data points are | the stock's last `period` days | the day's stocks |
 | The question | how does this stock move with `x`, through time? | across today's stocks, how much of `y` lines up with `x`? |
-| `x` is | a series over time, such as the market's return | a value for each stock that day, such as each stock's beta |
+| `x` is | one or more series over time, such as the market's return or factor returns | one or more values for each stock that day, such as each stock's beta |
 | The coefficients | belong to the stock: each stock has its own beta and alpha | belong to the day: one intercept and one slope, shared by every stock |
 
 They are often used together. A time-series regression estimates each stock's beta from its history; a

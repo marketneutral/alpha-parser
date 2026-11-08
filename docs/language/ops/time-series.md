@@ -253,7 +253,7 @@ ts_beta_shrunk(returns(1), returns(1, 'market'), 252, 126, 'sector')   # and a v
 
 ### ts_alpha
 
-<p class="sig"><code>ts_alpha(y, x, period[, min_periods])</code></p>
+<p class="sig"><code>ts_alpha(y, x1, ..., xk, period[, min_periods])</code></p>
 
 The intercept of the same regression: the $\alpha$ of $y_t = \alpha + \beta x_t + \varepsilon_t$ over the window. A
 least-squares line goes through the two means, so over the window's paired days
@@ -268,8 +268,30 @@ Both means are over the days both series have a value, the same days as the beta
 risk-free rate; times 252 for a year.
 
 ```qex
-ts_alpha(returns(1), returns(1, 'market'), 252) * 252     # each stock's alpha over the last year, annualized
+ts_alpha(returns(1), returns(1, 'market'), 252) * 252     # annualized
 ```
+
+**Several regressors.** Give more than one `x` and it is one joint least-squares fit over the window's days where `y`
+and every `x` have a value:
+
+$$
+y_t = \alpha + \sum_{j=1}^{k} \beta_j \, x_{j,t} + \varepsilon_t
+\qquad\Longrightarrow\qquad
+\alpha = \bar y - \sum_{j=1}^{k} \beta_j \, \bar x_j
+$$
+
+with the $\beta_j$ solving the window's normal equations, $\operatorname{cov}(x, x)\,\beta = \operatorname{cov}(x, y)$.
+The alpha is net of all the regressors at once, which is not the same as taking them out one at a time when they are
+correlated. A window needs at least $k + 2$ such days (and `min_periods`); regressors that duplicate each other get
+the minimum-norm fit. A multi-factor alpha, with factor returns supplied once per day for every stock
+([Data Format](../../data/format.md#date-only-fields-and-the-market)):
+
+```qex
+ts_alpha(returns(1), field('mkt'), field('smb'), field('hml'), 252) * 252
+```
+
+The shrunk versions take one regressor: shrinking several betas at once needs a prior across them, which is a model
+of its own.
 
 ### ts_alpha_shrunk
 
@@ -297,12 +319,12 @@ ts_alpha_shrunk(returns(1), returns(1, 'market'), 252, 'sector') * 252
 
 ### ts_resid
 
-<p class="sig"><code>ts_resid(y, x, period[, min_periods])</code></p>
+<p class="sig"><code>ts_resid(y, x1, ..., xk, period[, min_periods])</code></p>
 
-Today's residual from the window's fit, with $\alpha$ and $\beta$ from the window ending today:
+Today's residual from the window's fit, with $\alpha$ and the $\beta_j$ from the window ending today:
 
 $$
-\varepsilon_t = y_t - \alpha - \beta \, x_t
+\varepsilon_t = y_t - \alpha - \sum_{j=1}^{k} \beta_j \, x_{j,t}
 $$
 
 The part of today's `y` that `x` doesn't explain: for a stock's return on the market's, its idiosyncratic return. No
@@ -310,7 +332,8 @@ value on a day `y` or `x` is missing. The fit includes today, as any rolling reg
 uses nothing after today.
 
 ```qex
-ts_sum(ts_resid(returns(1), returns(1, 'market'), 252), 20)       # last month's return beyond what beta explains
+ts_sum(ts_resid(returns(1), returns(1, 'market'), 252), 20)         # last month, beyond beta
+ts_resid(returns(1), field('mkt'), field('smb'), field('hml'), 252)    # beyond three factors
 ```
 
 ### ts_resid_shrunk

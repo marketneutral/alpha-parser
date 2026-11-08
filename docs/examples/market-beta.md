@@ -169,7 +169,17 @@ let e = ts_resid_shrunk(returns(1), returns(1, 'market'), 252, 'sector')
 in delay(ts_sum(e, 231), 21) / ts_std(e, 252)
 ```
 
-The `_shrunk` versions use the shrunk beta, and its alpha changes with it: what the shrinkage takes off the beta,
+With more than one regressor, both are one joint fit, net of every regressor at once. Given daily factor returns in
+the data (each a series with one value per day), a three-factor alpha and residual momentum net of all three:
+
+```qex
+ts_alpha(returns(1), field('mkt'), field('smb'), field('hml'), 252) * 252
+
+let e = ts_resid(returns(1), field('mkt'), field('smb'), field('hml'), 252)
+in delay(ts_sum(e, 231), 21) / ts_std(e, 252)
+```
+
+The `_shrunk` versions take one regressor and use the shrunk beta, and its alpha changes with it: what the shrinkage takes off the beta,
 the alpha picks up, times the market's average return over the window
 ([`ts_alpha_shrunk`](../language/ops/time-series.md#ts_alpha_shrunk)).
 

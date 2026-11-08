@@ -100,9 +100,9 @@ the stocks on each day, see `regression_neut` under Cross-sectional.
 | `ts_cov(x, y, period[, min_periods])` | Covariance over the window. Part of the window |
 | `ts_beta(y, x, period[, min_periods])` | Least-squares slope of `y` on `x`, cov(y, x) / var(x), over the window. Part of the window |
 | `ts_beta_shrunk(y, x, period[, min_periods][, groups])` | `ts_beta`, pulled toward the day's average beta (or with `groups`, its group's) in proportion to its noise (Vasicek). Part of the window |
-| `ts_alpha(y, x, period[, min_periods])` | Intercept of `y` on `x` over the window, mean(y) − beta × mean(x) on the paired days. Part of the window |
+| `ts_alpha(y, x1, ..., xk, period[, min_periods])` | Intercept of `y` on one or more regressors over the window, from one joint least-squares fit on the days all have a value; with one, mean(y) − beta × mean(x). Part of the window |
 | `ts_alpha_shrunk(y, x, period[, min_periods][, groups])` | The intercept that goes with `ts_beta_shrunk`'s slope. Part of the window |
-| `ts_resid(y, x, period[, min_periods])` | Today's residual, y − alpha − beta × x, from the window's fit: the part of today's `y` that `x` doesn't explain. Part of the window |
+| `ts_resid(y, x1, ..., xk, period[, min_periods])` | Today's residual from the window's fit, y − alpha − Σ beta_j × x_j: the part of today's `y` the regressors don't explain. Part of the window |
 | `ts_resid_shrunk(y, x, period[, min_periods][, groups])` | Today's residual from `ts_beta_shrunk`'s fit. Part of the window |
 
 ### Exponentially weighted
