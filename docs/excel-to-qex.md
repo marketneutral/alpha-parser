@@ -2,8 +2,9 @@
 
 *A walkthrough for spreadsheet people.*
 
-If you know how to use Excel, you are fast on your way to using qex! A sheet of prices, a few columns of formulas, a
-ranking at the end: that's how qex thinks too. It just writes it down differently.
+If you know how to use Excel, you are well on your way to expressing quant ideas in the qex language! A sheet of
+prices, a few columns of formulas, a ranking at the end: that's how qex thinks too. It just writes it down
+differently.
 
 To be clear about what qex is: it isn't an Excel add-in, and it doesn't run inside a spreadsheet. It's a short
 language for describing a signal. You write the steps as one line, and qex works them out for every stock and every
