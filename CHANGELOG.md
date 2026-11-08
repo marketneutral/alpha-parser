@@ -9,7 +9,9 @@
   twin's `value`. Twins are chosen every `rebalance` days from the days before (point in time), among stocks in the
   universe and, with `within`, in the same group; never the stock itself; held in between, and ended when either
   stock leaves the universe. Metrics: correlation, Spearman, cosine, root mean squared and mean absolute distance,
-  each over the pair's shared days. `'exclusive'` pairs the group off into mutual twins. Designed and tested as a
+  each over the pair's shared days, and `'path'`: Gatev, Goetzmann and Rouwenhorst's distance between price paths
+  compounded from 100 at each formation window's start (the key is daily returns). `'exclusive'` pairs the group off
+  into mutual twins. Designed and tested as a
   mock in qexarena's notebook "ts_match: mocking up a new operator in Python"; the semantics tests are ported.
 - **The selection is one internal node**, `MatchSelection`, shared by every `ts_match` and `ts_match_score` on the
   same key and options whatever its value: a twin's return, volume, identifier and score cost one selection.

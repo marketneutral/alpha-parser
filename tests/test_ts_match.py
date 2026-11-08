@@ -66,7 +66,7 @@ def test_the_value_read_is_the_twins(pairs_data):
 def test_each_metric_is_the_pairwise_definition(metric):
     """similarity() against a pair-by-pair computation over each pair's shared days, with gaps."""
     rng = np.random.default_rng(3)
-    w = rng.normal(0, 1, (30, 9))
+    w = rng.normal(0, 0.02 if metric == "path" else 1, (30, 9))
     w[rng.random(w.shape) < 0.15] = np.nan
     s = similarity(w, metric, 10)
     for i in range(9):
@@ -86,6 +86,10 @@ def test_each_metric_is_the_pairwise_definition(metric):
                 expected = a @ b / np.sqrt((a @ a) * (b @ b))
             elif metric == "euclidean":
                 expected = -np.sqrt(np.mean((a - b) ** 2))
+            elif metric == "path":                                     # paths from 100, a missing day flat
+                pi = 100 * np.cumprod(1 + np.nan_to_num(w[:, i]))
+                pj = 100 * np.cumprod(1 + np.nan_to_num(w[:, j]))
+                expected = -np.sqrt(np.mean((pi[both] - pj[both]) ** 2))
             else:
                 expected = -np.mean(np.abs(a - b))
             assert s[i, j] == pytest.approx(expected, abs=1e-10)
@@ -336,3 +340,57 @@ def test_the_score_reads_the_same_selection(pairs_data):
 def test_bad_score_arguments(expr, message):
     with pytest.raises(ValueError, match=message):
         qex(expr)
+
+
+# --- metric='path': Gatev, Goetzmann and Rouwenhorst's distance -------------------------------------------------------
+
+def _tracking_pairs(idio):
+    """24 stocks in 12 pairs whose prices track each other: a shared return plus `idio` of daily noise each."""
+    rng = np.random.default_rng(21)
+    T, N = 260, 24
+    idx = pd.bdate_range("2023-01-02", periods=T)
+    r = np.repeat(rng.normal(0, 0.012, (T, N // 2)), 2, axis=1) + rng.normal(0, idio, (T, N))
+    return {"close": pd.DataFrame(30 * np.cumprod(1 + r, axis=0), idx, [f"S{i:02d}" for i in range(N)])}
+
+
+def test_path_finds_pairs_whose_prices_track_each_other():
+    d = _tracking_pairs(0.002)
+    p = peers(", metric='path', matching='exclusive'", d).iloc[-1]
+    assert (p.to_numpy() == (np.arange(24) ^ 1)).all()
+
+
+def test_path_twins_are_the_closest_paths():
+    """The defining property: each stock's nearest twin is the stock whose path from 100 was closest."""
+    d = _tracking_pairs(0.004)                                         # loose pairs: path and correlation differ
+    p = peers(", metric='path'", d)
+    r = ev("returns(1)", d)
+    t = LOOK + 21 * 2
+    paths = 100 * (1 + r.iloc[t - LOOK:t].fillna(0)).cumprod()
+    valid = r.iloc[t - LOOK:t].notna()
+    for i in range(24):
+        dist = [np.sqrt(((paths.iloc[:, i] - paths.iloc[:, j])[valid.iloc[:, i] & valid.iloc[:, j]] ** 2).mean())
+                if j != i else np.inf for j in range(24)]
+        assert p.iloc[t, i] == int(np.argmin(dist))
+
+
+def test_path_score_is_the_distance_between_paths_in_index_points(pairs_data):
+    d = pairs_data
+    score = ev(f"ts_match_score(returns(1), {LOOK}, metric='path', min_overlap=40)", d)
+    p = peers(", metric='path', min_overlap=40", d)
+    r = ev("returns(1)", d)
+    t = LOOK + 21 * 3                                                  # a rebalance day
+    window = r.iloc[t - LOOK:t]
+    for i in range(24):
+        j = p.iloc[t, i]
+        if j < 0:
+            continue
+        paths = 100 * (1 + window.iloc[:, [i, j]].fillna(0)).cumprod()
+        both = window.iloc[:, [i, j]].notna().all(axis=1)
+        expected = np.sqrt(((paths.iloc[:, 0] - paths.iloc[:, 1])[both] ** 2).mean())
+        assert score.iloc[t, i] == pytest.approx(expected, abs=1e-9) and score.iloc[t, i] >= 0
+
+
+def test_path_needs_returns_as_its_key():
+    from qex.adjust import check
+    fields = {"close": dict(adjustment=1, unit="usd_per_share")}
+    assert [f["kind"] for f in check(qex("ts_match(returns(5), close(), 60, metric='path')"), fields, mode="warn")]

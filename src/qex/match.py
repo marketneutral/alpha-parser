@@ -26,7 +26,8 @@ import pandas as pd
 from .signal import Signal
 from .universe import universe_members
 
-METRICS = ("corr", "spearman", "cosine", "euclidean", "manhattan")
+METRICS = ("corr", "spearman", "cosine", "euclidean", "manhattan", "path")
+DISTANCES = ("euclidean", "manhattan", "path")                  # scores in the metric's units: smaller is closer
 MATCHINGS = ("nearest", "exclusive")
 
 
@@ -40,6 +41,13 @@ def similarity(window: np.ndarray, metric: str, min_overlap: int) -> np.ndarray:
     if metric == "spearman":                                    # a correlation of ranks
         window = pd.DataFrame(window).rank().to_numpy()
         metric = "corr"
+    elif metric == "path":
+        # Gatev, Goetzmann and Rouwenhorst (2006): the key is daily returns, compounded into a price path that starts
+        # at 100 at the window's start (a missing day is a flat day inside the path); pairs are compared by the root
+        # mean squared distance between paths, over the days both have a return
+        valid = np.isfinite(window)
+        window = np.where(valid, 100 * np.cumprod(1 + np.where(valid, window, 0.0), axis=0), np.nan)
+        metric = "euclidean"
     valid = np.isfinite(window)
     x = np.where(valid, window, 0.0)
     m = valid.astype(float)
@@ -185,7 +193,7 @@ class TsMatch(Signal):
 class TsMatchScore(Signal):
     """How alike each stock and its twin were when the twin was chosen: the score of ts_match's selection, in the
     metric's own units (a correlation for 'corr', 'spearman' and 'cosine'; the distance, positive, smaller is closer,
-    for 'euclidean' and 'manhattan'). Held until the next rebalance; no value without a twin. Reads the same internal
+    for 'euclidean', 'manhattan' and 'path', the last in index points of paths starting at 100). Held until the next rebalance; no value without a twin. Reads the same internal
     MatchSelection node as every ts_match on the same key and options."""
 
     def __init__(self, selection: MatchSelection):
@@ -193,7 +201,7 @@ class TsMatchScore(Signal):
 
     def _compute(self, data):
         sel = self.selection.evaluate(data)
-        scores = -sel.scores if self.selection.metric in ("euclidean", "manhattan") else sel.scores
+        scores = -sel.scores if self.selection.metric in DISTANCES else sel.scores
         return pd.DataFrame(scores, index=sel.index, columns=sel.columns)
 
     def _cache_key(self):

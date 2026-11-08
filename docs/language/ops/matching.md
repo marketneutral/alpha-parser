@@ -2,7 +2,10 @@
 
 Every other cross-sectional operator compares a stock with a **crowd**: the market (`demean`), its sector
 (`group_demean`), all its peers at once (`rank`). `ts_match` compares a stock with **one particular other stock**: its
-closest relative, chosen from history, and `ts_match_score` says how close. The panels on this page run on the
+closest relative, chosen from history, and `ts_match_score` says how close.
+
+**Reference.** Gatev, E., Goetzmann, W. N. and Rouwenhorst, K. G. (2006). Pairs trading: Performance of a
+relative-value arbitrage rule. *Review of Financial Studies* 19(3), 797-827. The panels on this page run on the
 [Excel to qex dataset](../../excel-to-qex.md): six stocks over 30 days, AAA, BBB and CCC in Tech, DDD, EEE and FFF in
 Energy.
 
@@ -33,7 +36,7 @@ expression as leaving it out.
 | `value` | | What to read from the twin: any expression, numbers or labels |
 | `key` | | The expression whose history decides who is alike |
 | `lookback` | | How many days of `key` to compare, at least 2 |
-| `metric` | `'corr'` | How to measure alike: `'corr'`, `'spearman'`, `'cosine'`, `'euclidean'`, `'manhattan'` |
+| `metric` | `'corr'` | How to measure alike: `'corr'`, `'spearman'`, `'cosine'`, `'euclidean'`, `'manhattan'`, `'path'` |
 | `within` | `None` | A group the twin must share: a group's name (`'sector'`) or any labels expression |
 | `matching` | `'nearest'` | `'nearest'`: each stock's closest; `'exclusive'`: reciprocal pairs that don't overlap |
 | `rebalance` | `21` | Choose twins every this many days, and hold them in between |
@@ -75,6 +78,7 @@ stocks' `key` on those days:
 | `'cosine'` | $\displaystyle \frac{\sum x\,y}{\sqrt{\sum x^2 \sum y^2}}$ | the correlation without removing the means |
 | `'euclidean'` | $\displaystyle -\sqrt{\tfrac{1}{n} \sum (x - y)^2}$ | how far apart they are, day by day |
 | `'manhattan'` | $\displaystyle -\tfrac{1}{n} \sum \lvert x - y \rvert$ | the same, less swayed by one large gap |
+| `'path'` | $\displaystyle -\sqrt{\tfrac{1}{n} \sum (P^x_t - P^y_t)^2}$, with $P_t = 100 \prod_{s \le t} (1 + x_s)$ | how far apart their prices travelled from a common start: the key is daily returns, compounded from 100 at the window's start ([below](#pairs-by-distance-gatev-goetzmann-and-rouwenhorst)) |
 
 Higher is closer, so the distances are negated. They are divided by $n$, so a pair with a few gaps isn't favored over
 one with none. (Spearman ranks each stock's whole window, then correlates the ranks on the shared days: exact when
@@ -161,7 +165,7 @@ weaker match. The score is in the metric's own units:
 | `metric` | The score |
 |---|---|
 | `'corr'`, `'spearman'`, `'cosine'` | the correlation (or cosine), from −1 to 1, higher is closer |
-| `'euclidean'`, `'manhattan'` | the distance, 0 or more, **smaller** is closer |
+| `'euclidean'`, `'manhattan'`, `'path'` | the distance, 0 or more, **smaller** is closer (for `'path'`, in index points of paths that start at 100) |
 
 Like the twin, the score is fixed at the rebalance and held until the next, and there is no score without a twin. It
 says how good the match was when chosen; whether the pair still moves together is a different question, asked of the
@@ -211,7 +215,7 @@ the slowest metric (6.5 s within sectors); a longer `rebalance` divides the cost
   an adjusted price level ([Adjusted Data and Look-Ahead](../adjusted-data.md)). The look-ahead check flags
   `ts_match(close(), …)`, as it flags `rank(close())`; `ts_match(returns(5), …)` is fine.
 - A key may be an adjusted price level for `'corr'`, `'spearman'` and `'cosine'`, which ignore each stock's scale,
-  but not for the distances, which compare levels across stocks.
+  but not for the distances, which compare levels across stocks, nor for `'path'`, whose key is returns.
 
 ## Trading on twins
 
@@ -272,6 +276,60 @@ Gating on all three checks at once (`where(near & agree & liquid, …, None)`) k
 too few of them: breadth is part of the edge. [Pairs Trading](../../examples/pairs-trading.md) has more pairs
 strategies, with fixed pairs.
 
+## Pairs by distance: Gatev, Goetzmann and Rouwenhorst
+
+The classic way to find pairs (Gatev, Goetzmann and Rouwenhorst, 2006): over a formation period, turn each stock's
+total returns into a price path starting at 100, and pair the stocks whose paths stayed closest, by the sum of
+squared differences day by day. That is `metric='path'`, with the key daily returns:
+
+$$
+P^i_t = 100 \prod_{s \le t} \left(1 + r^i_s\right),
+\qquad
+d_{ij} = \sqrt{\tfrac{1}{n} \sum_t \left(P^i_t - P^j_t\right)^2}
+$$
+
+over the window's days on which both have a return (a missing day is a flat day inside a path). The square root and
+the $1/n$ don't change which pairs are closest: the order is the paper's sum of squared differences.
+
+**Why it is a metric, not a key.** The paths start at 100 at the start of *each* formation window, and that start
+moves with every rebalance. A key is one series through time, so no key makes "growth of 100 since this window
+began" for every window at once: prices compare levels ($40 against $120), and an index from the start of the data
+carries each stock's whole past. The rebasing happens inside `ts_match`, window by window.
+
+The paper's procedure, in qex: a year of formation, pairs that don't overlap (`'exclusive'` pairs the closest first,
+exactly their ranking by distance), only the closest pairs traded, and a bet that a pair which has drifted apart
+comes back:
+
+```qex
+let r       = returns(1),
+    twin    = ts_match(returns(21), r, 252, metric='path', within='sector', matching='exclusive', rebalance=126),
+    dist    = ts_match_score(r, 252, metric='path', within='sector', matching='exclusive', rebalance=126),
+    nearest = rank(-dist) > 0.8
+in where(nearest, -(returns(21) - twin), None)
+```
+
+`rebalance=126` re-forms the pairs every six months, as the paper does; `ts_match_score` is each pair's distance, and
+`nearest` keeps the closest fifth. One part is not the paper's: it opens a trade when the two *normalized*
+prices diverge by two standard deviations since the trading period began, a spread that also restarts at each
+rebalance. Here the divergence is the last month's return gap.
+
+**Path or correlation?** They find different twins. Correlation asks whether two stocks move together day by day;
+path asks whether their prices ended up travelling together. On pairs whose prices really track each other they agree:
+in a test with twelve planted pairs differing by 0.2% of noise a day, both find all twelve. On looser pairs (0.4% a
+day of their own), correlation still finds every pair and path finds under half: the small daily differences compound
+into a wide gap over a year, and two unrelated stocks that happened to end up close look just as good. Path favors
+pairs of quiet stocks and genuine near-substitutes (share classes, close competitors); correlation finds co-movement
+at any volatility. A robust choice uses both: `path` to choose, and `ts_corr(r, twin, 63)` or a Spearman match to
+check.
+
+**What no metric here finds: a leader.** Take a stock whose price follows a sine wave around 100 and one that
+follows the cosine, a quarter cycle ahead. Their daily returns are uncorrelated (one rises fastest when the other is
+at its peak), so correlation never pairs them. Their prices never drift apart, yet `path` doesn't pair them either:
+a quarter cycle apart, their gap swings by $\pm\sqrt{2}A$ for an amplitude $A$, an RMS distance of $A$, while a stock
+that simply stays flat is only $A/\sqrt{2}$ from each. What they share is a lag: today's return of one matches the
+other's from a quarter cycle earlier (a correlation of 0.97 in a test at five days). That is a lead-lag relationship,
+not a twin.
+
 ## Errors
 
 Every mistake is refused when the expression is read, with a message that says what to write:
@@ -280,7 +338,7 @@ Every mistake is refused when the expression is read, with a message that says w
 |---|---|
 | `ts_match(r, key, 252, metrc='corr')` | there is no option `metrc`; the options are listed |
 | `ts_match(r, key, 252, 'corr', metric='corr')` | `metric` is given twice, by position and by name |
-| `ts_match(r, key, 252, metric='pearson')` | the metrics are `'corr'`, `'spearman'`, `'cosine'`, `'euclidean'`, `'manhattan'` |
+| `ts_match(r, key, 252, metric='pearson')` | the metrics are `'corr'`, `'spearman'`, `'cosine'`, `'euclidean'`, `'manhattan'`, `'path'` |
 | `ts_match(r, key, 252, min_overlap=300)` | `min_overlap` can't be more than `lookback` |
 | `rank(ts_match(identifier(), key, 252))` | the result is labels, and `rank` needs numbers |
 | `ts_mean(r, period=20)` | only `ts_match` takes arguments by name |
