@@ -162,6 +162,13 @@ How many days ago the window's smallest value was. The whole window.
 
 ## Pairs of series
 
+!!! note "Regressions through time, one stock at a time"
+    The pair operators work down **each stock's own history**: `ts_beta(y, x, 252)` fits one regression per stock, on
+    that stock's last 252 days, so every stock gets its own beta, alpha and residual. `x` is usually one series for
+    every stock, such as the market's return. For a regression **across the stocks on one day**, use
+    [`regression_neut`](cross-sectional.md#regression_neut);
+    [Two kinds of regression](../concepts.md#two-kinds-of-regression) sets them side by side.
+
 The pair operators use only the days on which both series have a value. `min_periods` (default `min(20, period)`) is
 the fewest such days a window needs: with the default, a stock 20 days after listing gets a "252-day" beta from 20
 days. Ask for more when it matters.

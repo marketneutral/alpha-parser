@@ -91,6 +91,9 @@ Each stock's own history. Each operator follows one of three [window rules](ops/
 
 ### Pairs of series
 
+Regressions and correlations through time: one fit per stock, over its own window. For a regression across
+the stocks on each day, see `regression_neut` under Cross-sectional.
+
 | Operation | Description |
 |-----------|-------------|
 | `ts_corr(x, y, period[, min_periods])` | Correlation of `x` and `y` over the window. Part of the window |
@@ -145,7 +148,7 @@ Across the stocks in the universe, one day at a time. [Cross-sectional in detail
 | `quantile(x, n)` | Bucket 1 (lowest) to `n` by percentile rank |
 | `winsorize(x, limit)` | Clip at the day's `limit` and 1 − `limit` quantiles: `winsorize(x, 0.05)` caps at the 5th and 95th percentiles |
 | `truncate(x, max)` | Clip each value to [−max, max] (element by element, not across stocks) |
-| `regression_neut(y, x1, x2, ...)` | y with its least-squares fit on the regressors (and an intercept) taken out, across the day's stocks |
+| `regression_neut(y, x1, x2, ...)` | One regression per day, across the stocks (not through time): `y` with its least-squares fit on the regressors (and an intercept) taken out |
 | `pca_factor(x, window, k[, refit])` | Each stock's beta to the k-th statistical factor of `x`, from a principal component analysis across stocks, refit every `refit` days (default 21) |
 
 ## Groups

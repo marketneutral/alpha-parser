@@ -36,6 +36,31 @@ A part used twice, by name with `let` or written out twice, is the same part: qe
 Most signals mix all of them. In `rank(-returns(5) / volatility(20))`, `returns` and `volatility` look down each
 stock's history, `/` and `-` work element by element, and `rank` compares the stocks on each day.
 
+### Two kinds of regression
+
+The direction matters most for regressions, because qex has both kinds, and they answer different questions.
+
+| | Time-series regression | Cross-sectional regression |
+|---|---|---|
+| Operators | `ts_beta`, `ts_beta_shrunk`, `ts_alpha`, `ts_resid` and the other `ts_` pair operators | `regression_neut` |
+| One fit for | each stock, on each day | each day |
+| Its data points are | the stock's last `period` days | the day's stocks |
+| The question | how does this stock move with `x`, through time? | across today's stocks, how much of `y` lines up with `x`? |
+| `x` is | a series over time, such as the market's return | a value for each stock that day, such as each stock's beta |
+| The coefficients | belong to the stock: each stock has its own beta and alpha | belong to the day: one intercept and one slope, shared by every stock |
+
+They are often used together. A time-series regression estimates each stock's beta from its history; a
+cross-sectional regression then takes those betas out of today's signal:
+
+```qex
+let beta = ts_beta_shrunk(returns(1), returns(1, 'market'), 252)   # through time
+in regression_neut(rank(-returns(5)), beta)                       # across stocks
+```
+
+Their residuals differ in the same way. `ts_resid(returns(1), returns(1, 'market'), 252)` is the part of a stock's
+return today that the market's move doesn't explain, judged against that stock's own history.
+`regression_neut(y, beta)` is the part of today's `y` that beta doesn't explain, judged across today's stocks.
+
 ## Which stocks a cross-section compares
 
 A cross-sectional or group operator compares the stocks in the **universe** that day, and gives every other stock no

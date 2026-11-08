@@ -148,7 +148,9 @@ neutralization sees.
 
 ## Alpha and the residual
 
-The same regression gives two more numbers. `ts_alpha` is its intercept: the return a stock earned beyond what its
+The same regression gives two more numbers. Like `ts_beta`, both come from each stock's own history, one
+regression per stock through time (the next section's `regression_neut` is the other kind, across the stocks on
+each day). `ts_alpha` is its intercept: the return a stock earned beyond what its
 beta to the market explains, on average over the window. `ts_resid` is today's leftover: today's return minus what
 the fit predicts from today's market move.
 
@@ -173,7 +175,8 @@ the alpha picks up, times the market's average return over the window
 
 ## Taking beta out of a signal
 
-`regression_neut(y, x)` regresses `y` on `x` across stocks each day, with an intercept, and
+`regression_neut(y, x)` regresses `y` on `x` across the stocks on each day (a cross-sectional regression, not one
+through time), with an intercept, and
 returns the residual. The result has zero mean and zero covariance with `x` across stocks,
 so a book with those weights has no exposure to `x`:
 
