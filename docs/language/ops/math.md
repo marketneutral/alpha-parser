@@ -5,7 +5,7 @@ Element by element: each date and stock on its own. Any argument can be a number
 
 ```toy
 returns(1)
-max(returns(1), 0)
+abs(returns(1))
 ```
 
 ### log
@@ -15,7 +15,7 @@ max(returns(1), 0)
 The natural logarithm. No value for `x` < 0, and −∞ at 0.
 
 ```qex
-log(close() / delay(close(), 20))           # a 20-day log return
+log(1 + returns(20))                        # a 20-day log return
 log(field('mcap'))                          # size, on a log scale
 ```
 
@@ -48,7 +48,7 @@ ts_mean(abs(returns(1)), 20)                # average daily move, either way
 −1, 0 or 1.
 
 ```qex
-sign(returns(20)) * sqrt(abs(returns(20)))  # a signed square root
+sign(returns(20)) * sqrt(abs(returns(20)))  # keeps the direction, damps the outliers
 ```
 
 ### sqrt
@@ -75,7 +75,7 @@ The larger of `x` and `y`, element by element. Not the largest across stocks or 
 [`ts_max`](time-series.md#ts_max) or [`rank`](cross-sectional.md#rank).
 
 ```qex
-max(returns(5), 0)                          # gains only
+ts_mean(max(returns(1), 0), 14) / ts_mean(abs(returns(1)), 14)    # the up share of recent moves, as in RSI
 ```
 
 ### min
@@ -85,5 +85,6 @@ max(returns(5), 0)                          # gains only
 The smaller of `x` and `y`, element by element.
 
 ```qex
-min(max(returns(1), -0.1), 0.1)             # clip at ±10%
+sqrt(ts_mean(power(min(returns(1), 0), 2), 60) * 252)              # downside deviation, annualized
+min(max(returns(1), -0.1), 0.1)                                      # clip at ±10%
 ```

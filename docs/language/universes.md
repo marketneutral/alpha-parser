@@ -12,7 +12,7 @@ nonzero, and not a member where it is 0 or missing.
 
 ```qex
 field('mcap') >= 300e6                                          # $300M market cap and up
-(close() >= 2) & (field('price') * field('shares') >= 2e9)      # a $2 price and $2B market cap
+(field('price') >= 2) & (field('price') * field('shares') >= 2e9)      # a $2 price and $2B market cap
 ```
 
 A data field that is 1 for members and missing otherwise is a universe too. How to hand a universe to a book or an

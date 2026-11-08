@@ -19,7 +19,7 @@ def _frame(rows):
 
 def toy_data():
     """Four stocks over six days. C has no price on the third day; earnings are reported on four days; each stock has a
-    market beta."""
+    market beta. No splits or dividends, so the as-traded price is the adjusted close."""
     close = _frame([[10, 20, 30, 40],
                     [11, 19, 30.5, 42],
                     [12, 18, nan, 41],
@@ -41,7 +41,7 @@ def toy_data():
     sector = pd.DataFrame([["Tech", "Tech", "Energy", "Energy"]] * len(DATES), index=DATES, columns=STOCKS)
     beta = _frame([[1.4, 0.7, 1.1, 0.8]] * len(DATES))
     market = pd.Series([100, 101, 100.5, 102, 103, 102.5], index=DATES, dtype=float)
-    return {"close": close, "open": close * 0.99, "high": close * 1.01, "low": close * 0.98, "volume": volume,
+    return {"close": close, "price": close.copy(), "open": close * 0.99, "high": close * 1.01, "low": close * 0.98, "volume": volume,
             "surprise": surprise, "beta": beta, "sector": sector, "market": market}
 
 

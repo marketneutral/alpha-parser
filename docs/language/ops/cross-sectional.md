@@ -49,11 +49,12 @@ demean(rank(returns(1)))
 
 <p class="sig"><code>scale(x)</code></p>
 
-`x` divided by the day's sum of absolute values, so the absolute values sum to 1: weights with a gross of one.
+`x` divided by the day's sum of absolute values, so the absolute values sum to 1: weights with a gross of one. Below,
+a one-day reversal book: long yesterday's losers, short its winners, half the gross on each side.
 
 ```toy
-demean(returns(1))
-scale(demean(returns(1)))
+demean(-returns(1))
+scale(demean(-returns(1)))
 ```
 
 ### quantile
@@ -79,11 +80,12 @@ quantile(field('mcap'), 5)           # size quintiles, 1 the smallest
 <p class="sig"><code>winsorize(x, limit)</code></p>
 
 Clips each day's values at that day's `limit` and `1 − limit` quantiles: `winsorize(x, 0.05)` caps at the 5th and 95th
-percentiles. Below, with four stocks and `limit` 0.25, **A** and **D** are pulled in to the 25th and 75th percentiles.
+percentiles. Below, with four stocks and `limit` 0.25, each day's highest and lowest returns are pulled in to the
+25th and 75th percentiles: **A**'s 18% on Jan 08 no longer dominates the day.
 
 ```toy
-close()
-winsorize(close(), 0.25)
+returns(1)
+winsorize(returns(1), 0.25)
 ```
 
 ```qex
@@ -95,10 +97,12 @@ winsorize(returns(1), 0.01)          # cap the 1% tails
 <p class="sig"><code>truncate(x, max)</code></p>
 
 Clips each value to `[−max, max]`. Element by element, not across stocks: the limit is a number, not a percentile.
+Its use is a position cap: below, the reversal book from [`scale`](#scale) with no position above 30% of the gross.
+After the cap the gross is under one, and a book built from the signal scales it back.
 
 ```toy
-returns(1)
-truncate(returns(1), 0.05)
+scale(demean(-returns(1)))
+truncate(scale(demean(-returns(1))), 0.3)
 ```
 
 ## Neutralizing

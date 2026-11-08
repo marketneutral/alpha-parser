@@ -30,10 +30,11 @@ where(group('sector') == 'Financials', None, field('book_to_price'))    # not fo
 
 <p class="sig"><code>group_cross(a, b, ...)</code></p>
 
-One grouping from several: each stock's labels joined with a bar, such as `'Tech|2'`.
+One grouping from several: each stock's labels joined with a bar, such as `'Tech|2'`. Below, sector crossed with
+beta halves: the high-beta stock in each sector is in half 2.
 
 ```toy
-group_cross('sector', quantile(returns(1), 2))
+group_cross('sector', quantile(field('beta'), 2))
 ```
 
 ```qex
@@ -81,8 +82,8 @@ group_quantile(field('value'), quantile(field('mcap'), 3), 3)    # value tercile
 
 ## Group statistics
 
-Every member of a group gets the group's number, even a member whose own value is missing: **C** has no volume on
-Jan 04 and still gets the Energy sum.
+Every member of a group gets the group's number, even a member whose own value is missing: **C** has no dollar
+volume on Jan 04 and still gets the Energy sum.
 
 ### group_std
 
@@ -107,12 +108,12 @@ group_demean(returns(5), 'sector') / group_std(returns(5), 'sector')    # a z-sc
 The sum within the group; no value when the group has no values that day.
 
 ```toy
-volume(1)
-group_sum(volume(1), 'sector')
+adv(1)
+group_sum(adv(1), 'sector')
 ```
 
 ```qex
-volume(1) / group_sum(volume(1), 'sector')     # each stock's share of its sector's volume
+adv(20) / group_sum(adv(20), 'sector')         # each stock's share of its sector's trading
 ```
 
 ### group_count_valid
@@ -122,5 +123,5 @@ volume(1) / group_sum(volume(1), 'sector')     # each stock's share of its secto
 How many values the group's stocks have had over the last `period` days.
 
 ```qex
-where(group_count_valid(field('surprise'), 'sector', 63) >= 5, group_rank(field('surprise'), 'sector'), None)
+group_count_valid(field('surprise'), 'sector', 63)     # how many reports the sector had this quarter
 ```
