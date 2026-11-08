@@ -407,9 +407,9 @@ let r    = returns(1),
 in where(good, -(returns(10) - twin), None)
 ```
 
-All four read one selection. `t < -3.5` is roughly the 1% critical value of the Engle-Granger test for two series;
-choosing each stock's best of many candidates makes chance pairs likelier than that, which is one more reason to
-restrict candidates by `within`.
+All four read one selection. `t < -3.5` sits between the Engle-Granger critical values for two series, about −3.34
+at 5% and −3.90 at 1% (MacKinnon); choosing each stock's best of many candidates makes chance pairs likelier than
+those levels say, which is one more reason to restrict candidates by `within`.
 
 **Reference.** Engle, R. F. and Granger, C. W. J. (1987). Co-integration and error correction: Representation,
 estimation, and testing. *Econometrica* 55(2), 251-276.
