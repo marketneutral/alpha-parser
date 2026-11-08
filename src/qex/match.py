@@ -26,54 +26,89 @@ import pandas as pd
 from .signal import Signal
 from .universe import universe_members
 
-METRICS = ("corr", "spearman", "cosine", "euclidean", "manhattan", "path")
-DISTANCES = ("euclidean", "manhattan", "path")                  # scores in the metric's units: smaller is closer
+METRICS = ("corr", "euclidean", "path", "coint")
 MATCHINGS = ("nearest", "exclusive")
+DISTANCES = ("euclidean", "path")                               # scores in the metric's units: smaller is closer
+COINT_STATS = ("t", "hedge", "half_life", "spread_vol")         # what ts_match_score can report for a 'coint' pair
 
 
-def similarity(window: np.ndarray, metric: str, min_overlap: int) -> np.ndarray:
-    """N x N similarities (higher is closer) between the columns of a T x N window, each pair over the days both have.
-
-    With M the mask of valid days and X the window with gaps at zero, the pairwise counts, sums and cross-products are
-    M'M, X'M, (X*X)'M and X'X, so every pair uses exactly its shared days. Distances are divided by the shared days, so
-    pairs with gaps compare fairly. NaN where a pair shares fewer than min_overlap days, and on the diagonal.
-    """
-    if metric == "spearman":                                    # a correlation of ranks
-        window = pd.DataFrame(window).rank().to_numpy()
-        metric = "corr"
-    elif metric == "path":
-        # Gatev, Goetzmann and Rouwenhorst (2006): the key is daily returns, compounded into a price path that starts
-        # at 100 at the window's start (a missing day is a flat day inside the path); pairs are compared by the root
-        # mean squared distance between paths, over the days both have a return
-        valid = np.isfinite(window)
-        window = np.where(valid, 100 * np.cumprod(1 + np.where(valid, window, 0.0), axis=0), np.nan)
-        metric = "euclidean"
+def _log_paths(window: np.ndarray):
+    """Daily returns compounded into log price paths starting at 0 (a missing day is a flat day), and the mask."""
     valid = np.isfinite(window)
-    x = np.where(valid, window, 0.0)
+    return np.cumsum(np.log1p(np.where(valid, window, 0.0)), axis=0), valid
+
+
+def _coint(window: np.ndarray):
+    """Engle-Granger for every pair at once. The key is daily returns, compounded into log paths L. For stock i on
+    stock j: the hedge ratio b = cov(L_i, L_j) / var(L_j), the spread e = L_i - b L_j (centered), and the
+    Dickey-Fuller regression of its daily change on its previous level, de_t = g e_{t-1} + u_t. Every sum is a
+    quadratic form in b of cross-products of the centered paths, their lags and their changes, so all pairs come from
+    a few m x m matrices. Returns (t, b, g, spread_sd), each m x m, row i the regression of i on column j."""
+    L, _ = _log_paths(window)
+    L = L - L.mean(axis=0)
+    lag, d = L[:-1], np.diff(L, axis=0)
+    C = L.T @ L                                                   # sums of products of the paths
+    Q = lag.T @ lag                                               # of the lagged paths
+    M = d.T @ lag                                                 # change of one against the other's previous level
+    D = d.T @ d                                                   # of the changes
+    di = lambda X: np.diagonal(X)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        b = C / di(C)[None, :]                                    # i regressed on j
+        see = di(Q)[:, None] - 2 * b * Q + b ** 2 * di(Q)[None, :]           # sum of e_{t-1}^2
+        sde = di(M)[:, None] - b * M - b * M.T + b ** 2 * di(M)[None, :]     # sum of de_t * e_{t-1}
+        sdd = di(D)[:, None] - 2 * b * D + b ** 2 * di(D)[None, :]           # sum of de_t^2
+        g = sde / see
+        ssr = np.maximum(sdd - g * sde, 0)
+        n = len(d)
+        t = g / np.sqrt(ssr / (n - 1) / see)
+        spread_sd = np.sqrt(np.maximum(di(C)[:, None] - 2 * b * C + b ** 2 * di(C)[None, :], 0) / len(L))
+    return t, b, g, spread_sd
+
+
+def similarity(window: np.ndarray, metric: str, min_overlap: int, stats: bool = False):
+    """N x N similarities (higher is closer) between the columns of a T x N window, NaN where a pair shares fewer
+    than min_overlap days and on the diagonal. With stats=True for 'coint', also {stat: N x N} for each pair (row i:
+    stock i on stock j).
+
+    'corr' and 'euclidean' compare each pair over the days both have: with M the mask of valid days and X the window
+    with gaps at zero, the counts, sums and cross-products are M'M, X'M, (X*X)'M and X'X. 'path' (Gatev, Goetzmann and
+    Rouwenhorst) compounds the key (daily returns) into price paths from 100 at the window's start and takes the root
+    mean squared distance between them. 'coint' (Engle-Granger) scores a pair by the Dickey-Fuller t of its spread's
+    reversion, the mean of the two directions, negated so that higher is closer; a pair whose hedge ratio is not
+    positive (either way) is not a long-short pair and is not compared.
+    """
+    valid = np.isfinite(window)
     m = valid.astype(float)
     n = m.T @ m
-    sx = x.T @ m
-    sxx = (x * x).T @ m
-    sxy = x.T @ x
+    extra = None
     with np.errstate(invalid="ignore", divide="ignore"):
-        if metric == "corr":
-            cov = n * sxy - sx * sx.T
-            var = n * sxx - sx * sx
-            s = cov / np.sqrt(var * var.T)
-        elif metric == "cosine":
-            s = sxy / np.sqrt(sxx * sxx.T)
-        elif metric == "euclidean":                             # root mean squared distance
-            s = -np.sqrt(np.maximum(sxx + sxx.T - 2 * sxy, 0) / n)
-        elif metric == "manhattan":                             # mean absolute distance, one stock against all
-            s = np.empty_like(n)
-            for i in range(x.shape[1]):
-                s[i] = -(np.abs(x[:, [i]] - x) * (m[:, [i]] * m)).sum(axis=0) / n[i]
+        if metric == "coint":
+            t, b, g, sd = _coint(window)
+            s = -(t + t.T) / 2
+            s[(b <= 0) | (b.T <= 0)] = np.nan                     # a pair is long one, short the other: hedge > 0
+            if stats:
+                extra = {"t": (t + t.T) / 2, "hedge": b, "half_life": np.log(0.5) / np.log1p(g), "spread_vol": sd}
         else:
-            raise ValueError(f"metric must be one of {METRICS}")
+            if metric == "path":
+                # a missing day is a flat day inside the path; distances over the days both have a return
+                window = np.where(valid, 100 * np.cumprod(1 + np.where(valid, window, 0.0), axis=0), np.nan)
+                metric = "euclidean"
+            x = np.where(valid, window, 0.0)
+            sx = x.T @ m
+            sxx = (x * x).T @ m
+            sxy = x.T @ x
+            if metric == "corr":
+                cov = n * sxy - sx * sx.T
+                var = n * sxx - sx * sx
+                s = cov / np.sqrt(var * var.T)
+            elif metric == "euclidean":                         # root mean squared distance
+                s = -np.sqrt(np.maximum(sxx + sxx.T - 2 * sxy, 0) / n)
+            else:
+                raise ValueError(f"metric must be one of {METRICS}")
     s[~np.isfinite(s)] = np.nan
     s[n < min_overlap] = np.nan
     np.fill_diagonal(s, np.nan)
-    return s
+    return (s, extra) if stats else s
 
 
 def _nearest(s: np.ndarray) -> np.ndarray:
@@ -98,10 +133,11 @@ class MatchResult:
     """A MatchSelection's value: each stock's twin's column on each date (-1: none), the similarity of the stock and
     its twin when chosen (higher is closer; NaN without a twin), and the dates and names."""
 
-    __slots__ = ("peers", "scores", "index", "columns")
+    __slots__ = ("peers", "scores", "stats", "index", "columns")
 
-    def __init__(self, peers: np.ndarray, scores: np.ndarray, index, columns):
+    def __init__(self, peers: np.ndarray, scores: np.ndarray, index, columns, stats=None):
         self.peers, self.scores, self.index, self.columns = peers, scores, index, columns
+        self.stats = stats or {}                                  # 'coint': each chosen pair's t, hedge, half-life, width
 
 
 class MatchSelection(Signal):
@@ -138,24 +174,32 @@ class MatchSelection(Signal):
         scores = np.full((T, N), np.nan)
         current = np.full(N, -1)
         current_score = np.full(N, np.nan)
+        coint = self.metric == "coint"
+        stats = {k: np.full((T, N), np.nan) for k in COINT_STATS} if coint else {}
+        current_stats = {k: np.full(N, np.nan) for k in stats}
         for t in range(self.lookback, T):
             if (t - self.lookback) % self.rebalance == 0:
                 window = values[t - self.lookback:t]                  # up to t - 1: point in time
                 current = np.full(N, -1)
                 current_score = np.full(N, np.nan)
+                current_stats = {k: np.full(N, np.nan) for k in stats}
                 for g in np.unique(codes[t][eligible[t] & (codes[t] >= 0)]):
                     columns = np.flatnonzero(eligible[t] & (codes[t] == g))
                     if len(columns) < 2:
                         continue
-                    s = similarity(window[:, columns], self.metric, self.min_overlap)
+                    s, extra = similarity(window[:, columns], self.metric, self.min_overlap, stats=True)
                     chosen = choose(s)
                     found = np.flatnonzero(chosen >= 0)
                     current[columns[found]] = columns[chosen[found]]
                     current_score[columns[found]] = s[found, chosen[found]]
+                    for k in stats:
+                        current_stats[k][columns[found]] = extra[k][found, chosen[found]]
             held = (current >= 0) & eligible[t] & eligible[t, np.maximum(current, 0)]     # leaving ends a match
             peers[t] = np.where(held, current, -1)
             scores[t] = np.where(held, current_score, np.nan)
-        return MatchResult(peers, scores, key.index, key.columns)
+            for k in stats:
+                stats[k][t] = np.where(held, current_stats[k], np.nan)
+        return MatchResult(peers, scores, key.index, key.columns, stats)
 
     def _cache_key(self):
         from .groups import _groups_key
@@ -191,21 +235,32 @@ class TsMatch(Signal):
 
 
 class TsMatchScore(Signal):
-    """How alike each stock and its twin were when the twin was chosen: the score of ts_match's selection, in the
-    metric's own units (a correlation for 'corr', 'spearman' and 'cosine'; the distance, positive, smaller is closer,
-    for 'euclidean', 'manhattan' and 'path', the last in index points of paths starting at 100). Held until the next rebalance; no value without a twin. Reads the same internal
+    """How alike each stock and its twin were when the twin was chosen, from ts_match's selection, in the metric's own
+    units: a correlation for 'corr'; the distance (positive, smaller is closer) for 'euclidean' and 'path', the latter
+    in index points of paths from 100; for 'coint' the Dickey-Fuller t of the pair's spread (more negative, stronger
+    reversion), or with stat= the stock's hedge ratio on its twin, the spread's half-life in days, or its standard
+    deviation in log points. Held until the next rebalance; no value without a twin. Reads the same internal
     MatchSelection node as every ts_match on the same key and options."""
 
-    def __init__(self, selection: MatchSelection):
+    def __init__(self, selection: MatchSelection, stat: Optional[str] = None):
         self.selection = selection
+        self.stat = stat
 
     def _compute(self, data):
         sel = self.selection.evaluate(data)
-        scores = -sel.scores if self.selection.metric in DISTANCES else sel.scores
-        return pd.DataFrame(scores, index=sel.index, columns=sel.columns)
+        if self.stat is not None:
+            values = sel.stats[self.stat]
+        elif self.selection.metric == "coint":
+            values = -sel.scores                                  # the t itself
+        elif self.selection.metric in DISTANCES:
+            values = -sel.scores
+        else:
+            values = sel.scores
+        return pd.DataFrame(values, index=sel.index, columns=sel.columns)
 
     def _cache_key(self):
-        return ('TsMatchScore', self.selection._cache_key())
+        key = ('TsMatchScore', self.selection._cache_key())
+        return key if self.stat in (None, "t") else key + (self.stat,)
 
 
 def _whole(name: str, what: str, v, low: int) -> int:
@@ -252,7 +307,20 @@ def ts_match(value: Signal, key: Signal, lookback: int, metric: str = 'corr', wi
 
 
 def ts_match_score(key: Signal, lookback: int, metric: str = 'corr', within=None, matching: str = 'nearest',
-                   rebalance: int = 21, min_overlap: Optional[int] = None) -> TsMatchScore:
+                   rebalance: int = 21, min_overlap: Optional[int] = None, stat: Optional[str] = None) -> TsMatchScore:
     """Create a TsMatchScore signal: how alike each stock and its twin were when chosen, ts_match's arguments without
-    the value."""
-    return TsMatchScore(_selection("ts_match_score", key, lookback, metric, within, matching, rebalance, min_overlap))
+    the value; with metric='coint', stat= is 't' (the default), 'hedge', 'half_life' or 'spread_vol'."""
+    from .operators import NoneValue
+    if isinstance(stat, NoneValue):
+        stat = None
+    sel = _selection("ts_match_score", key, lookback, metric, within, matching, rebalance, min_overlap)
+    if stat is not None:
+        if metric != "coint":
+            raise ValueError(f"ts_match_score()'s stat= is for metric='coint' (the pair's {', '.join(COINT_STATS)}); "
+                             f"with metric={metric!r} the score is its similarity")
+        if stat not in COINT_STATS:
+            raise ValueError(f"ts_match_score()'s stat is one of {', '.join(repr(k) for k in COINT_STATS)}, "
+                             f"not {stat!r}")
+        if stat == "t":
+            stat = None                                           # the default: one expression, one cache key
+    return TsMatchScore(sel, stat)

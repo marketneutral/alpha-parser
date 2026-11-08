@@ -459,11 +459,11 @@ def _collapse_whitespace(expression: str) -> str:
 # position only. (Since 0.15.0; ts_match's five options would be unreadable by position.)
 KEYWORDS = {
     "ts_match": ("metric", "within", "matching", "rebalance", "min_overlap"),
-    "ts_match_score": ("metric", "within", "matching", "rebalance", "min_overlap"),
+    "ts_match_score": ("metric", "within", "matching", "rebalance", "min_overlap", "stat"),
 }
 POSITIONAL_ORDER = {
     "ts_match": ("value", "key", "lookback", "metric", "within", "matching", "rebalance", "min_overlap"),
-    "ts_match_score": ("key", "lookback", "metric", "within", "matching", "rebalance", "min_overlap"),
+    "ts_match_score": ("key", "lookback", "metric", "within", "matching", "rebalance", "min_overlap", "stat"),
 }
 
 _ARG_RULES = {

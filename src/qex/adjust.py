@@ -239,10 +239,10 @@ def _walk(s, fields, seen, found, mode):
         v = w(kids[0])
         out = UNKNOWN if v.e is None or v.log else V(2 * v.e, False, None)
     elif name == "MatchSelection":
-        # similarity by correlation (or of ranks, or cosine) ignores each stock's scale, so a key may be an adjusted
+        # similarity by correlation ignores each stock's scale, so a key may be an adjusted
         # level; a distance compares levels across stocks, so then the key must not be one
         k = w(s.key)
-        if s.metric in ("euclidean", "manhattan", "path"):        # 'path' compounds the key: it must be returns
+        if s.metric in ("euclidean", "path", "coint"):            # 'path' and 'coint' compound the key: returns
             need_free(k, s.key, "ts_match()'s distance")
         if isinstance(s.groups, Signal):
             w(s.groups)

@@ -62,7 +62,7 @@ def test_the_value_read_is_the_twins(pairs_data):
         assert twin.iloc[t, i] == r5.iloc[t, p.iloc[t, i]] if p.iloc[t, i] >= 0 else np.isnan(twin.iloc[t, i])
 
 
-@pytest.mark.parametrize("metric", METRICS)
+@pytest.mark.parametrize("metric", ["corr", "euclidean", "path"])
 def test_each_metric_is_the_pairwise_definition(metric):
     """similarity() against a pair-by-pair computation over each pair's shared days, with gaps."""
     rng = np.random.default_rng(3)
@@ -78,20 +78,12 @@ def test_each_metric_is_the_pairwise_definition(metric):
             a, b = w[both, i], w[both, j]
             if metric == "corr":
                 expected = np.corrcoef(a, b)[0, 1]
-            elif metric == "spearman":                                  # ranks within each full column, as documented
-                ra = pd.Series(w[:, i]).rank().to_numpy()[both]
-                rb = pd.Series(w[:, j]).rank().to_numpy()[both]
-                expected = np.corrcoef(ra, rb)[0, 1]
-            elif metric == "cosine":
-                expected = a @ b / np.sqrt((a @ a) * (b @ b))
             elif metric == "euclidean":
                 expected = -np.sqrt(np.mean((a - b) ** 2))
-            elif metric == "path":                                     # paths from 100, a missing day flat
+            else:                                                      # paths from 100, a missing day flat
                 pi = 100 * np.cumprod(1 + np.nan_to_num(w[:, i]))
                 pj = 100 * np.cumprod(1 + np.nan_to_num(w[:, j]))
                 expected = -np.sqrt(np.mean((pi[both] - pj[both]) ** 2))
-            else:
-                expected = -np.mean(np.abs(a - b))
             assert s[i, j] == pytest.approx(expected, abs=1e-10)
 
 
@@ -200,6 +192,7 @@ def test_keyword_defaults_give_the_same_expression():
     ("ts_match(returns(5), returns(1), 60, metrc='corr')", "no argument named 'metrc'"),
     ("ts_match(returns(5), returns(1), 60, 'corr', metric='corr')", "both by position and by name"),
     ("ts_match(returns(5), returns(1), 60, metric='pearson')", "metric is one of"),
+    ("ts_match(returns(5), returns(1), 60, metric='spearman')", "metric is one of"),
     ("ts_match(returns(5), returns(1), 60, matching='best')", "'nearest'.*'exclusive'"),
     ("ts_match(returns(5), returns(1), 60, min_overlap=90)", "can't be more than its lookback"),
     ("ts_match(returns(5), returns(1), 1)", "lookback must be a whole number, at least 2"),
@@ -252,8 +245,8 @@ def test_identifier_reads_the_cached_selection(pairs_data):
 
 
 def test_the_same_partner_check_is_exact(pairs_data):
-    same = ev(f"ts_match(identifier(), returns(1), {LOOK}) == ts_match(identifier(), returns(1), {LOOK}, "
-              f"metric='spearman')", pairs_data)
+    same = ev(f"ts_match(identifier(), returns(1), {LOOK}) == ts_match(identifier(), returns(1), {LOOK // 2})",
+              pairs_data)
     values = same.to_numpy()
     assert set(np.unique(values[np.isfinite(values)])) <= {0.0, 1.0}
     assert same.iloc[-1].mean() > 0.8                                   # planted pairs: the metrics agree
@@ -280,7 +273,7 @@ def test_identifiers_group_and_compare():
 
 # --- ts_match_score: how alike each stock and its twin were --------------------------------------------------------
 
-@pytest.mark.parametrize("metric", ["corr", "euclidean", "manhattan"])
+@pytest.mark.parametrize("metric", ["corr", "euclidean"])
 def test_the_score_is_the_pairs_similarity_at_selection(pairs_data, metric):
     d = pairs_data
     score = ev(f"ts_match_score(returns(1), {LOOK}, metric='{metric}', min_overlap=40)", d)
@@ -296,8 +289,7 @@ def test_the_score_is_the_pairs_similarity_at_selection(pairs_data, metric):
             both = window.iloc[:, [i, j]].dropna()
             a, b = both.iloc[:, 0].to_numpy(), both.iloc[:, 1].to_numpy()
             expected = {"corr": lambda: np.corrcoef(a, b)[0, 1],
-                        "euclidean": lambda: np.sqrt(np.mean((a - b) ** 2)),
-                        "manhattan": lambda: np.mean(np.abs(a - b))}[metric]()
+                        "euclidean": lambda: np.sqrt(np.mean((a - b) ** 2))}[metric]()
             assert score.iloc[t, i] == pytest.approx(expected, abs=1e-10)
 
 
@@ -394,3 +386,104 @@ def test_path_needs_returns_as_its_key():
     from qex.adjust import check
     fields = {"close": dict(adjustment=1, unit="usd_per_share")}
     assert [f["kind"] for f in check(qex("ts_match(returns(5), close(), 60, metric='path')"), fields, mode="warn")]
+
+
+# --- metric='coint': Engle-Granger ---------------------------------------------------------------------------------------
+
+def _engle_granger(w, i, j):
+    """Stock i on stock j over a window of daily returns: (t, hedge, g, spread sd), computed directly."""
+    L = np.cumsum(np.log1p(np.nan_to_num(w)), axis=0)
+    a, b = L[:, i], L[:, j]
+    X = np.column_stack([np.ones(len(b)), b])
+    coef = np.linalg.lstsq(X, a, rcond=None)[0]
+    e = a - X @ coef
+    de, el = np.diff(e), e[:-1]
+    g = de @ el / (el @ el)
+    se = np.sqrt((de - g * el) @ (de - g * el) / (len(de) - 1) / (el @ el))
+    return g / se, coef[1], g, e.std()
+
+
+def test_coint_is_engle_granger():
+    from qex.match import similarity
+    rng = np.random.default_rng(4)
+    w = rng.normal(0, 0.015, (120, 6))
+    w[:, 1] = w[:, 0] + rng.normal(0, 0.003, 120)                     # a related pair, so hedges are positive
+    s, ex = similarity(w, "coint", 100, stats=True)
+    for i in range(6):
+        for j in range(6):
+            if i == j:
+                continue
+            t, b, g, sd = _engle_granger(w, i, j)
+            t_back = _engle_granger(w, j, i)[0]
+            assert ex["hedge"][i, j] == pytest.approx(b, abs=1e-12)
+            assert ex["t"][i, j] == pytest.approx((t + t_back) / 2, abs=1e-10)
+            assert ex["spread_vol"][i, j] == pytest.approx(sd, abs=1e-12)
+            assert ex["half_life"][i, j] == pytest.approx(np.log(0.5) / np.log1p(g), abs=1e-9)
+            positive = b > 0 and _engle_granger(w, j, i)[1] > 0
+            assert (np.isnan(s[i, j]) if not positive else s[i, j] == pytest.approx(-(t + t_back) / 2, abs=1e-10))
+
+
+def _cointegrated_pairs(seed, T=800, pairs=10):
+    """Pairs that wander and revert to each other: B a random walk, A = B and a mean-reverting spread."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2020-01-01", periods=T)
+    cols = {}
+    for k in range(pairs):
+        walk = np.cumsum(rng.normal(0, 0.015, T))
+        spread = np.zeros(T)
+        for t in range(1, T):
+            spread[t] = 0.93 * spread[t - 1] + rng.normal(0, 0.01)
+        cols[f"A{k}"], cols[f"B{k}"] = 50 * np.exp(walk + spread), 50 * np.exp(walk)
+    return {"close": pd.DataFrame(cols, idx)}
+
+
+def test_coint_finds_pairs_that_revert_to_each_other_over_two_years():
+    for seed in range(3):
+        d = _cointegrated_pairs(seed)
+        twin = ev("ts_match(identifier(), returns(1), 504, metric='coint', matching='exclusive')", d).iloc[-1]
+        partner = {n: n.translate(str.maketrans("AB", "BA")) for n in twin.index}
+        assert all(twin[n] == partner[n] for n in twin.index)
+
+
+def test_coint_stats_describe_the_chosen_pair():
+    d = _cointegrated_pairs(0)
+    opts = "504, metric='coint', matching='exclusive'"
+    last = {stat: ev(f"ts_match_score(returns(1), {opts}, stat='{stat}')", d).iloc[-1]
+            for stat in ("t", "hedge", "half_life", "spread_vol")}
+    assert (last["t"] < -3).all()                                       # strong evidence of reversion
+    assert last["hedge"].between(0.8, 1.25).all()                        # planted 1
+    assert last["half_life"].between(3, 25).all()                        # planted about 10 days
+    assert (last["spread_vol"] > 0).all()
+    default = ev(f"ts_match_score(returns(1), {opts})", d)
+    pd.testing.assert_frame_equal(default, ev(f"ts_match_score(returns(1), {opts}, stat='t')", d))
+
+
+@pytest.mark.parametrize("expr, message", [
+    ("ts_match_score(returns(1), 252, stat='hedge')", "stat= is for metric='coint'"),
+    ("ts_match_score(returns(1), 252, metric='coint', stat='beta')", "stat is one of"),
+])
+def test_bad_coint_arguments(expr, message):
+    with pytest.raises(ValueError, match=message):
+        qex(expr)
+
+
+def test_coint_prefers_the_stock_it_reverts_to_over_a_closer_correlated_decoy():
+    """B has a true partner A (a noisy spread that reverts within days) and a decoy C (B's moves plus its own slow
+    drift: more correlated day to day, but it wanders off). Correlation takes the decoy; cointegration, the partner."""
+    rng = np.random.default_rng(0)
+    T, K = 800, 8
+    idx = pd.bdate_range("2020-01-01", periods=T)
+    cols = {}
+    for k in range(K):
+        walk = np.cumsum(rng.normal(0, 0.015, T))
+        spread = np.zeros(T)
+        for t in range(1, T):
+            spread[t] = 0.85 * spread[t - 1] + rng.normal(0, 0.012)
+        drift = np.cumsum(rng.normal(0, 0.006, T))
+        cols[f"A{k}"], cols[f"B{k}"], cols[f"C{k}"] = (50 * np.exp(walk + spread), 50 * np.exp(walk),
+                                                    50 * np.exp(walk + drift))
+    d = {"close": pd.DataFrame(cols, idx)}
+    by_corr = ev("ts_match(identifier(), returns(1), 504)", d).iloc[-1]
+    by_coint = ev("ts_match(identifier(), returns(1), 504, metric='coint')", d).iloc[-1]
+    assert all(by_corr[f"B{k}"] == f"C{k}" for k in range(K))
+    assert all(by_coint[f"B{k}"] == f"A{k}" for k in range(K))

@@ -109,8 +109,12 @@ def label(signal: Signal, nested: bool = False) -> str:
         sel = signal if name == "MatchSelection" else signal.selection
         args = ([label(signal.value)] if name == "TsMatch" else []) + [label(sel.key), str(sel.lookback)]
         defaults = {"metric": "corr", "within": None, "matching": "nearest", "rebalance": 21, "min_overlap": sel.lookback}
-        for opt, v in (("metric", sel.metric), ("within", sel.groups), ("matching", sel.matching),
-                       ("rebalance", sel.rebalance), ("min_overlap", sel.min_overlap)):
+        opts = [("metric", sel.metric), ("within", sel.groups), ("matching", sel.matching),
+                ("rebalance", sel.rebalance), ("min_overlap", sel.min_overlap)]
+        if name == "TsMatchScore" and signal.stat is not None:
+            opts.append(("stat", signal.stat))
+            defaults["stat"] = None
+        for opt, v in opts:
             if v != defaults[opt] if not isinstance(v, Signal) else True:
                 args.append(f"{opt}={label(v) if isinstance(v, Signal) else repr(v)}")
         return f"{ {'TsMatch': 'ts_match', 'TsMatchScore': 'ts_match_score'}.get(name, 'match_selection')}({', '.join(args)})"
