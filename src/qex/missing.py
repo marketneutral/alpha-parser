@@ -93,6 +93,16 @@ def label(signal: Signal, nested: bool = False) -> str:
     if isinstance(signal, _dt.Field):
         return f"{signal.name}()" if signal.name in ("close", "open", "high", "low") else f"field('{signal.name}')"
     name = type(signal).__name__
+    if hasattr(signal, "fit") and isinstance(getattr(signal, "fit"), Signal) or name in ("TsFit", "RegressionFit"):
+        fit = signal if name in ("TsFit", "RegressionFit") else signal.fit       # written as the user writes them
+        args = [label(fit.y)] + [label(x) for x in fit.xs]
+        if name in ("TsFit",) or isinstance(fit, _ts.TsFit):
+            args.append(str(fit.period))
+            if fit.groups is not None:
+                args.append(label(fit.groups) if isinstance(fit.groups, Signal) else repr(fit.groups))
+        if name == "RegressionBeta":
+            args.append(str(signal.j))
+        return f"{_snake(name)}({', '.join(args)})"
     if name in ("PcaFactor", "PcaBasis"):               # written pca_factor(x, window, k[, refit]); the basis is internal
         basis = signal.basis if name == "PcaFactor" else signal
         args = [label(basis.signal), str(basis.window)] + ([str(signal.k)] if name == "PcaFactor" else [])
@@ -213,8 +223,16 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
         s = nodes[k]
         node_id = len(labels)
         labels.append(label(s))
-        if isinstance(s, _cs.PcaBasis):                 # a decomposition, not a frame: its input's reasons pass through
-            code, cause, origin = (a.copy() for a in results[s.signal._cache_key()])
+        if isinstance(s, _cs.PcaBasis) or not getattr(type(s), "value_is_frame", True):
+            # a decomposition or a fit, not a frame: its inputs' reasons pass through, the first input's first
+            if isinstance(s, _cs.PcaBasis):
+                code, cause, origin = (a.copy() for a in results[s.signal._cache_key()])
+            else:
+                code, cause, origin = np.zeros(shape, np.int8), np.zeros(shape, np.int8), np.zeros(shape, np.int32)
+                for c in children(s):
+                    rc = results[c._cache_key()]
+                    take = (code == PRESENT) & (rc[0] != PRESENT)
+                    code[take], cause[take], origin[take] = rc[0][take], rc[1][take], rc[2][take]
             results[k] = (code, cause, origin)
             for c in children(s):
                 ck = c._cache_key()
@@ -268,6 +286,13 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
                     own(mask, EXCLUDED)                                     # the where that chose None
                 else:
                     inherit(mask, res)
+            own(missing, CALC)
+        elif isinstance(s, (_cs.RegressionAlpha,)):
+            # one number per day for every name: missing only on a day with no fit, for too few names
+            usable = got[0][0] == PRESENT
+            if in_uni is not None:
+                usable &= in_uni
+            own(missing & (usable.sum(axis=1) < len(s.fit.xs) + 2)[:, None], TOO_FEW)
             own(missing, CALC)
         elif isinstance(s, _CROSS + _GROUP_OPS):
             if in_uni is not None:

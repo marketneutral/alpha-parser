@@ -71,8 +71,8 @@ from .timeseries import (
 
 # Cross-sectional operations
 from .crosssection import (
-    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate, RegressionNeut, PcaFactor, pca_factor,
-    rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut,
+    Rank, ZScore, Demean, Quantile, Winsorize, Scale, Truncate, RegressionNeut, RegressionAlpha, RegressionBeta, PcaFactor, pca_factor,
+    rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, regression_alpha, regression_beta,
 )
 
 # Conditional operations
@@ -284,6 +284,8 @@ __all__ = [
     'Scale',
     'Truncate',
     'RegressionNeut',
+    'RegressionAlpha',
+    'RegressionBeta',
     'PcaFactor',
     'pca_factor',
     'rank',
@@ -294,6 +296,8 @@ __all__ = [
     'scale',
     'truncate',
     'regression_neut',
+    'regression_alpha',
+    'regression_beta',
 
     # Conditional
     'Where',

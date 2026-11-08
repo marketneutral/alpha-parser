@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.14.0
+
+The coefficients of the cross-sectional regression, and the graph and caching fixes found while testing many signals
+together. Existing expressions keep their values and cache keys.
+
+- **`regression_alpha(y, x1, ..., xk)`** and **`regression_beta(y, x1, ..., xk, j)`**: the intercept and the j-th
+  slope of `regression_neut`'s daily fit, one number per day given to every stock. On today's returns and yesterday's
+  characteristics they are the Fama-MacBeth intercept and factor returns: factor momentum, volatility-managed blends,
+  data-weighted characteristics and beta timing are on the new Factor Premia and Timing page. A day with fewer than
+  k + 2 names has no value, reported as "too few names".
+- **Shared fits.** `regression_alpha` and every `regression_beta` on the same inputs read one internal
+  `RegressionFit` node; `ts_alpha`, `ts_resid` and their shrunk versions read one `TsFit` node, whose slope, with one
+  regressor, is the `ts_beta` (or `ts_beta_shrunk`) node itself. Each fit is computed once, in a compute_context, in
+  SignalGraph and on Dask, and the DAG shows it shared.
+- **The DAG connects every operator to its inputs.** `SignalGraph` found inputs by a fixed list of attribute names
+  and missed the pair operators' (`ts_corr`, `ts_cov`, `ts_beta`, `ts_beta_shrunk`, `ewma_cov`, `ts_beta_ewma`),
+  `latch`'s conditions and `power`'s exponent: the graph drew them without inputs, and on Dask their inputs were
+  recomputed inside the node. It now takes every attribute that is a signal.
+- **A compute context belongs to its thread.** It was one module global: threads entering and leaving contexts at
+  overlapping times (Dask's threaded workers) could leave one context active for the whole process, so later
+  evaluations read a stale cache, and a node's inputs could land in another thread's cache and be computed again.
+  It is now a `contextvars.ContextVar`.
+- `tests/test_sharing.py` puts six overlapping signals (two statistical factors, a cross-sectional fit read for its
+  intercept and a slope, a sector-prior shrunk beta used three ways, a two-regressor time-series fit) through one
+  compute context, `SignalGraph.compute` and Dask, and checks every node is computed exactly once and every result
+  equals the signal evaluated alone.
+
 ## 0.13.0
 
 New operators for the intercept and residual of a rolling regression, and a group prior for shrunk betas. Existing

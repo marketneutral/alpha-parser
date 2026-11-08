@@ -42,7 +42,7 @@ The direction matters most for regressions, because qex has both kinds, and they
 
 | | Time-series regression | Cross-sectional regression |
 |---|---|---|
-| Operators | `ts_beta`, `ts_beta_shrunk`, `ts_alpha`, `ts_resid` and the other `ts_` pair operators | `regression_neut` |
+| Operators | `ts_beta`, `ts_beta_shrunk`, `ts_alpha`, `ts_resid` and the other `ts_` pair operators | `regression_neut`, `regression_alpha`, `regression_beta` |
 | One fit for | each stock, on each day | each day |
 | Its data points are | the stock's last `period` days | the day's stocks |
 | The question | how does this stock move with `x`, through time? | across today's stocks, how much of `y` lines up with `x`? |
