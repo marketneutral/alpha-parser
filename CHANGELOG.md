@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.1
+
+Messages name `gaussrank` and `group_gaussrank` as they are written (they said `gauss_rank()`). Both are
+cross-sectional, so the adjustment check refuses them on an adjusted level (`gaussrank(close())`), as it does `rank`;
+tests added.
+
 ## 0.16.0
 
 - **`gaussrank(x)`**: the day's rank mapped through the inverse normal, Φ⁻¹((r − 0.5)/n), exact (scipy's `ndtri`). A
