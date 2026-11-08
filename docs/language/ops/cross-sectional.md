@@ -11,7 +11,11 @@ three stocks, not four.
 <p class="sig"><code>rank(x)</code></p>
 
 Each stock's percentile among the day's stocks with a value, from `1/n` (the lowest) to `1` (the highest); ties share
-their average rank. An infinity ranks first or last.
+their average rank. An infinity ranks first or last. With $n$ stocks:
+
+$$
+\operatorname{rank}(x)_i = \frac{1}{n}\left(\#\{j : x_j < x_i\} + \frac{\#\{j : x_j = x_i\} + 1}{2}\right)
+$$
 
 ```toy
 returns(1)
@@ -27,7 +31,13 @@ rank(-returns(5))                    # higher return, lower rank: a reversal
 
 <p class="sig"><code>zscore(x)</code></p>
 
-`(x − mean) / standard deviation` across the day's stocks. No value on a day the stocks don't vary.
+The distance from the day's mean in standard deviations. No value on a day the stocks don't vary.
+
+$$
+z_i = \frac{x_i - \bar x}{s},
+\qquad
+s^2 = \frac{1}{n - 1} \sum_j (x_j - \bar x)^2
+$$
 
 ```toy
 returns(1)
@@ -49,7 +59,13 @@ demean(rank(returns(1)))
 
 <p class="sig"><code>scale(x)</code></p>
 
-`x` divided by the day's sum of absolute values, so the absolute values sum to 1: weights with a gross of one. Below,
+`x` divided by the day's sum of absolute values, so the absolute values sum to 1: weights with a gross of one,
+
+$$
+w_i = \frac{x_i}{\sum_j |x_j|}
+$$
+
+Below,
 a one-day reversal book: long yesterday's losers, short its winners, half the gross on each side.
 
 ```toy
@@ -111,9 +127,32 @@ truncate(scale(demean(-returns(1))), 0.3)
 
 <p class="sig"><code>regression_neut(y, x1, x2, ...)</code></p>
 
-Takes out of `y`, each day, the part the regressors explain: the residual of a least-squares fit of `y` on them, with
-an intercept, over the stocks where all have a value. The result has zero mean and zero covariance with each
-regressor across the day's stocks, which is what "neutral to x" means. Below, each stock's market beta is taken out
+Takes out of `y`, each day, the part the regressors explain. Across the day's stocks with a value for all of them, it
+fits
+
+$$
+y_i = a + \sum_{j=1}^{k} b_j \, x_{ij} + \varepsilon_i
+$$
+
+by least squares, and gives the residual $\hat\varepsilon_i = y_i - \hat a - \sum_j \hat b_j x_{ij}$. Least squares makes
+the residual orthogonal to the intercept and to every regressor:
+
+$$
+\sum_i \hat\varepsilon_i = 0,
+\qquad
+\sum_i x_{ij} \, \hat\varepsilon_i = 0 \quad \text{for every } j
+$$
+
+so it has zero mean and zero covariance with each regressor, which is what "neutral to x" means. With one regressor
+it is
+
+$$
+\hat\varepsilon_i = (y_i - \bar y) - \hat b \, (x_i - \bar x),
+\qquad
+\hat b = \frac{\sum_i (x_i - \bar x)(y_i - \bar y)}{\sum_i (x_i - \bar x)^2}
+$$
+
+Below, each stock's market beta is taken out
 of the day's returns: what is left is the part of each return that beta doesn't explain. On Jan 03, **A** was up 10%,
 but with a beta of 1.4 almost all of that lines up with beta, and 0.9% is left; **D**, up 5% with a beta of 0.8, has
 the largest return beta doesn't explain.
@@ -150,10 +189,34 @@ data alone, by a principal component analysis across stocks.
 - **Correlation, not covariance.** Each stock is scaled by its own volatility first, so a few volatile stocks don't
   make up the first factors.
 - **A beta.** The value is the stock's beta to the factor's return, in `x`'s units: the exposure a position carries,
-  and what `regression_neut` should take out.
+  and what `regression_neut` should take out (below).
 - **Factors keep their identity.** Each refit's factors are matched to the last refit's and signed to agree, so factor
   2 stays factor 2. The first factor is the market, signed long. `k` is at most 20.
 - **Shared.** `pca_factor` with the same `x`, `window` and `refit` and different `k` share one decomposition.
+
+**The math.** At a refit, take the window's $T$ days of $x$ for the $N$ stocks in the fit, and standardize each stock
+by its own mean and volatility over the window (a missing day counts as the stock's mean):
+
+$$
+z_{ti} = \frac{x_{ti} - \bar x_i}{\sigma_i}
+$$
+
+The correlation matrix and its eigenvectors, largest eigenvalue first, are
+
+$$
+C = \frac{1}{T - 1} Z^\top Z,
+\qquad
+C \, v_k = \lambda_k \, v_k,
+\qquad
+\lVert v_k \rVert = 1
+$$
+
+The k-th factor's return is the eigenportfolio $f_{kt} = \sum_i v_{ik} \, z_{ti}$, with variance $\lambda_k$. Since
+$\operatorname{cov}(z_i, f_k) = (C v_k)_i = \lambda_k v_{ik}$, each stock's beta to it, in $x$'s units, is simply
+
+$$
+\beta_{ik} = \frac{\operatorname{cov}(x_i, f_k)}{\operatorname{var}(f_k)} = \sigma_i \, v_{ik}
+$$
 
 ```qex
 let r = returns(1)

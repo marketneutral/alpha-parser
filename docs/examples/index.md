@@ -2,7 +2,7 @@
 
 These pages are signals written in qex: momentum, mean reversion, pairs, events, market beta, technical indicators,
 and patterns that combine them. Every code block is a qex expression, not Python; paste one into
-`qex("...")` or a qexarena cell. Each page explains the idea, gives the expression, says how it reads, and covers
+`qex("...")`. Each page explains the idea, gives the expression, says how it reads, and covers
 variants and what to watch for.
 
 What each operator does is in the [Operator Reference](../language/reference.md). To run an example in a backtest,

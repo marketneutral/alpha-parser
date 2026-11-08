@@ -33,6 +33,10 @@ hooks:
 extra_css:
   - stylesheets/extra.css
 
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js
+
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
@@ -42,6 +46,8 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
+  - pymdownx.arithmatex:
+      generic: true
   - pymdownx.snippets
   - pymdownx.superfences
   - pymdownx.tabbed:
@@ -72,6 +78,11 @@ plugins:
             separate_signature: true
             show_signature_annotations: true
 
+exclude_docs: |
+  excel/build_workbook.py
+  __pycache__/
+  hooks/
+
 validation:
   anchors: warn
   unrecognized_links: warn
@@ -79,6 +90,7 @@ validation:
 nav:
   - Home: index.md
   - Philosophy: philosophy.md
+  - Excel to qex: excel-to-qex.md
   - Language:
     - Syntax: language/syntax.md
     - How qex Evaluates: language/concepts.md

@@ -3,13 +3,12 @@
 ## 0.12.1
 
 Fixes found while rewriting the documentation. Expressions that parsed before give the same tree, except those with a
-`#` comment followed by more lines, which now parse in full (every expression in qexarena's universes, templates and
-595 example-notebook cells parses exactly as before).
+`#` comment followed by more lines, which now parse in full.
 
 - **`#` comments end at the end of their line.** The parser joined an expression's lines before removing comments, so
   a comment hid every line after it: `rank(returns(5))  # reversal` followed by a line `* -1` parsed, silently, as
   `rank(returns(5))`. Comments are now removed line by line first (a `#` inside a quoted string is kept), in
-  `_collapse_whitespace`, which qexarena's notebook also uses to join cells.
+  `_collapse_whitespace`, which tools that join several lines into one expression can use too.
 - **Clear errors for what qex doesn't have.** `and`, `or`, `not`, `%`, `//`, keyword arguments, lists, indexing,
   attributes and `if`/`else` raised `KeyError` or "Unsupported node type"; each now says what to write instead
   (`&`, `|`, `~`, `where`, arguments by position). Unary `+x` is `x`.
@@ -17,7 +16,7 @@ Fixes found while rewriting the documentation. Expressions that parsed before gi
   least 1 (a lag, 0 or more), half-lives and `truncate`'s limit above 0, `winsorize`'s level in [0, 0.5], names
   quoted strings. `returns('5')`, `delay(x, 1.5)`, `quantile(x, 0)`, `ts_mean(x, 0)` and `truncate(x, -1)` were
   accepted and gave errors later or meaningless numbers. Values pass through unchanged (`20.0` stays `20.0`), so no
-  cache key, and no qexarena expression hash, changes.
+  cache key changes.
 - **The risk model's `liquidity` factor is dollar volume.** It was described as "20-day average dollar volume" but
   computed `rank(ts_mean(volume(1), 20))`, share volume; it is now `rank(adv(20))`. Risk-model numbers that use it
   change.
@@ -40,7 +39,7 @@ never silently gives different numbers. For a pair's spread against its own hist
 examples meant: `let s = group_demean(x, 'pair') in s / ts_std(s, n)`. The pairs-trading guide, the cookbook and the
 README now use that. `group_count_valid(x, g, w)` keeps its window.
 
-Before adopting this version, check stored expressions for `group_std` (qexarena issue #36).
+Before adopting this version, check stored expressions for `group_std`.
 
 ### The other group operators: three fixes that change numbers, and one that doesn't
 
@@ -73,7 +72,7 @@ Each change touches only the cases named; everywhere else the numbers are identi
 - `regression_neut(y, x1, x2, ...)`: several regressors in one least-squares fit per day, so the residual has zero
   covariance with each. Nesting `regression_neut(regression_neut(y, x1), x2)` is not the same when `x1` and `x2` are
   correlated: the second step brings back some of the `x1` exposure. With one regressor nothing changes, including
-  its cache key, so qexarena's expression hashes of sealed alphas keep.
+  its cache key.
 
   A day needs at least k + 2 valid names for k regressors (three for one). With fewer, the fit passes through every
   point and the residual is rounding noise (around 1e-16) that `rank` or `zscore` would turn into full-size
@@ -122,8 +121,7 @@ declarations. Guide: *Adjusted Data*.
 `ts_mean_events(x, n, min_n)`, `ts_std_events` and `ts_sum_events` take an optional minimum: the window gives a value
 once it has `min_n` events, not only all `n` (the default, unchanged). A dollar-volume average over the last 20
 sessions that needs only 10 is `ts_sum_events(price * vol, 20, 1) / ts_sum_events(vol > 0, 20, 1)`, guarded by
-`ts_sum_events(vol > 0, 20, 1) >= 10`; with it, qexarena's universe written in qex reproduces its old membership file
-exactly. A count outside 1 to `n` is refused.
+`ts_sum_events(vol > 0, 20, 1) >= 10`. A count outside 1 to `n` is refused.
 
 ### Faster event windows
 
@@ -188,8 +186,7 @@ labels). Labels can be compared with `==` and `!=`, used to group, and passed th
 expression that hands labels to an operator needing numbers is now refused when it is parsed, naming the part and
 saying what to write instead. Before, `rank(group('sector'))` silently ranked the sector names alphabetically, and
 `group('sector') + 1` failed with a pandas error. `qex.kinds.kind(signal)` says which an expression gives, and
-`qex.kinds.numbers_only(signal)` why one cannot be an alpha. Every one of qexarena's 1,258 saved expressions (alphas,
-sealed alphas, notebooks, examples and lectures) still parses.
+`qex.kinds.numbers_only(signal)` why one cannot be an alpha.
 
 ### Fixes
 
@@ -257,7 +254,7 @@ comparison gave everywhere before this release. A new operator: nothing that doe
 An expression whose comparisons only see values that are present is unchanged. One that compares a series still
 warming up (`where(ts_std(x, 21) > ts_std(x, 252), a, b)` in its first year) or a field that can be missing on
 days the gated value is not (`returns(1) * (field('volume') > 60)`) now has no value there, where before it took
-the "false" answer. In qexarena's regression over its sealed alphas, two of three were unchanged.
+the "false" answer.
 
 ## 0.6.0
 
@@ -282,7 +279,7 @@ signal's own evaluation produced and changes none of them.
 
 ## 0.5.2
 
-Bug fixes, from the reports in qexarena's `IDEAS.md`. **Numbers change** for `ts_beta` and
+Bug fixes. **Numbers change** for `ts_beta` and
 `ts_beta_ewma` on names with missing values, for cross-sections containing an infinity, and for
 everything `FactorRiskModel` produces.
 

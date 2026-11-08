@@ -51,7 +51,7 @@ PYTHONPATH=src pytest tests/ -v
 - `None` is the literal for "no value here, on purpose" (`where(cond, x, None)`); `0` is a value, and a position once a book demeans the signal. `explain_missing(signal, data, universe=...)` (`missing.py`) traces each missing cell to its reason and the node where it began
 - Every group operator works on one day's cross-section; `group_std(x, g)` is the day's spread within each group (since 0.12.0; the old `group_std(x, g, n)` window form is refused). `group_count_valid(x, g, w)` alone still counts over a window
 - `pca_factor(x, window, k[, refit=21])` is each stock's beta to the k-th statistical factor (correlation PCA across stocks, refit every `refit` rows and held, components tracked across refits); its input is an internal `PcaBasis` node (the decomposition, value a `PcaFits` list, not a frame), shared by every pca_factor on the same x, window and refit; `missing.py`, `adjust.py` and `distributed.py` special-case it
-- `regression_neut(y, x1, x2, ...)` with several regressors is one joint least-squares fit; with one regressor its cache key is unchanged (qexarena hashes sealed alphas by it)
+- `regression_neut(y, x1, x2, ...)` with several regressors is one joint least-squares fit; with one regressor its cache key is unchanged (downstream tools hash expressions by their cache key, so keys must stay stable)
 - Group data can be accessed as `data['sector']` or `data['groups']['sector']`
 
 ## Available Operations
@@ -185,6 +185,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
+- `test_excel.py` - The Excel to qex workbook: its formulas are current and its values match qex
 - `test_docs.py` - The documentation: every operator documented, every qex block parses, Python blocks compile, worked pages run
 - `test_bugfixes_052.py` - Regression tests for the 0.5.2 fixes (paired betas, infinities in cross-sections, risk model, ts_rank, math of numbers)
 - `test_distributed.py` - Distributed evaluation and graph visualization tests
@@ -192,12 +193,13 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 
 ## Documentation
 
-`docs/` (mkdocs, built with `mkdocs build --strict` in CI on every PR) has six sections: Philosophy, Language (pure qex,
+`docs/` (mkdocs, built with `mkdocs build --strict` in CI on every PR) has seven sections: Philosophy, Excel to qex
+(one signal as a workbook and as qex; `docs/excel/build_workbook.py --recalc` rebuilds `excel-to-qex.xlsx`, and
+`tests/test_excel.py` checks it against qex), Language (pure qex,
 no Python; `language/reference.md` lists every operator in one table, and `language/ops/*.md` give each family's
 operators an entry with worked examples on toy data: ```` ```toy ```` blocks that `docs/hooks/toy.py` evaluates at build time), Examples (pure qex), Python, Data, and Python
 Examples. qex code goes in ```` ```qex ```` blocks, Python in ```` ```python ```` blocks. `tests/test_docs.py` checks that
-every operator has a reference row (two-column `| \`name(args)\` | description |`, the form qexarena's `lang.py`
-parses), that every qex block parses, that every Python block compiles and its `qex("...")` strings parse, and that the
+every operator has a reference row (two-column `| \`name(args)\` | description |`, a stable form that tools can parse), that every qex block parses, that every Python block compiles and its `qex("...")` strings parse, and that the
 Quick Start and Backtesting the Examples pages run. A new operator needs a reference row and an entry (`### name`) on its family's page.
 
 ## Data Fetching

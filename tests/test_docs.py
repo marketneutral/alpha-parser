@@ -1,6 +1,6 @@
 """The documentation stays true to the code.
 
-- every qex function has an entry in the operator reference (parsed as qexarena's lang.py parses it);
+- every qex function has an entry in the operator reference (a two-column table row, `| \`name(args)\` | description |`);
 - every ```qex block parses: a block is one or more expressions separated by blank lines, and each is either one
   multi-line expression or a list of one-line expressions, one per line (a `#` comment may end a line);
 - every ```python block is valid Python, and every qex("...") string literal in it parses;
@@ -48,7 +48,7 @@ def test_every_operator_is_in_the_reference():
     names = QexParser().functions
     found = set()
     for line in (DOCS / "language" / "reference.md").read_text().splitlines():
-        m = re.match(r"\|\s*`([a-z_]+)(\([^`]*\))?`\s*\|\s*(.*?)\s*\|\s*$", line)      # qexarena/lang.py's rule
+        m = re.match(r"\|\s*`([a-z_]+)(\([^`]*\))?`\s*\|\s*(.*?)\s*\|\s*$", line)      # a reference row
         if m and m.group(1) in names and m.group(3):
             found.add(m.group(1))
     assert sorted(set(names) - found) == []
@@ -111,10 +111,10 @@ def _toy():
 TOY = _toy()
 
 
-@pytest.mark.parametrize("block, inputs", [pytest.param(b, f, id=f"{p.relative_to(DOCS)}:{i}")
-                                           for p in PAGES for i, (b, f) in enumerate(TOY.blocks(p.read_text()))])
-def test_toy_block_renders(block, inputs):
-    out = TOY.render(block, inputs)
+@pytest.mark.parametrize("block, options", [pytest.param(b, o, id=f"{p.relative_to(DOCS)}:{i}")
+                                            for p in PAGES for i, (b, o) in enumerate(TOY.blocks(p.read_text()))])
+def test_toy_block_renders(block, options):
+    out = TOY.render(block, options)
     assert out.count('class="toy-panel') == len([l for l in block.splitlines() if l.strip()])
 
 

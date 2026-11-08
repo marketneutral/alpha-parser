@@ -49,8 +49,7 @@ qex records why each missing value is missing, and the node of the expression wh
 | too few names | a day with too few names for a cross-sectional fit: `regression_neut` with k regressors needs k + 2 |
 
 A missing input passes its reason on; a node gives its own reason only where all its inputs had values. From Python,
-`explain_missing` gives the report ([Diagnostics](../python/diagnostics.md#why-a-value-is-missing-explain_missing));
-in qexarena, **why missing?** under a qex cell shows it.
+`explain_missing` gives the report ([Diagnostics](../python/diagnostics.md#why-a-value-is-missing-explain_missing)).
 
 ## Comparisons and logic: three values
 

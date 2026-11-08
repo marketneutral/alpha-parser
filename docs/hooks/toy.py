@@ -1,6 +1,9 @@
-"""Toy examples for the operator reference: a ```toy block lists qex expressions, one per line; each is evaluated on
-the small dataset below and shown as a dates x stocks panel, the last one as the result. The panels are computed when
-the site is built, so they are always what the code does."""
+"""Worked examples in the docs: a ```toy block lists qex expressions, one per line; each is evaluated on a small
+dataset and shown as a dates x stocks panel, the last one as the result. The panels are computed when the site is
+built, so they are always what the code does.
+
+Options after ```toy: `inputs` (no panel is the result), `data=excel` (the Excel to qex dataset instead of the toy
+data), `tail=N` (only the last N dates)."""
 
 import html
 import re
@@ -45,6 +48,30 @@ def toy_data():
             "surprise": surprise, "beta": beta, "sector": sector, "market": market}
 
 
+EXCEL_STOCKS = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"]
+EXCEL_SECTORS = ["Tech", "Tech", "Tech", "Energy", "Energy", "Energy"]
+
+
+def excel_data():
+    """The Excel to qex dataset: six stocks in two sectors over 30 trading days, prices from a sector factor and noise.
+    docs/excel/build_workbook.py writes the same prices into the workbook."""
+    rng = np.random.default_rng(20240301)
+    dates = pd.bdate_range("2024-03-01", periods=30)
+    sector_moves = {"Tech": rng.normal(0, 0.012, len(dates)), "Energy": rng.normal(0, 0.010, len(dates))}
+    start = [50, 120, 35, 80, 60, 25]
+    cols = {}
+    for name, sector, p0 in zip(EXCEL_STOCKS, EXCEL_SECTORS, start):
+        r = sector_moves[sector] + rng.normal(0, 0.015, len(dates))
+        r[0] = 0.0
+        cols[name] = np.round(p0 * np.cumprod(1 + r), 2)
+    close = pd.DataFrame(cols, index=dates)
+    sector = pd.DataFrame([EXCEL_SECTORS] * len(dates), index=dates, columns=EXCEL_STOCKS)
+    return {"close": close, "sector": sector}
+
+
+DATASETS = {"toy": toy_data, "excel": excel_data}
+
+
 def _fmt_panel(frame):
     """Cell strings: labels as they are; numbers with the fewest decimals that show every value, at most 3 below 1 and 2 above."""
     vals = frame.to_numpy()
@@ -70,38 +97,57 @@ def _fmt_panel(frame):
     return [[one(v) for v in row] for row in num]
 
 
-def panel(expr, data, result=False):
+def panel(expr, data, result=False, tail=None):
     from qex import qex, compute_context
     with compute_context():
         out = qex(expr).evaluate(data)
+    dates, stocks = data["close"].index, list(data["close"].columns)
     if isinstance(out, pd.Series):
-        out = pd.DataFrame({s: out for s in STOCKS})
-    out = out.reindex(index=DATES, columns=STOCKS)
+        out = pd.DataFrame({s: out for s in stocks})
+    out = out.reindex(index=dates, columns=stocks)
+    if tail:
+        out = out.iloc[-tail:]
     cells = _fmt_panel(out)
-    head = "".join(f"<th>{s}</th>" for s in STOCKS)
+    head = "".join(f"<th>{s}</th>" for s in stocks)
     body = "".join(
         f"<tr><th>{d:%b %d}</th>" + "".join(f'<td class="{"na" if not c else ""}">{c or "·"}</td>' for c in row)
-        + "</tr>" for d, row in zip(DATES, cells))
+        + "</tr>" for d, row in zip(out.index, cells))
     cls = "toy-panel toy-result" if result else "toy-panel"
     return (f'<figure class="{cls}"><figcaption><code>{html.escape(expr)}</code></figcaption>'
             f'<table class="toy-table"><thead><tr><th></th>{head}</tr></thead><tbody>{body}</tbody></table></figure>')
 
 
-def render(block, inputs=False):
-    """Panels for each expression in the block; the last is the result, unless inputs (```toy inputs) says all are."""
+def _options(info):
+    opts = {"inputs": False, "data": "toy", "tail": None}
+    for tok in (info or "").split():
+        if tok == "inputs":
+            opts["inputs"] = True
+        elif tok.startswith("data="):
+            opts["data"] = tok[5:]
+        elif tok.startswith("tail="):
+            opts["tail"] = int(tok[5:])
+        else:
+            raise ValueError(f"unknown toy option {tok!r}")
+    return opts
+
+
+def render(block, info=""):
+    """Panels for each expression in the block; the last is the result, unless the `inputs` option says all are."""
+    o = _options(info)
     exprs = [l.strip() for l in block.strip().splitlines() if l.strip()]
-    data = toy_data()
-    parts = [panel(e, data, result=(not inputs and i == len(exprs) - 1)) for i, e in enumerate(exprs)]
+    data = DATASETS[o["data"]]()
+    parts = [panel(e, data, result=(not o["inputs"] and i == len(exprs) - 1), tail=o["tail"])
+             for i, e in enumerate(exprs)]
     return '<div class="toy">' + "".join(parts) + "</div>"
 
 
-_BLOCK = re.compile(r"^```toy( inputs)?\n(.*?)^```\s*$", re.S | re.M)
+_BLOCK = re.compile(r"^```toy([^\n]*)\n(.*?)^```\s*$", re.S | re.M)
 
 
 def blocks(markdown):
-    """[(block, inputs)] for each ```toy block."""
-    return [(m.group(2), bool(m.group(1))) for m in _BLOCK.finditer(markdown)]
+    """[(block, options)] for each ```toy block."""
+    return [(m.group(2), m.group(1).strip()) for m in _BLOCK.finditer(markdown)]
 
 
 def on_page_markdown(markdown, **kwargs):
-    return _BLOCK.sub(lambda m: render(m.group(2), inputs=bool(m.group(1))), markdown)
+    return _BLOCK.sub(lambda m: render(m.group(2), m.group(1).strip()), markdown)
