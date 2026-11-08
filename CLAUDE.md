@@ -42,7 +42,7 @@ PYTHONPATH=src pytest tests/ -v
 - Data is passed as `Dict[str, pd.DataFrame]` with keys like `'close'`, `'volume'`
 - Use `LazyData` wrapper for large datasets - fields are loaded on demand
 - Use `LazyData(data, descriptions={...})` for self-documenting data - call `data.describe()` to inspect
-- Never call `pct_change` on prices: use `price_returns`/`forward_returns` (NaN on days with no price, bridged from the last valid price up to `MAX_PRICE_GAP` rows; identical on pandas 2 and 3). `Backtest` holds untradable names' weights via `hold_untradable`
+- Never call `pct_change` on prices: use `price_returns`/`forward_returns` (NaN on days with no price, bridged from the last valid price up to `MAX_PRICE_GAP` rows; identical on pandas 2 and 3). `Backtest` holds untradable names' weights via `hold_untradable`, and starts on the first day the book holds a position (since 0.12.2)
 - Sparse data (e.g., earnings) uses NaN for missing values - use `fill_forward()` and `is_valid()`
 - A universe is a mask, a field name, or a qex expression (nonzero = member), evaluated over all stocks with no universe active (`universe.py: universe_mask`); `latch(on, off)` is hysteresis (since 0.9.0)
 - Expressions give numbers or labels (`group`, `group_cross`, strings); labels only compare (`==`, `!=`), group, or pass through `coalesce`/`where`, else the parse is refused (`kinds.py`)
@@ -185,6 +185,7 @@ Tests use pytest fixtures from `tests/conftest.py`. The `sample_data` fixture pr
 - `test_pca_factor.py` - pca_factor: planted factors, the beta definition, refits, shared decomposition, tracking, coverage, universe
 - `test_operators_012.py` - exp, is_finite, ts_quantile, regression_neut with several regressors, one-day group_std
 - `test_parser_0121.py` - Comments to end of line, clear errors for unsupported syntax, constant-argument checks (`parser.py: _ARG_RULES`)
+- `test_backtest_warmup.py` - Backtest starts on the first day the book holds a position (0.12.2)
 - `test_excel.py` - The Excel to qex workbook: its formulas are current and its values match qex
 - `test_docs.py` - The documentation: every operator documented, every qex block parses, Python blocks compile, worked pages run
 - `test_bugfixes_052.py` - Regression tests for the 0.5.2 fixes (paired betas, infinities in cross-sections, risk model, ts_rank, math of numbers)

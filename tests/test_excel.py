@@ -66,19 +66,17 @@ def _check_pnl(path):
     """The PnL sheet is the qex backtest's daily return on GMV, on the days the book is held."""
     from evaluation import Backtest
     data = TOY.excel_data()
-    bt = Backtest(qex(WEIGHTS)).run(data).returns
-    held = bt.loc[qex(WEIGHTS).evaluate(data).notna().any(axis=1)]          # the days the book has positions
+    result = Backtest(qex(WEIGHTS)).run(data)
     ws = openpyxl.load_workbook(path, data_only=True)["PnL"]
     rows = range(BUILD.PNL_FIRST, BUILD.FIRST + len(data["close"]))
     excel = np.array([ws[f"B{r}"].value for r in rows], dtype=float)
     # the backtest dates a return by the day its weights were set; the sheet, by the day it is earned
-    np.testing.assert_allclose(excel, held.to_numpy()[:len(excel)], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(excel, result.returns.to_numpy(), rtol=0, atol=1e-12)
     summary = {ws[f"E{r}"].value: ws[f"F{r}"].value for r in range(BUILD.FIRST, BUILD.FIRST + len(BUILD.SUMMARY))}
-    r = held.iloc[:len(excel)]
-    assert summary["Days"] == len(r)
-    assert summary["Return on GMV, total"] == pytest.approx(r.sum(), abs=1e-12)
-    assert summary["Growth of $1"] == pytest.approx((1 + r).prod(), abs=1e-12)
-    assert summary["Sharpe ratio, annualized"] == pytest.approx(r.mean() / r.std() * np.sqrt(252), abs=1e-9)
+    assert summary["Days"] == len(result.returns)
+    assert summary["Return on GMV, total"] == pytest.approx(result.return_gmv, abs=1e-12)
+    assert summary["Growth of $1"] == pytest.approx(1 + result.total_return, abs=1e-12)
+    assert summary["Sharpe ratio, annualized"] == pytest.approx(result.sharpe, abs=1e-9)
 
 
 def test_committed_workbook_matches_qex():
