@@ -75,7 +75,8 @@ def children(signal: Signal) -> List[Signal]:
 
 
 def _snake(name: str) -> str:
-    return {"ZScore": "zscore", "Ewma": "ewma", "EwmaVar": "ewma_var", "EwmaCov": "ewma_cov"}.get(
+    return {"ZScore": "zscore", "Ewma": "ewma", "EwmaVar": "ewma_var", "EwmaCov": "ewma_cov",
+            "GaussRank": "gaussrank", "GroupGaussRank": "group_gaussrank"}.get(
         name, re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower())
 
 

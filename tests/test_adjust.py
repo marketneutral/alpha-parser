@@ -34,6 +34,8 @@ REFUSED = [
     "log(close()) > 3",
     "field('price') + field('shares')",
     "scale(close())",
+    "gaussrank(close())",
+    "group_gaussrank(close(), 'sector')",
 ]
 
 FINE = [
@@ -60,6 +62,9 @@ FINE = [
     "ts_beta(returns(1), returns(1, 'market'), 252)",
     "rank(close() / delay(close(), 21) - 1)",
     "is_valid(close()) & (field('price') >= 2)",
+    "gaussrank(returns(5))",
+    "group_gaussrank(returns(21), 'sector')",
+    "gaussrank(-field('price'))",
     "rank(field('unknown_field'))",                       # an undeclared field is not checked
     "delay(field('mcap'), 1) + 0 * returns(1)",            # a plain number adds to dollars
 ]
@@ -115,3 +120,8 @@ def test_let_bindings_are_followed():
     with pytest.raises(LookAhead):
         check(qex("let p = close(), q = p * 2 in rank(q)"), FIELDS)
     assert check(qex("let p = close(), r = p / delay(p, 5) in rank(r)"), FIELDS) == []
+
+
+def test_gaussrank_is_named_as_it_is_written():
+    with pytest.raises(LookAhead, match=r"gaussrank\(\) compares close\(\) across stocks"):
+        check(qex("gaussrank(close())"), FIELDS)
