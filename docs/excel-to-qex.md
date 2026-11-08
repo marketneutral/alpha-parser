@@ -10,10 +10,21 @@ To be clear about what qex is: it isn't an Excel add-in, and it doesn't run insi
 language for describing a signal. You write the steps as one line, and qex works them out for every stock and every
 day at once.
 
-This page builds one signal twice: first the way you would in Excel, then the way you'd write it in qex. Same idea,
-same numbers. If you'd like to follow along, the workbook has every step as ordinary Excel formulas.
+This page builds one strategy twice: first the way you would in Excel, then the way you'd write it in qex. Same
+idea, same numbers. If you'd like to follow along, the workbook has every step as ordinary Excel formulas.
 
 [Download the Excel workbook](excel/excel-to-qex.xlsx){ .md-button .md-button--primary }
+
+!!! abstract "Front to back: data → signal → weights → P&L"
+    The walkthrough goes all the way from prices to profit and loss, in four stages:
+
+    1. **Data**: daily closing prices for six stocks.
+    2. **Signal** (steps 1 to 6): a score for every stock on every day, saying which to buy and which to sell.
+    3. **Weights** (steps 7 and 8): the score turned into a portfolio, how much of the book in each stock.
+    4. **P&L** (steps 9 and 10): what that portfolio earned, day by day.
+
+    The qex language covers the first three, from data to weights, in one line. Adding up the P&L is the job of a
+    backtest, which runs the weights through history; it's in the workbook too, so you can see the whole trip.
 
 ## The idea
 
@@ -162,10 +173,60 @@ always 1/6 to 1. The signal only decides who gets which.
 scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))
 ```
 
+### 9. What each position earned
+
+Sheet **Contribution**: each stock's weight times its return. The weights are set with today's closing prices, so
+the earliest they can earn is tomorrow's return: the cell for Apr 01 multiplies Mar 29's weight by Apr 01's return.
+Using the same day's return would be cheating, trading on prices you couldn't have known when you set the weights.
+
+```text
+=Weights!B23*Returns!B24
+```
+
+In qex this is `delay(weights, 1) * returns(1)`: yesterday's weights times today's returns. A positive number made
+money, whichever side the position was on: a short (negative weight) in a falling stock (negative return) is a
+gain.
+
+```toy data=excel tail=5
+delay(scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector')))), 1) * returns(1)
+```
+
+### 10. The book's return
+
+Sheet **PnL**: one number a day, the whole book's return on its **gross market value** (GMV, the long dollars plus the
+short dollars). It's the day's total P&L divided by the gross held:
+
+```text
+=SUM(Contribution!B24:G24)/SUMPRODUCT(ABS(Weights!B23:G23))
+```
+
+Here the gross is always 1, so it's simply the sum of the day's contributions. On a $10 million book, a day of
++0.25% is $25,000 made. "Growth of $1" compounds the days: each day's value is the day before times (1 + the day's
+return).
+
+| Day | Return on GMV | Growth of $1 |
+|---|---|---|
+| Apr 01 | −0.80% | 0.9920 |
+| Apr 02 | +0.25% | 0.9945 |
+| Apr 03 | +1.69% | 1.0113 |
+| Apr 04 | −0.08% | 1.0105 |
+| Apr 05 | −0.70% | 1.0034 |
+| Apr 08 | −0.67% | 0.9966 |
+| Apr 09 | +1.56% | 1.0122 |
+| Apr 10 | −0.43% | 1.0078 |
+| Apr 11 | +0.28% | 1.0107 |
+
+The sheet sums it up on the right: over the nine days the book returned 1.10% on its gross (1.07% compounded), with
+an annualized Sharpe ratio, `AVERAGE / STDEV.S × SQRT(252)`, of 2.06. Don't read anything into that number: nine
+days of made-up prices prove nothing. The arithmetic is the point.
+
+This step has no qex line, and that's by design. The qex language describes the portfolio you'd hold each day;
+adding up what it earns over time is a backtest. In Python, qex's `Backtest` does exactly these sums for the whole
+history, and adds trading costs, turnover and drawdowns. Its daily returns match the PnL sheet.
+
 ## The same signal in qex
 
-Now the qex side. Everything you just built, from prices to a long-short portfolio in eight sheets of formulas, is
-one line:
+Now the qex side. Everything from prices to portfolio weights, steps 1 to 8, is one line:
 
 ```qex
 scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))
@@ -201,6 +262,8 @@ This page is about the writing part, and you've just read your first qex express
 | `RANK.AVG` over the day's row | A cross-sectional operator, `rank(x)` |
 | Subtracting the row's `AVERAGE` | `demean(x)` |
 | Dividing by the row's `SUMPRODUCT(ABS(...))` | `scale(x)` |
+| Yesterday's weight times today's return | `delay(w, 1) * returns(1)` |
+| Adding up the book's P&L and compounding it | A backtest, not the language: in Python, `Backtest` |
 | Starting the formulas on row 23, once there is enough history | Automatic: no value until the window has its data |
 
 ## Why write it in qex
