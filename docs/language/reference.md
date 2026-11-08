@@ -160,6 +160,7 @@ Within groups of stocks sharing a label, one day at a time. [Groups in detail â†
 | Operation | Description |
 |-----------|-------------|
 | `group('name')` | The labels themselves, for comparing or grouping: `group('sector') == 'Technology'` |
+| `identifier()` | Each stock's own identifier, as a label; through `ts_match`, its twin's |
 | `group_cross(a, b, ...)` | One grouping from several: labels joined with a bar, `'Technology\|3'` |
 | `group_demean(x, groups)` | x minus its group's mean |
 | `group_rank(x, groups)` | Percentile rank within each group, from 1/n to 1 |
@@ -167,6 +168,14 @@ Within groups of stocks sharing a label, one day at a time. [Groups in detail â†
 | `group_std(x, groups)` | Standard deviation across the group's stocks that day; every member gets it |
 | `group_sum(x, groups)` | Sum within the group; every member gets it; missing when the group has no values that day |
 | `group_count_valid(x, groups, period)` | How many values the group's stocks have had over the last `period` days |
+
+## Matching
+
+Each stock's statistical twin: one particular other stock, chosen from history. [Matching in detail â†’](ops/matching.md)
+
+| Operation | Description |
+|-----------|-------------|
+| `ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)` | The `value` of each stock's twin: the stock whose `key` over the last `lookback` days was most alike, chosen every `rebalance` days from the past only; options by name |
 
 ## Logic and conditions
 

@@ -118,6 +118,29 @@ class Group(Signal):
         return ('Group', self.name)
 
 
+class Identifier(Signal):
+    """Each stock's own identifier (its column name in the data), as a label, on every date.
+
+    A label like group('sector'): it can be compared, used as groups, and gathered. Its use is reading a stock's
+    identity through an operator that moves values between stocks: ts_match(identifier(), key, 252) is each stock's
+    twin's identifier.
+    """
+
+    def _compute(self, data):
+        data = resolve_data(data)
+        ref = data["close"] if "close" in data else next(v for v in data.values() if isinstance(v, pd.DataFrame))
+        names = np.asarray(ref.columns, dtype=object)
+        return pd.DataFrame(np.broadcast_to(names, ref.shape).copy(), index=ref.index, columns=ref.columns)
+
+    def _cache_key(self):
+        return ('Identifier',)
+
+
+def identifier() -> Identifier:
+    """Create an Identifier signal: each stock's own identifier, as a label."""
+    return Identifier()
+
+
 def group(name: str) -> Group:
     """Access group/categorical data for use in expressions.
 

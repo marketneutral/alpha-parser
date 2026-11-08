@@ -163,10 +163,13 @@ class TsMatch(Signal):
             value = pd.DataFrame({c: value for c in sel.columns}, index=value.index)
         elif not isinstance(value, pd.DataFrame):
             value = pd.DataFrame(float(value), index=sel.index, columns=sel.columns)
-        v = value.reindex(index=sel.index, columns=sel.columns).to_numpy(dtype=float)
+        value = value.reindex(index=sel.index, columns=sel.columns)
+        labels = not all(pd.api.types.is_numeric_dtype(t) for t in value.dtypes)
+        v = value.to_numpy(dtype=object if labels else float)              # labels gather as labels
         rows = np.arange(len(sel.index))[:, None]
         read = np.where(sel.peers >= 0, v[rows, np.maximum(sel.peers, 0)], np.nan)
-        return pd.DataFrame(read, index=sel.index, columns=sel.columns)
+        out = pd.DataFrame(read, index=sel.index, columns=sel.columns)
+        return out if labels else out.astype(float)
 
     def _cache_key(self):
         return ('TsMatch', self.value._cache_key(), self.selection._cache_key())

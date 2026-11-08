@@ -22,7 +22,8 @@ from .match import ts_match
 from .crosssection import (rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, pca_factor,
     regression_alpha, regression_beta)
 from .conditional import where, coalesce
-from .groups import group, group_rank, group_demean, group_count_valid, group_std, group_sum, group_quantile, group_cross
+from .groups import (group, group_rank, group_demean, group_count_valid, group_std, group_sum, group_quantile,
+                     group_cross, identifier)
 from .operators import log, exp, abs_, sign, sqrt, power, max_, min_
 
 
@@ -109,6 +110,7 @@ class QexParser:
             'regression_alpha': regression_alpha,
             'regression_beta': regression_beta,
             'ts_match': ts_match,
+            'identifier': identifier,
             'pca_factor': pca_factor,
 
             # Conditional

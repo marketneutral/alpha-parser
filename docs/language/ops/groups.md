@@ -26,6 +26,18 @@ group('sector') == 'Tech'
 where(group('sector') == 'Financials', None, field('book_to_price'))    # not for banks
 ```
 
+### identifier
+
+<p class="sig"><code>identifier()</code></p>
+
+Each stock's own identifier (its name in the data), as a label, on every date. On its own it says nothing new; its use
+is reading a stock's identity through an operator that moves values between stocks. `ts_match(identifier(), key,
+252)` is each stock's twin's identifier: the way to see the twins ([Statistical Twins](matching.md#seeing-the-twins-identifier)).
+
+```toy data=excel tail=3 inputs
+identifier()
+```
+
 ### group_cross
 
 <p class="sig"><code>group_cross(a, b, ...)</code></p>

@@ -200,7 +200,6 @@ def test_keyword_defaults_give_the_same_expression():
     ("ts_match(returns(5), returns(1), 60, min_overlap=90)", "can't be more than its lookback"),
     ("ts_match(returns(5), returns(1), 1)", "lookback must be a whole number, at least 2"),
     ("ts_match(returns(5), returns(1), 60, rebalance=0)", "rebalance must be a whole number"),
-    ("ts_match(group('sector'), returns(1), 60)", "gives labels, not numbers"),
     ("rank(returns(5), x=2)", "takes its arguments by position"),
     ("ts_mean(returns(1), period=20)", "takes its arguments by position"),
 ])
@@ -216,3 +215,60 @@ def test_look_ahead_rules():
     assert kinds("ts_match(returns(5), close(), 60)") == []                       # correlation ignores scale
     assert kinds("ts_match(returns(5), close(), 60, metric='euclidean')") != []   # a distance compares levels
     assert kinds("ts_match(close(), returns(1), 60)") != []                       # another stock's adjusted level
+
+
+# --- identifier(): seeing the twins ------------------------------------------------------------------------------------
+
+def test_identifier_is_each_stocks_own_name(pairs_data):
+    ids = ev("identifier()", pairs_data)
+    assert (ids.to_numpy() == np.asarray(pairs_data["close"].columns)[None, :]).all()
+
+
+def test_the_twins_identifier_is_the_selection(pairs_data):
+    names = np.asarray(pairs_data["close"].columns, dtype=object)
+    twin = ev(f"ts_match(identifier(), returns(1), {LOOK}, within='sector')", pairs_data)
+    p = peers(", within='sector'", pairs_data).to_numpy()
+    expected = np.where(p >= 0, names[np.maximum(p, 0)], None)
+    got = twin.to_numpy()
+    assert all((e is None and pd.isna(g)) or e == g for e, g in zip(expected.ravel(), got.ravel()))
+
+
+def test_identifier_reads_the_cached_selection(pairs_data):
+    calls = []
+    original = MatchSelection._compute
+    MatchSelection._compute = lambda self, data: calls.append(1) or original(self, data)
+    try:
+        with compute_context():
+            ev_ = lambda e: qex(e).evaluate(pairs_data)
+            ev_(f"ts_match(returns(5), returns(1), {LOOK}, within='sector')")
+            ev_(f"ts_match(identifier(), returns(1), {LOOK}, within='sector')")
+    finally:
+        MatchSelection._compute = original
+    assert len(calls) == 1
+
+
+def test_the_same_partner_check_is_exact(pairs_data):
+    same = ev(f"ts_match(identifier(), returns(1), {LOOK}) == ts_match(identifier(), returns(1), {LOOK}, "
+              f"metric='spearman')", pairs_data)
+    values = same.to_numpy()
+    assert set(np.unique(values[np.isfinite(values)])) <= {0.0, 1.0}
+    assert same.iloc[-1].mean() > 0.8                                   # planted pairs: the metrics agree
+
+
+@pytest.mark.parametrize("expr", ["rank(ts_match(identifier(), returns(1), 60))", "identifier() + 1",
+                                  "ts_mean(identifier(), 5)"])
+def test_identifiers_are_labels(expr):
+    with pytest.raises(ValueError, match="gives labels, not numbers"):
+        qex(expr)
+
+
+def test_a_twins_labels_are_gathered_as_labels(pairs_data):
+    twin_sector = ev(f"ts_match(group('sector'), returns(1), {LOOK})", pairs_data)
+    assert set(twin_sector.stack().dropna().unique()) <= {"A", "B", "C"}
+    with pytest.raises(ValueError, match="gives labels, not numbers"):
+        qex(f"rank(ts_match(group('sector'), returns(1), {LOOK}))")
+
+
+def test_identifiers_group_and_compare():
+    qex(f"group_demean(returns(5), ts_match(identifier(), returns(1), {LOOK}, matching='exclusive'))")
+    qex(f"where(ts_match(identifier(), returns(1), {LOOK}) == 'S01', returns(5), None)")

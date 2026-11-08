@@ -57,7 +57,7 @@ REASONS = {
 }
 _CROSS = tuple(c for c in vars(_cs).values() if isinstance(c, type) and issubclass(c, Signal) and c.__module__ == _cs.__name__)
 _GROUP_OPS = tuple(c for c in vars(_gr).values() if isinstance(c, type) and issubclass(c, Signal)
-                   and c.__module__ == _gr.__name__ and c not in (_gr.Group, _gr.GroupCross))
+                   and c.__module__ == _gr.__name__ and c not in (_gr.Group, _gr.GroupCross, _gr.Identifier))
 _TIME = tuple(c for c in vars(_ts).values() if isinstance(c, type) and issubclass(c, Signal) and c.__module__ == _ts.__name__)
 _PRIMITIVE_FIELDS = {_pr.Returns: lambda s: [s.price_field], _pr.Volatility: lambda s: [s.price_field],
                      _pr.Volume: lambda s: ["volume"], _pr.Adv: lambda s: [s.price_field, "volume"]}

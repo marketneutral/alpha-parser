@@ -86,6 +86,7 @@ from .groups import (
 
 # Parser
 from .match import ts_match, TsMatch, MatchSelection
+from .groups import identifier, Identifier
 from .parser import QexParser, qex, AlphaParser, alpha, compute_weights
 
 # Distributed (optional - graphviz for visualization, dask for distributed)
@@ -300,6 +301,8 @@ __all__ = [
     'regression_alpha',
     'regression_beta',
     'ts_match',
+    'identifier',
+    'Identifier',
     'TsMatch',
     'MatchSelection',
 

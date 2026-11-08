@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.15.0
+
+`ts_match`, each stock's statistical twin, and the first keyword arguments in qex. Existing expressions are unchanged.
+
+- **`ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21,
+  min_overlap=None)`**: for each stock, the stock whose `key` over the last `lookback` days was most alike, and that
+  twin's `value`. Twins are chosen every `rebalance` days from the days before (point in time), among stocks in the
+  universe and, with `within`, in the same group; never the stock itself; held in between, and ended when either
+  stock leaves the universe. Metrics: correlation, Spearman, cosine, root mean squared and mean absolute distance,
+  each over the pair's shared days. `'exclusive'` pairs the group off into mutual twins. Designed and tested as a
+  mock in qexarena's notebook "ts_match: mocking up a new operator in Python"; the semantics tests are ported.
+- **The selection is one internal node**, `MatchSelection`, shared by every `ts_match` on the same key and options
+  whatever its value: a twin's return, volume and identifier cost one selection.
+- **`identifier()`**: each stock's own identifier, as a label. `ts_match(identifier(), key, 252)` is each stock's
+  twin's identifier, the way to see and check the twins; `ts_match` gathers labels as labels.
+- **Keyword arguments**, for `ts_match` only: its options can be given by name, in any order. Every other operator
+  still takes its arguments by position. Writing an option at its default is the same expression (and cache key) as
+  leaving it out.
+- A missing cell with no twin is reported as "no twin"; a missing twin value, with the twin's own reason.
+
 ## 0.14.0
 
 The coefficients of the cross-sectional regression, and the graph and caching fixes found while testing many signals

@@ -164,7 +164,7 @@ def _walk(s, fields, seen, found, mode):
             out = V(d["adjustment"], False, UNITS.get(d.get("unit")))
     elif name in _CALENDAR:
         out = FREE
-    elif isinstance(s, (gr.Group, gr.GroupCross)):
+    elif isinstance(s, (gr.Group, gr.GroupCross, gr.Identifier)):
         out = UNKNOWN
     elif isinstance(s, pr.Returns) or isinstance(s, pr.Volatility):
         out = FREE

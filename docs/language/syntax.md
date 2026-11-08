@@ -9,8 +9,9 @@ rank(-returns(5) / volatility(20))
 
 ## Function calls
 
-An operator is called by name with its arguments in parentheses, separated by commas. Arguments are positional;
-there are no keyword arguments.
+An operator is called by name with its arguments in parentheses, separated by commas. Arguments are positional,
+with one exception: `ts_match`'s options can also be given by name, as in `within='sector'`
+([Statistical Twins](ops/matching.md#arguments)).
 
 ```qex
 returns(20)                          # one argument
@@ -125,7 +126,7 @@ with a message:
 | `a + b` with no `let` for `b` | `Unknown variable: b` |
 | `let rank = returns(1) in rank` | `Cannot shadow function name: rank` |
 | `rank(returns(1), 2)` | the wrong number of arguments for the operator |
-| `ts_mean(returns(1), period=20)` | arguments are by position, not by name |
+| `ts_mean(returns(1), period=20)` | arguments are by position, not by name (only `ts_match` takes names) |
 | `1 < returns(1) < 2` | `Chained comparisons not supported` |
 | `returns(1) ** returns(2)` | `The exponent of ** must be a number, as in power(x, n)` |
 | `rank(group('sector'))`, `group('sector') + 1` | labels where numbers are needed ([Groups and Labels](groups.md#numbers-and-labels)) |
