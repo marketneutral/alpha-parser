@@ -106,6 +106,8 @@ class Backtest:
       build_book(): delay, universe, neutralization, constant book size and
       truncation, the standard simulation settings of Finding Alphas
     - PnL = sum(weights * next day's returns)
+    - It starts on the first day the book holds a position, so a signal's warm-up (the days before it has a
+      value) is not counted as a flat book
 
     With holding_period=h > 1, each day's target book is held for h days, as h overlapping
     books (Jegadeesh and Titman, 1993): the book held on a day is the average of the last h
@@ -170,6 +172,13 @@ class Backtest:
                 weights = self.signal.to_weights(data)
         else:
             weights = build_book(self.signal, data, self.settings)
+
+        # The backtest starts on the first day the book holds a position. Before it the signal is warming up
+        # (a 60-day volatility has no value for 60 days): those days are not a flat book, and counting them
+        # would dilute every summary number. A flat day once the book is running is real and stays.
+        held = (weights.fillna(0) != 0).any(axis=1)
+        if held.any():
+            weights = weights.loc[held.idxmax():]
 
         # Hold each day's target for holding_period days: the held book is the average of the
         # last h targets (h overlapping books, each a 1/h slice)

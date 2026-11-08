@@ -222,8 +222,12 @@ def backtest_data():
 
 @pytest.mark.parametrize('tc', [0.0, 0.001])
 def test_default_backtest_unchanged(backtest_data, tc):
+    """The 0.3.1 backtest, day for day, from the first day the book holds a position. Since 0.12.2 the warm-up
+    days before it (no signal yet) are no longer counted as a flat book."""
     signal = alpha("rank(returns(20)) - 0.5")
     weights, pnl, returns, to = _backtest_031(signal, backtest_data, transaction_cost=tc)
+    start = (weights != 0).any(axis=1).idxmax()
+    weights, pnl, returns, to = weights.loc[start:], pnl.loc[start:], returns.loc[start:], to.loc[start:]
     r = Backtest(signal, transaction_cost=tc).run(backtest_data)
     pd.testing.assert_frame_equal(r.weights, weights, check_exact=True)
     pd.testing.assert_series_equal(r.pnl, pnl, check_exact=True)

@@ -222,7 +222,8 @@ days of made-up prices prove nothing. The arithmetic is the point.
 
 This step has no qex line, and that's by design. The qex language describes the portfolio you'd hold each day;
 adding up what it earns over time is a backtest. In Python, qex's `Backtest` does exactly these sums for the whole
-history, and adds trading costs, turnover and drawdowns. Its daily returns match the PnL sheet.
+history, and adds trading costs, turnover and drawdowns. Run on this data, it gives the PnL sheet's numbers: the
+same nine daily returns, 1.10% on gross and a Sharpe ratio of 2.06.
 
 ## The same signal in qex
 

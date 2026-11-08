@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.2
+
+**Numbers change** for every `Backtest` summary on a signal with a warm-up, for the better.
+
+- **A backtest starts on the first day the book holds a position.** The days before a signal has a value (a 60-day
+  volatility's first 60 days) were counted as days with a flat book. Daily returns were right, but every summary
+  diluted: `return_gmv` divided total P&L by an average gross that included those zero days, so it was too large by
+  the ratio of all days to days held, and `sharpe`, `annual_return`, `annual_volatility`, `sortino`, `calmar` and
+  `avg_turnover` averaged in zeros. On 9 days held after 20 of warm-up, return on GMV read 3.5% instead of 1.1%.
+  Those leading days are now left out of every series and number; each day from the first one held is exactly as
+  before, and a flat day once the book is running still counts.
+
 ## 0.12.1
 
 Fixes found while rewriting the documentation. Expressions that parsed before give the same tree, except those with a

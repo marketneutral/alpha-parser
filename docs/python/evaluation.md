@@ -29,6 +29,11 @@ print(result.summary())
 
 `run(data, start_date=None, end_date=None)` returns a `BacktestResult`.
 
+The backtest starts on the first day the book holds a position. A signal has no value while its windows fill (a
+60-day volatility, its first 60 days), and those days are not counted as a flat book; a flat day once the book is
+running is. Every series and summary number below covers the days from that start. Each day's weights earn the next
+day's return, so the last day of the data has no return and is left out.
+
 ### BacktestResult
 
 | Attribute | Type | Description |
