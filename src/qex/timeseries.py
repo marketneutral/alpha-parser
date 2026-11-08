@@ -829,23 +829,42 @@ def ts_beta(signal1: Signal, signal2: Signal, period: int, min_periods: int = No
     return TsBeta(signal1, signal2, period, min_periods)
 
 
+def _only_constants(s) -> bool:
+    """Whether an expression is arithmetic on written numbers only, such as 252 / 2."""
+    from .operators import Constant
+    from .missing import children
+    if isinstance(s, Constant):
+        return not isinstance(s.value, str)
+    kids = children(s)
+    return bool(kids) and all(_only_constants(k) for k in kids)
+
+
 def _shrunk_args(name: str, rest: tuple):
-    """min_periods and groups from the arguments after the period: (y, x, period[, min_periods][, groups])."""
+    """min_periods and groups from the arguments after the period: (y, x, period[, min_periods][, groups]).
+
+    A written number is min_periods; anything else is the groups. So that the two can't be confused, min_periods
+    must be written as a number (126, not 252 / 2), and groups come after it."""
     from .groups import _as_groups
+    usage = f"{name}(y, x, period[, min_periods][, groups])"
     rest = list(rest)
     min_periods = groups = None
     if rest and isinstance(rest[0], (int, float)) and not isinstance(rest[0], bool):
         min_periods = rest.pop(0)
     if rest:
         groups = rest.pop(0)
+        if isinstance(groups, Signal) and _only_constants(groups):
+            raise ValueError(f"{name}()'s min_periods must be written as a whole number, such as 126, not as "
+                             f"arithmetic: a number is min_periods and anything else is the groups ({usage})")
         if isinstance(groups, (int, float)):
-            raise ValueError(f"{name}()'s last argument is its groups, a group's name ('sector') or an expression "
-                             f"giving labels, not the number {groups!r}: write {name}(y, x, period, min_periods, "
-                             f"groups)")
+            raise ValueError(f"{name}()'s last argument is the groups, a group's name ('sector') or an expression "
+                             f"giving labels, not {groups!r}: {usage}")
         groups = _as_groups(groups)
     if rest:
-        raise ValueError(f"{name}() takes y, x, a period, and optionally min_periods and groups "
-                         f"({name}(y, x, period[, min_periods][, groups])), not {3 + len(rest) + 2} arguments")
+        if min_periods is None and isinstance(rest[0], (int, float)):
+            raise ValueError(f"{name}()'s min_periods comes before its groups: write {name}(y, x, period, "
+                             f"{rest[0]!r}, {groups!r}) ({usage})" if isinstance(groups, str) else
+                             f"{name}()'s min_periods comes before its groups ({usage})")
+        raise ValueError(f"{name}() takes y, x, a period, and optionally min_periods and groups ({usage})")
     return min_periods, groups
 
 

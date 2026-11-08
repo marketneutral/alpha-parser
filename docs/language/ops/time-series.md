@@ -242,8 +242,11 @@ against $\tau^2$) keeps its own beta; a beta from a short or noisy history moves
 **A prior for each group.** With `groups` (a group's name or any labels expression), $\bar\beta$ and $\tau^2$ are the
 mean and variance of the betas in the stock's own group that day: a utility's beta is pulled toward the utilities',
 not toward the market's average. A stock with no group has no value. A group with fewer than two betas that day has
-no spread to shrink by, so its stocks keep their own betas. `groups` comes last, after `min_periods` when there is
-one.
+no spread to shrink by, so its stocks keep their own betas.
+
+How qex tells the two optional arguments apart: a number written as a number is `min_periods`, and anything else
+(a quoted name, a labels expression) is `groups`. So `groups` comes last, after `min_periods` when there is one, and
+`min_periods` is written out (`126`, not `252 / 2`); qex refuses either mistake with a message that says which.
 
 ```qex
 ts_beta_shrunk(returns(1), returns(1, 'market'), 252)                  # toward the day's average beta

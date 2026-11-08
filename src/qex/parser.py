@@ -462,11 +462,10 @@ def _check_args(func_name: str, args: list) -> list:
         if rule == "x":
             continue
         if rule in ("count_or_groups", "groups"):
-            if isinstance(value, (str, Signal)):                  # a group's name, or an expression giving labels
+            # a group's name or labels expression; the shrunk fits sort out min_periods from groups themselves,
+            # with messages that say which comes first
+            if isinstance(value, (str, Signal)) or rule == "groups":
                 continue
-            if rule == "groups":
-                raise ValueError(f"{func_name}()'s {_ORDINAL.get(i + 1, f'#{i + 1}')} argument is its groups, a "
-                                 f"group's name in quotes ('sector') or an expression giving labels, not {value!r}")
             rule = "count"
         ok = True
         if rule == "name":

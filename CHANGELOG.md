@@ -19,7 +19,8 @@ expressions keep their values and cache keys.
 - **A group prior for the shrunk fits**: `ts_beta_shrunk(y, x, period[, min_periods][, groups])`, and the same for
   `ts_alpha_shrunk` and `ts_resid_shrunk`. With groups, a beta is pulled toward its own group's mean beta by that
   group's spread; a stock with no group has no value, and a group with fewer than two betas keeps its own. Without
-  groups nothing changes, cache key included.
+  groups nothing changes, cache key included. A number written as a number is `min_periods` and anything else is the
+  groups, so groups come last and `min_periods` is written out (`126`, not `252 / 2`); either mistake is refused.
 
 ## 0.12.2
 

@@ -136,7 +136,10 @@ def test_without_groups_the_cache_key_is_unchanged():
 
 
 @pytest.mark.parametrize("expr, message", [
-    (f"ts_beta_shrunk({Y}, {X}, {P}, 30, 7)", "fifth argument is its groups"),
+    (f"ts_beta_shrunk({Y}, {X}, {P}, 30, 7)", "last argument is the groups"),
+    (f"ts_beta_shrunk({Y}, {X}, {P}, 'sector', 30)", "min_periods comes before its groups.*30, 'sector'"),
+    (f"ts_alpha_shrunk({Y}, {X}, 252, 252 / 2)", "written as a whole number"),
+    (f"ts_resid_shrunk({Y}, {X}, 252, 126, 252 / 2)", "written as a whole number"),
     (f"ts_alpha({Y}, {X}, {P}, 'sector')", "takes no groups.*ts_alpha_shrunk"),
     (f"ts_resid_shrunk({Y}, {X}, {P}, 0)", "a whole number, at least 1"),
     (f"ts_alpha_shrunk(group('sector'), {X}, {P})", "gives labels, not numbers"),
