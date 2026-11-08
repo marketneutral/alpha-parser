@@ -30,6 +30,27 @@ METRICS = ("corr", "euclidean", "path", "coint")
 MATCHINGS = ("nearest", "exclusive")
 DISTANCES = ("euclidean", "path")                               # scores in the metric's units: smaller is closer
 COINT_STATS = ("t", "hedge", "half_life", "spread_vol")         # what ts_match_score can report for a 'coint' pair
+RETURN_KEYED = ("path", "coint")                                 # metrics that compound the key: it is daily returns
+_RETURN_SIZE = 0.25                                             # a daily return's typical size is about 0.01
+
+
+def _check_daily_returns(name: str, metric: str, values: np.ndarray):
+    """'path' and 'coint' compound their key as daily returns: refuse what can't be one. Below -1 is a loss of more
+    than everything; a typical size (median absolute value) above 0.25 is a rank, a z-score, a price or a volume,
+    not a day's return, whose typical size is about 0.01."""
+    finite = values[np.isfinite(values)]
+    if not finite.size:
+        return
+    usage = (f"its key is daily returns: returns(1), or residual daily returns such as "
+             f"ts_resid(returns(1), returns(1, 'market'), 252)")
+    if finite.min() < -1:
+        raise ValueError(f"{name}(metric={metric!r}) compounds its key into price paths, so {usage}; the key has "
+                         f"values below -1, a loss of more than everything, which no return can be")
+    typical = float(np.median(np.abs(finite)))
+    if typical > _RETURN_SIZE:
+        raise ValueError(f"{name}(metric={metric!r}) compounds its key into price paths, so {usage}; the key's typical "
+                         f"size is {typical:.3g}, where a day's return is about 0.01: it looks like a rank, a z-score, a "
+                         f"price or a volume")
 
 
 def _log_paths(window: np.ndarray):
@@ -161,6 +182,8 @@ class MatchSelection(Signal):
             raise ValueError("ts_match's key must give each stock a value on each day")
         values = key.to_numpy(dtype=float)
         values = np.where(np.isfinite(values), values, np.nan)
+        if self.metric in RETURN_KEYED:
+            _check_daily_returns("ts_match", self.metric, values)
         T, N = values.shape
         members = universe_members(key.index, key.columns)
         eligible = np.ones((T, N), bool) if members is None else np.asarray(members, bool)
@@ -278,6 +301,11 @@ def _selection(name: str, key, lookback, metric, within, matching, rebalance, mi
     lookback = _whole("lookback", "the days of key to compare", lookback, 2)
     if metric not in METRICS:
         raise ValueError(f"{name}()'s metric is one of {', '.join(repr(m) for m in METRICS)}, not {metric!r}")
+    from .primitives import Returns
+    if metric in RETURN_KEYED and isinstance(key, Returns) and key.period != 1:
+        raise ValueError(f"{name}(metric={metric!r}) compounds its key day by day, so its key is daily returns, "
+                         f"returns(1), not returns({key.period}): overlapping {key.period}-day returns compounded as "
+                         f"daily ones give the wrong paths")
     if matching not in MATCHINGS:
         raise ValueError(f"{name}()'s matching is 'nearest' (each stock's closest) or 'exclusive' (reciprocal "
                          f"pairs), not {matching!r}")

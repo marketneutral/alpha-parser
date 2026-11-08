@@ -385,6 +385,32 @@ a half-life of about ten days) among independent stocks, `'coint'` found the tru
 a year of formation and for all of them with two, across five datasets. Restricting candidates by economics,
 `within='industry'` or a fundamental grouping, cuts the chance pairs further.
 
+### The key: daily returns
+
+`'coint'` and `'path'` compound their key day by day into price paths, so the key must be a **daily return**: each
+value that day's return. `returns(1)` is one; so are returns with something taken out, and those are often the better
+key, because cointegration then asks whether two stocks' *own* price paths revert to each other, after what they
+share with everyone:
+
+```qex
+ts_match_score(returns(1), 504, metric='coint')                                             # prices
+ts_match_score(returns(1) - returns(1, 'market'), 504, metric='coint')                      # excess over the market
+ts_match_score(ts_resid(returns(1), returns(1, 'market'), 252), 504, metric='coint')        # net of each stock's beta
+ts_match_score(regression_neut(returns(1), pca_factor(returns(1), 252, 1),
+                               pca_factor(returns(1), 252, 2)), 504, metric='coint')        # net of two statistical factors
+```
+
+What can't be a daily return is refused, with a message that says why:
+
+- `returns(n)` with `n` above 1, when the expression is read: overlapping multi-day returns compounded as daily ones
+  give the wrong paths.
+- A key with a value below −1, when it is evaluated: no return loses more than everything.
+- A key whose typical size (its median absolute value) is above 0.25: a day's return is typically about 0.01, while
+  a rank is about 0.5, a z-score about 0.7, and a price or a volume far more.
+
+A price is not a key: an adjusted close is refused by the look-ahead check, and an as-traded price would show a split
+as a divergence.
+
 ### Reading a pair: `stat=`
 
 With `metric='coint'`, `ts_match_score` also reads what you need to trade the pair, from the same selection:
@@ -424,6 +450,8 @@ Every mistake is refused when the expression is read, with a message that says w
 | `ts_match(r, key, 252, 'corr', metric='corr')` | `metric` is given twice, by position and by name |
 | `ts_match(r, key, 252, metric='pearson')` | the metrics are `'corr'`, `'euclidean'`, `'path'`, `'coint'` |
 | `ts_match_score(r, 252, stat='hedge')` | `stat=` is for `metric='coint'` |
+| `ts_match_score(returns(5), 504, metric='coint')` | the key of `'coint'` and `'path'` is daily returns, `returns(1)` |
+| `ts_match_score(rank(returns(1)), 504, metric='coint')` | a rank's typical size is not a day's return's (when evaluated) |
 | `ts_match(r, key, 252, min_overlap=300)` | `min_overlap` can't be more than `lookback` |
 | `rank(ts_match(identifier(), key, 252))` | the result is labels, and `rank` needs numbers |
 | `ts_mean(r, period=20)` | only `ts_match` takes arguments by name |

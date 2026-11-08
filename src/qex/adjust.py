@@ -242,7 +242,9 @@ def _walk(s, fields, seen, found, mode):
         # similarity by correlation ignores each stock's scale, so a key may be an adjusted
         # level; a distance compares levels across stocks, so then the key must not be one
         k = w(s.key)
-        if s.metric in ("euclidean", "path", "coint"):            # 'path' and 'coint' compound the key: returns
+        if s.metric in ("path", "coint"):                         # they compound the key: it is daily returns
+            need_free(k, s.key, f"ts_match(metric={s.metric!r}), whose key is daily returns, not a price,")
+        elif s.metric == "euclidean":
             need_free(k, s.key, "ts_match()'s distance")
         if isinstance(s.groups, Signal):
             w(s.groups)
