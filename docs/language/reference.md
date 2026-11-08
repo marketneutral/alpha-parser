@@ -13,7 +13,8 @@ In the signatures:
 ## The toy data
 
 Four stocks, **A** to **D**, over six trading days. **C** has no price on Jan 04. **A** and **B** are Tech, **C** and
-**D** are Energy. `surprise` is an earnings surprise, reported on four days, and the data also has a `market` series.
+**D** are Energy. `surprise` is an earnings surprise, reported on four days; `beta` is each stock's market beta (1.4, 0.7, 1.1 and 0.8);
+and the data also has a `market` series.
 The worked examples evaluate their expressions on this data when the site is built, so every number is what qex
 computes. A dot is a missing value.
 

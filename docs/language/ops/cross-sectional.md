@@ -109,13 +109,15 @@ truncate(returns(1), 0.05)
 
 Takes out of `y`, each day, the part the regressors explain: the residual of a least-squares fit of `y` on them, with
 an intercept, over the stocks where all have a value. The result has zero mean and zero covariance with each
-regressor across the day's stocks, which is what "neutral to x" means. Below, the day's returns with the part
-explained by price level taken out.
+regressor across the day's stocks, which is what "neutral to x" means. Below, each stock's market beta is taken out
+of the day's returns: what is left is the part of each return that beta doesn't explain. On Jan 03, **A** was up 10%,
+but with a beta of 1.4 almost all of that lines up with beta, and 0.9% is left; **D**, up 5% with a beta of 0.8, has
+the largest return beta doesn't explain.
 
 ```toy
 returns(1)
-close()
-regression_neut(returns(1), close())
+field('beta')
+regression_neut(returns(1), field('beta'))
 ```
 
 With several regressors the fit is joint, and the result is neutral to each. That is not the same as nesting,
