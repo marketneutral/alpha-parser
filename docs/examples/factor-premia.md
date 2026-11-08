@@ -21,8 +21,10 @@ net of the others.
 Two rules for everything on this page:
 
 - **Lag the characteristics.** Regress today's return on characteristics known at yesterday's close, the
-  `delay(..., 1)` above. Otherwise the regression credits a characteristic for moving with today's return, which is
-  look-ahead.
+  `delay(..., 1)` above. A factor's return is what a portfolio formed *before* the day earned *during* it. Today's
+  book-to-price moves with today's price, so a same-day regression mostly measures that mechanical link (price up,
+  book-to-price down), not value's return. This is about what you measure, not about safety: the engine already rules
+  out look-ahead ([No lookahead by construction](../philosophy.md#no-lookahead-by-construction)).
 - **Average the premiums.** One day's slope is mostly noise; the signals below use averages over months.
 
 A day's premium is one number for every stock, so on its own it is not a signal: a book demeans it away. Each signal
