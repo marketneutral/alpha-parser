@@ -1,6 +1,6 @@
 """Build excel-to-qex.xlsx: the Excel to qex page's signal, one sheet per step, as Excel formulas.
 
-    rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))
+    scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))
 
 The prices are the page's dataset (docs/hooks/toy.py: excel_data). Every sheet has dates down column A from row 3,
 the six stocks across columns B to G, and the sectors in row 2. Run from the repository root:
@@ -39,6 +39,24 @@ STEPS = [
     ("Rank", FIRST + STD_WINDOW,
      lambda c, r: f"=_xlfn.RANK.AVG(Neutral!{c}{r},Neutral!$B{r}:$G{r},1)/COUNT(Neutral!$B{r}:$G{r})", "0.000",
      "rank(...): the day's percentile, 1/n to 1, ties at their average rank"),
+    ("Demean", FIRST + STD_WINDOW, lambda c, r: f"=Rank!{c}{r}-AVERAGE(Rank!$B{r}:$G{r})", "0.000",
+     "demean(...): the rank minus the day's average rank; positive is long, negative is short"),
+    ("Weights", FIRST + STD_WINDOW,
+     lambda c, r: f"=Demean!{c}{r}/SUMPRODUCT(ABS(Demean!$B{r}:$G{r}))", "0.000",
+     "scale(...): the weights, divided by the day's total absolute value so long and short add up to 1"),
+    ("Contribution", FIRST + STD_WINDOW + 1, lambda c, r: f"=Weights!{c}{r - 1}*Returns!{c}{r}", "0.0000",
+     "What each position earned: yesterday's weight times today's return"),
+]
+
+# The PnL sheet: one row per day, summary on the right
+PNL_FIRST = FIRST + STD_WINDOW + 1          # the first day with a return earned by the book
+SUMMARY = [
+    ("Days", lambda a, b: f"=COUNT({a}:{b})", "0"),
+    ("Return on GMV, total", lambda a, b: f"=SUM({a}:{b})", "0.00%"),
+    ("Growth of $1", None, "0.0000"),
+    ("Average daily return", lambda a, b: f"=AVERAGE({a}:{b})", "0.000%"),
+    ("Daily volatility", lambda a, b: f"=_xlfn.STDEV.S({a}:{b})", "0.000%"),
+    ("Sharpe ratio, annualized", None, "0.00"),
 ]
 
 
@@ -67,14 +85,16 @@ def build(path=OUT):
     lines = [
         "Excel to qex",
         "",
-        "rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))",
+        "scale(demean(rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))))",
         "",
         "Each sheet is one step of the signal. Dates run down column A from row 3, stocks across columns B to G,",
         "and row 2 holds each stock's sector. Each formula is written once and filled across the grid.",
         "",
     ] + [f"{name}: {what}" for name, _, _, _, what in STEPS] + [
         "",
-        "In qex the whole workbook is the one line above.",
+        "Contribution and PnL: the P&L the weights earn. That part is a backtest's job, not the qex language's.",
+        "",
+        "From data to signal to weights, the whole workbook is the one line above.",
     ]
     for i, line in enumerate(lines, start=1):
         about.cell(row=i, column=1, value=line)
@@ -111,6 +131,36 @@ def build(path=OUT):
             for c in cols:
                 ws[f"{c}{r}"] = formula(c, r)
                 ws[f"{c}{r}"].number_format = fmt
+
+    pnl = wb.create_sheet("PnL")
+    for col, head in zip("ABC", ("Date", "Return on GMV", "Growth of $1")):
+        pnl[f"{col}1"] = head
+        pnl[f"{col}1"].font = bold
+    pnl["A2"] = "Today's return on the book: the positions' P&L over the gross held"
+    pnl["A2"].font = grey
+    for i, d in enumerate(close.index):
+        pnl.cell(row=FIRST + i, column=1, value=d.to_pydatetime().date()).number_format = "yyyy-mm-dd"
+    span = f"{cols[0]}{{r}}:{cols[-1]}{{r}}"
+    for r in range(PNL_FIRST, last + 1):
+        pnl[f"B{r}"] = (f"=SUM(Contribution!{span.format(r=r)})"
+                        f"/SUMPRODUCT(ABS(Weights!{span.format(r=r - 1)}))")
+        pnl[f"B{r}"].number_format = "0.00%"
+        pnl[f"C{r}"] = f"=(1+B{r})" if r == PNL_FIRST else f"=C{r - 1}*(1+B{r})"
+        pnl[f"C{r}"].number_format = "0.0000"
+    a, b = f"B{PNL_FIRST}", f"B{last}"
+    for i, (label, formula, fmt) in enumerate(SUMMARY, start=FIRST):
+        pnl[f"E{i}"] = label
+        pnl[f"E{i}"].font = bold
+        if label == "Growth of $1":
+            pnl[f"F{i}"] = f"=C{last}"
+        elif label.startswith("Sharpe"):
+            pnl[f"F{i}"] = f"=F{i - 2}/F{i - 1}*SQRT(252)"
+        else:
+            pnl[f"F{i}"] = formula(a, b)
+        pnl[f"F{i}"].number_format = fmt
+    for col, width in zip("ABCDEF", (12, 15, 13, 3, 26, 12)):
+        pnl.column_dimensions[col].width = width
+    pnl.freeze_panes = "B3"
 
     wb.calculation.fullCalcOnLoad = True
     wb.save(path)

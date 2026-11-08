@@ -38,7 +38,11 @@ SHEETS = {
     "Score": SCORE,
     "Neutral": f"group_demean({SCORE}, 'sector')",
     "Rank": f"rank(group_demean({SCORE}, 'sector'))",
+    "Demean": f"demean(rank(group_demean({SCORE}, 'sector')))",
+    "Weights": f"scale(demean(rank(group_demean({SCORE}, 'sector'))))",
+    "Contribution": f"delay(scale(demean(rank(group_demean({SCORE}, 'sector')))), 1) * returns(1)",
 }
+WEIGHTS = SHEETS["Weights"]
 
 
 def _grid(ws, n_dates, n_stocks):
@@ -58,8 +62,28 @@ def _check_values(path):
         np.testing.assert_allclose(x[np.isfinite(x)], q[np.isfinite(q)], rtol=0, atol=1e-12, err_msg=sheet)
 
 
+def _check_pnl(path):
+    """The PnL sheet is the qex backtest's daily return on GMV, on the days the book is held."""
+    from evaluation import Backtest
+    data = TOY.excel_data()
+    bt = Backtest(qex(WEIGHTS)).run(data).returns
+    held = bt.loc[qex(WEIGHTS).evaluate(data).notna().any(axis=1)]          # the days the book has positions
+    ws = openpyxl.load_workbook(path, data_only=True)["PnL"]
+    rows = range(BUILD.PNL_FIRST, BUILD.FIRST + len(data["close"]))
+    excel = np.array([ws[f"B{r}"].value for r in rows], dtype=float)
+    # the backtest dates a return by the day its weights were set; the sheet, by the day it is earned
+    np.testing.assert_allclose(excel, held.to_numpy()[:len(excel)], rtol=0, atol=1e-12)
+    summary = {ws[f"E{r}"].value: ws[f"F{r}"].value for r in range(BUILD.FIRST, BUILD.FIRST + len(BUILD.SUMMARY))}
+    r = held.iloc[:len(excel)]
+    assert summary["Days"] == len(r)
+    assert summary["Return on GMV, total"] == pytest.approx(r.sum(), abs=1e-12)
+    assert summary["Growth of $1"] == pytest.approx((1 + r).prod(), abs=1e-12)
+    assert summary["Sharpe ratio, annualized"] == pytest.approx(r.mean() / r.std() * np.sqrt(252), abs=1e-9)
+
+
 def test_committed_workbook_matches_qex():
     _check_values(BOOK)
+    _check_pnl(BOOK)
 
 
 def test_committed_workbook_is_current(tmp_path):
@@ -82,3 +106,19 @@ def test_committed_workbook_is_current(tmp_path):
 def test_fresh_workbook_calculates_to_qex(tmp_path):
     path = BUILD.recalc(BUILD.build(tmp_path / "fresh.xlsx"))
     _check_values(path)
+    _check_pnl(path)
+
+
+def test_page_pnl_table_matches_the_workbook():
+    """The P&L table and summary on the Excel to qex page are the workbook's numbers."""
+    import re
+    page = (DOCS / "excel-to-qex.md").read_text()
+    ws = openpyxl.load_workbook(BOOK, data_only=True)["PnL"]
+    for r in range(BUILD.PNL_FIRST, BUILD.FIRST + len(TOY.excel_data()["close"])):
+        day, ret, growth = ws[f"A{r}"].value, ws[f"B{r}"].value, ws[f"C{r}"].value
+        row = f"| {day:%b %d} | {100 * ret:+.2f}% | {growth:.4f} |".replace("-", "−")
+        assert row in page, row
+    summary = {ws[f"E{r}"].value: ws[f"F{r}"].value for r in range(BUILD.FIRST, BUILD.FIRST + len(BUILD.SUMMARY))}
+    assert f"returned {100 * summary['Return on GMV, total']:.2f}% on its gross" in page
+    assert f"({100 * (summary['Growth of $1'] - 1):.2f}% compounded)" in page
+    assert f"of {summary['Sharpe ratio, annualized']:.2f}." in page
