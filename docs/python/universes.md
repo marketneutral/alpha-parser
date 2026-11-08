@@ -17,7 +17,7 @@ parsed as qex.
 from qex import qex, cross_section_universe, universe_mask
 from evaluation import BookSettings, build_book
 
-LARGE = "(close() >= 2) & (field('price') * field('shares') >= 2e9)"
+LARGE = "(field('price') >= 2) & (field('price') * field('shares') >= 2e9)"
 
 with cross_section_universe(LARGE, data):                       # an expression needs the data
     r = qex("rank(returns(5))").evaluate(data)                  # ranked among the large stocks only

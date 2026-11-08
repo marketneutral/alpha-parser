@@ -24,13 +24,14 @@ returns(1) > 0
 
 ### And, or, not
 
-Three-valued: false `&` missing is 0, true `|` missing is 1, and otherwise missing with missing is missing. On Jan 02,
-**A**, **B** and **C** close at 30 or less, so the `&` is 0 without a return; **D** closes above 30 and has no answer.
+Three-valued: false `&` missing is 0, true `|` missing is 1, and otherwise missing with missing is missing. Below,
+"up today and high-beta". On Jan 02 there are no returns: **B** and **D** have betas under 1, so the answer is 0
+without knowing the return; for **A** and **C** it depends on the return, so there is no answer.
 
 ```toy
 returns(1) > 0
-close() > 30
-(returns(1) > 0) & (close() > 30)
+field('beta') > 1
+(returns(1) > 0) & (field('beta') > 1)
 ```
 
 `&` and `|` bind tighter than comparisons, so the parentheses are needed.
@@ -43,9 +44,11 @@ close() > 30
 
 `if_true` where `cond` is nonzero, `if_false` where it is 0, and no value where it is missing.
 
+Below, the day's return rank, for high-beta stocks only.
+
 ```toy
-returns(1) > 0
-where(returns(1) > 0, close(), None)
+field('beta') > 1
+where(field('beta') > 1, rank(returns(1)), None)
 ```
 
 ```qex
@@ -56,15 +59,16 @@ where(volatility(20) > 0.6, None, rank(-returns(5)))      # leave out the most v
 
 <p class="sig"><code>coalesce(x, y)</code></p>
 
-`x` where it has a value, else `y`: a number, a label or an expression. It says what missing should mean.
+`x` where it has a value, else `y`: a number, a label or an expression. It says what missing should mean: below, a
+day without a report counts as no surprise. Choose with care: a missing return is not a 0% return.
 
 ```toy
-returns(1)
-coalesce(returns(1), 0)
+field('surprise')
+coalesce(field('surprise'), 0)
 ```
 
 ```qex
-coalesce(close() > 8, 0)                     # a missing comparison counts as false
+coalesce(field('price') > 5, 0)              # no price counts as not above $5
 coalesce(group('sector'), 'Other')           # a label for stocks without one
 ```
 

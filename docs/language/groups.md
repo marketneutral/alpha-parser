@@ -53,7 +53,7 @@ a book built from it is long and short within each sector, with no net bet on Te
 ```qex
 group_demean(returns(20), 'sector')      # sector-neutral momentum
 group_rank(-returns(5), 'sector')        # reversal, ranked within each sector
-volume(1) / group_sum(volume(1), 'sector')  # each stock's share of its sector's volume
+adv(20) / group_sum(adv(20), 'sector')      # each stock's share of its sector's trading
 ```
 
 ## A stock with no label

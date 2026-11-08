@@ -27,12 +27,13 @@ fill_forward(field('surprise'), 60)        # hold a surprise for a quarter
 <p class="sig"><code>latch(on, off)</code></p>
 
 A switch: 1 from a day `on` is true until a day `off` is true, then 0 until `on` is true again. It starts at 0, `off`
-wins a tie, and a day where either is missing changes nothing. Below, **A** switches on when its close passes 12 on
-Jan 08, and stays on while its close stays at or above 12.
+wins a tie, and a day where either is missing changes nothing. With the exit below the entry, small moves around a
+threshold don't flip it back and forth. Below, a price filter: **A** trades above $11.50 on Jan 04 and switches on;
+it slips to $11 on Jan 05, which turns the plain comparison off, but the latch stays on until a price under $10.50.
 
 ```toy
-close()
-latch(close() > 12, close() < 12)
+field('price') > 11.5
+latch(field('price') > 11.5, field('price') < 10.5)
 ```
 
 ```qex
@@ -69,7 +70,7 @@ ts_mean_events(field('surprise'), 4)       # average of the last four
 The standard deviation of the last `n` values, once there are `min_n`.
 
 ```qex
-field('surprise') / ts_std_events(field('surprise'), 8)     # a standardized surprise
+field('surprise') / ts_std_events(field('surprise'), 8)     # a standardized surprise, on report days
 ```
 
 ### ts_sum_events

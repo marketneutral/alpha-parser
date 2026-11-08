@@ -108,7 +108,7 @@ delay(close(), 1)
 ```
 
 ```qex
-delay(returns(20), 5)                      # momentum, skipping the last week
+delay(returns(231), 21)                    # 12-month momentum, skipping the last month
 ```
 
 ### delta
@@ -173,7 +173,7 @@ days. Ask for more when it matters.
 The correlation of `x` and `y` over the window. Part of the window.
 
 ```qex
-ts_corr(returns(1), volume(1), 60)         # do moves come with volume?
+ts_corr(abs(returns(1)), volume(1), 60)    # do big moves come with volume?
 ```
 
 ### ts_cov

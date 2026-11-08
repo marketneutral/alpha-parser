@@ -54,21 +54,21 @@ in qexarena, **why missing?** under a qex cell shows it.
 
 ## Comparisons and logic: three values
 
-A comparison has three possible answers: true (1), false (0), and *not known* (missing). `close() > 8` on a day with
-no price is not known. Before qex 0.7.0 it was 0, a confident "no", and everything downstream acted on it:
-`where(close() > 8, 1, -1)` shorted a stock with no price.
+A comparison has three possible answers: true (1), false (0), and *not known* (missing). `field('price') > 8` on a day
+with no price is not known. Before qex 0.7.0 it was 0, a confident "no", and everything downstream acted on it:
+`where(field('price') > 8, 1, -1)` shorted a stock with no price.
 
 Two stocks over three days, A with no price on day 2 and B none on day 3:
 
 | | day 1 A | day 1 B | day 2 A | day 2 B | day 3 A | day 3 B |
 |---|---|---|---|---|---|---|
-| `close()` | 10 | 5 | — | 6 | 12 | — |
-| `close() > 8` | 1 | 0 | — | 0 | 1 | — |
-| `~(close() > 8)` | 0 | 1 | — | 1 | 0 | — |
-| `where(close() > 8, 1, -1)` | 1 | −1 | — | −1 | 1 | — |
-| `is_valid(close()) & (close() > 8)` | 1 | 0 | 0 | 0 | 1 | 0 |
-| `coalesce(close() > 8, 0)` | 1 | 0 | 0 | 0 | 1 | 0 |
-| `where(close() > 8, 1, 0)` | 1 | 0 | — | 0 | 1 | — |
+| `field('price')` | 10 | 5 | — | 6 | 12 | — |
+| `field('price') > 8` | 1 | 0 | — | 0 | 1 | — |
+| `~(field('price') > 8)` | 0 | 1 | — | 1 | 0 | — |
+| `where(field('price') > 8, 1, -1)` | 1 | −1 | — | −1 | 1 | — |
+| `is_valid(field('price')) & (field('price') > 8)` | 1 | 0 | 0 | 0 | 1 | 0 |
+| `coalesce(field('price') > 8, 0)` | 1 | 0 | 0 | 0 | 1 | 0 |
+| `where(field('price') > 8, 1, 0)` | 1 | 0 | — | 0 | 1 | — |
 
 The rules:
 
@@ -83,7 +83,7 @@ The rules:
   | missing | missing | missing | missing | missing |
 
 - `where` with a missing condition is missing: not knowing the condition is not knowing which branch to take.
-  `where(close() > 8, 1, 0)` is therefore missing where the price is, not 0.
+  `where(field('price') > 8, 1, 0)` is therefore missing where the price is, not 0.
 
 So `is_valid(x) & (x > k)` is 0 where `x` is missing: `is_valid` is known false there, and false & anything is
 false.
@@ -93,7 +93,7 @@ false.
 `coalesce(x, y)` is `x` where it has a value and `y` where it does not. `y` is a number or another expression.
 
 ```qex
-coalesce(close() > 8, 0)                    # the comparison, and 0 (false) where it is not known
+coalesce(field('price') > 8, 0)                    # the comparison, and 0 (false) where it is not known
 coalesce(field('eps_estimate'), field('eps_trailing'))   # a fallback field
 coalesce(group('sector'), 'Other')          # labels, with 'Other' where there is none
 coalesce(group_demean(returns(20), 'sector'), 0)      # a stock with no sector sits at its sector's average

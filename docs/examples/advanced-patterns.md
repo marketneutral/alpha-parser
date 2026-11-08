@@ -253,7 +253,7 @@ in where(is_jan, rank(small_cap) - 0.5, None)
 ```qex
 let s1 = rank(returns(20)) - 0.5,
     s2 = rank(-returns(5)) - 0.5,
-    s3 = rank(ts_corr(returns(1), volume(1), 60)) - 0.5
+    s3 = rank(-volatility(60)) - 0.5
 in (s1 + s2 + s3) / 3
 ```
 

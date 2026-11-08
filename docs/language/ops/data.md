@@ -102,6 +102,6 @@ Average daily dollar volume, close × volume, over `period` days. Part of the wi
 stocks; share volume does not.
 
 ```qex
-log(adv(20))                    # liquidity, as the risk model measures it
+log(adv(20))                    # liquidity, on a log scale
 where(adv(20) > 5e6, rank(-returns(5)), None)    # trade only the liquid names
 ```
