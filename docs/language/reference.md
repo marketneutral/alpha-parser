@@ -91,12 +91,19 @@ Each stock's own history. Each operator follows one of three [window rules](ops/
 
 ### Pairs of series
 
+Regressions and correlations through time: one fit per stock, over its own window. For a regression across
+the stocks on each day, see `regression_neut` under Cross-sectional.
+
 | Operation | Description |
 |-----------|-------------|
 | `ts_corr(x, y, period[, min_periods])` | Correlation of `x` and `y` over the window. Part of the window |
 | `ts_cov(x, y, period[, min_periods])` | Covariance over the window. Part of the window |
 | `ts_beta(y, x, period[, min_periods])` | Least-squares slope of `y` on `x`, cov(y, x) / var(x), over the window. Part of the window |
-| `ts_beta_shrunk(y, x, period[, min_periods])` | `ts_beta`, pulled toward the day's average beta in proportion to its noise (Vasicek). Part of the window |
+| `ts_beta_shrunk(y, x, period[, min_periods][, groups])` | `ts_beta`, pulled toward the day's average beta (or with `groups`, its group's) in proportion to its noise (Vasicek). Part of the window |
+| `ts_alpha(y, x1, ..., xk, period[, min_periods])` | Intercept of `y` on one or more regressors over the window, from one joint least-squares fit on the days all have a value; with one, mean(y) − beta × mean(x). Part of the window |
+| `ts_alpha_shrunk(y, x, period[, min_periods][, groups])` | The intercept that goes with `ts_beta_shrunk`'s slope. Part of the window |
+| `ts_resid(y, x1, ..., xk, period[, min_periods])` | Today's residual from the window's fit, y − alpha − Σ beta_j × x_j: the part of today's `y` the regressors don't explain. Part of the window |
+| `ts_resid_shrunk(y, x, period[, min_periods][, groups])` | Today's residual from `ts_beta_shrunk`'s fit. Part of the window |
 
 ### Exponentially weighted
 
@@ -141,7 +148,7 @@ Across the stocks in the universe, one day at a time. [Cross-sectional in detail
 | `quantile(x, n)` | Bucket 1 (lowest) to `n` by percentile rank |
 | `winsorize(x, limit)` | Clip at the day's `limit` and 1 − `limit` quantiles: `winsorize(x, 0.05)` caps at the 5th and 95th percentiles |
 | `truncate(x, max)` | Clip each value to [−max, max] (element by element, not across stocks) |
-| `regression_neut(y, x1, x2, ...)` | y with its least-squares fit on the regressors (and an intercept) taken out, across the day's stocks |
+| `regression_neut(y, x1, x2, ...)` | One regression per day, across the stocks (not through time): `y` with its least-squares fit on the regressors (and an intercept) taken out |
 | `pca_factor(x, window, k[, refit])` | Each stock's beta to the k-th statistical factor of `x`, from a principal component analysis across stocks, refit every `refit` days (default 21) |
 
 ## Groups

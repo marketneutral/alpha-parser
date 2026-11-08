@@ -14,6 +14,7 @@ from .primitives import returns, volatility, volume, adv
 from .timeseries import (
     ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward, latch,
     ts_corr, ts_cov, ts_var, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
+    ts_alpha, ts_alpha_shrunk, ts_resid, ts_resid_shrunk,
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear, ts_quantile,
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
@@ -78,6 +79,10 @@ class QexParser:
             'ts_beta': ts_beta,
             'ts_beta_shrunk': ts_beta_shrunk,
             'ts_beta_ewma': ts_beta_ewma,
+            'ts_alpha': ts_alpha,
+            'ts_alpha_shrunk': ts_alpha_shrunk,
+            'ts_resid': ts_resid,
+            'ts_resid_shrunk': ts_resid_shrunk,
             'ts_argmax': ts_argmax,
             'ts_argmin': ts_argmin,
             'ts_skew': ts_skew,
@@ -426,7 +431,11 @@ _ARG_RULES = {
     # ts_quantile, pca_factor, group_quantile and group_count_valid check their own arguments, with their own messages
     "ts_quantile": ("x", "x", "x", "count"),
     "delay": ("x", "lag"), "delta": ("x", "lag"),
-    **{f: ("x", "x", "window", "count") for f in ("ts_corr", "ts_cov", "ts_beta", "ts_beta_shrunk")},
+    **{f: ("x", "x", "window", "count") for f in ("ts_corr", "ts_cov", "ts_beta")},
+    # ts_alpha and ts_resid take any number of regressors, (y, x1, ..., xk, period[, min_periods]): checked there
+    # the shrunk fits take (y, x, period[, min_periods][, groups]): a 4th argument is min_periods or the groups
+    **{f: ("x", "x", "window", "count_or_groups", "groups")
+       for f in ("ts_beta_shrunk", "ts_alpha_shrunk", "ts_resid_shrunk")},
     "ewma": ("x", "halflife"), "ewma_var": ("x", "halflife"), "ewma_cov": ("x", "x", "halflife"),
     "ts_beta_ewma": ("x", "x", "halflife"),
     **{f: ("x", "count", "count") for f in ("ts_mean_events", "ts_std_events", "ts_sum_events")},
@@ -437,7 +446,8 @@ _ARG_RULES = {
 _RULE_TEXT = {"window": "a whole number of days, at least 1", "lag": "a whole number of days, 0 or more",
               "count": "a whole number, at least 1", "name": "a name in quotes, as in 'sector'",
               "halflife": "a number of days above 0", "level": "a number from 0 to 1",
-              "winsor": "a number from 0 to 0.5", "positive": "a number above 0"}
+              "winsor": "a number from 0 to 0.5", "positive": "a number above 0",
+              "count_or_groups": "a whole number, at least 1 (min_periods), or groups ('sector')"}
 
 _ORDINAL = {1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"}
 
@@ -451,6 +461,12 @@ def _check_args(func_name: str, args: list) -> list:
     for i, (rule, value) in enumerate(zip(rules, args)):
         if rule == "x":
             continue
+        if rule in ("count_or_groups", "groups"):
+            # a group's name or labels expression; the shrunk fits sort out min_periods from groups themselves,
+            # with messages that say which comes first
+            if isinstance(value, (str, Signal)) or rule == "groups":
+                continue
+            rule = "count"
         ok = True
         if rule == "name":
             ok = isinstance(value, str)

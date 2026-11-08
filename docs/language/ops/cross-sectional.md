@@ -127,6 +127,13 @@ truncate(scale(demean(-returns(1))), 0.3)
 
 <p class="sig"><code>regression_neut(y, x1, x2, ...)</code></p>
 
+!!! note "A regression across stocks, not through time"
+    `regression_neut` fits one regression **per day, across the stocks**: its data points are that day's stocks, and
+    each `x` is a value per stock, such as each stock's beta or size. It is not a regression through time; for one
+    stock's regression on the market over its history, use [`ts_beta`](time-series.md#ts_beta),
+    [`ts_alpha`](time-series.md#ts_alpha) and [`ts_resid`](time-series.md#ts_resid).
+    [Two kinds of regression](../concepts.md#two-kinds-of-regression) sets them side by side.
+
 Takes out of `y`, each day, the part the regressors explain. Across the day's stocks with a value for all of them, it
 fits
 
