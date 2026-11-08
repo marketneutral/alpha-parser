@@ -170,7 +170,11 @@ days. Ask for more when it matters.
 
 <p class="sig"><code>ts_corr(x, y, period[, min_periods])</code></p>
 
-The correlation of `x` and `y` over the window. Part of the window.
+The correlation of `x` and `y` over the window. Part of the window. Over the window's $n$ paired days,
+
+$$
+\rho_{xy} = \frac{\sum_t (x_t - \bar x)(y_t - \bar y)}{\sqrt{\sum_t (x_t - \bar x)^2 \, \sum_t (y_t - \bar y)^2}}
+$$
 
 ```qex
 ts_corr(abs(returns(1)), volume(1), 60)    # do big moves come with volume?
@@ -182,11 +186,20 @@ ts_corr(abs(returns(1)), volume(1), 60)    # do big moves come with volume?
 
 The covariance of `x` and `y` over the window. Part of the window.
 
+$$
+\operatorname{cov}(x, y) = \frac{1}{n - 1} \sum_t (x_t - \bar x)(y_t - \bar y)
+$$
+
 ### ts_beta
 
 <p class="sig"><code>ts_beta(y, x, period[, min_periods])</code></p>
 
-The least-squares slope of `y` on `x` over the window, cov(y, x) / var(x). Part of the window.
+The least-squares slope of `y` on `x` over the window: the $\beta$ of $y_t = \alpha + \beta x_t + \varepsilon_t$, fitted
+on the paired days. Part of the window.
+
+$$
+\beta = \frac{\operatorname{cov}(y, x)}{\operatorname{var}(x)} = \frac{\sum_t (x_t - \bar x)(y_t - \bar y)}{\sum_t (x_t - \bar x)^2}
+$$
 
 ```qex
 ts_beta(returns(1), returns(1, 'market'), 252)          # market beta
@@ -197,10 +210,27 @@ ts_beta(returns(1), returns(1, 'market'), 252, 126)     # no value until 126 day
 
 <p class="sig"><code>ts_beta_shrunk(y, x, period[, min_periods])</code></p>
 
-`ts_beta`, pulled toward the day's average beta in proportion to its own noise (Vasicek):
-`w × b + (1 − w) × mean(b)`, with `w = var(b) / (var(b) + se(b)²)`. A beta from a short or noisy history moves furthest
-toward the average, which is taken over the universe. [Market Beta](../../examples/market-beta.md#shrinking-beta)
-derives it.
+`ts_beta`, pulled toward the day's average beta in proportion to its own noise (Vasicek 1973). For stock $i$, with
+$\beta_i$ its `ts_beta` from $n_i$ paired days:
+
+$$
+\beta_i^{\text{shrunk}} = w_i \, \beta_i + (1 - w_i) \, \bar\beta,
+\qquad
+w_i = \frac{\tau^2}{\tau^2 + s_i^2}
+$$
+
+- $\bar\beta$ and $\tau^2$ are the mean and variance of the day's betas across the stocks in the universe: the prior.
+- $s_i^2$ is the sampling variance of stock $i$'s own estimate, from its residual variance $\hat\sigma_i^2$:
+
+$$
+s_i^2 = \frac{\hat\sigma_i^2}{(n_i - 1)\operatorname{var}(x)},
+\qquad
+\hat\sigma_i^2 = \frac{n_i - 1}{n_i - 2}\left(\operatorname{var}(y_i) - \beta_i^2 \operatorname{var}(x)\right)
+$$
+
+This is the posterior mean of $\beta_i$ under a normal prior $N(\bar\beta, \tau^2)$. A precise estimate ($s_i^2$ small
+against $\tau^2$) keeps its own beta; a beta from a short or noisy history moves most of the way to the average.
+[Market Beta](../../examples/market-beta.md#shrinking-beta) discusses when it helps.
 
 ```qex
 ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
@@ -209,13 +239,23 @@ ts_beta_shrunk(returns(1), returns(1, 'market'), 252)
 ## Exponentially weighted
 
 A day's weight halves every `halflife` days, so the effective look-back is about three half-lives. There is no warm-up:
-a value from the first observation, carried through missing days.
+a value from the first observation, carried through missing days. With half-life $h$, a value $k$ days old has weight
+
+$$
+w_k = 2^{-k/h}
+$$
 
 ### ewma
 
 <p class="sig"><code>ewma(x, halflife)</code></p>
 
-The exponentially weighted mean. Below, **C** keeps its average through Jan 04.
+The exponentially weighted mean, over the days $x$ has a value:
+
+$$
+m_t = \frac{\sum_{k \ge 0} w_k \, x_{t-k}}{\sum_{k \ge 0} w_k}
+$$
+
+Below, **C** keeps its average through Jan 04.
 
 ```toy
 close()
@@ -246,7 +286,11 @@ The exponentially weighted covariance, over the days both have a value.
 
 <p class="sig"><code>ts_beta_ewma(y, x, halflife)</code></p>
 
-`ewma_cov(y, x) / ewma_var(x)`, over the days both have a value.
+The exponentially weighted version of `ts_beta`, over the days both have a value:
+
+$$
+\beta_t = \frac{\operatorname{cov}_h(y, x)}{\operatorname{var}_h(x)}
+$$
 
 ```qex
 ts_beta_ewma(returns(1), returns(1, 'market'), 63)     # a beta that adapts within a quarter
@@ -258,8 +302,13 @@ ts_beta_ewma(returns(1), returns(1, 'market'), 63)     # a beta that adapts with
 
 <p class="sig"><code>decay_linear(x, period)</code></p>
 
-A weighted mean with weights `period`, `period − 1`, …, 1, the newest heaviest. The whole window. On Jan 04, **A** is
-(3 × 12 + 2 × 11 + 1 × 10) / 6.
+A weighted mean with weights `period`, `period − 1`, …, 1, the newest heaviest. The whole window. With period $p$:
+
+$$
+\text{decay}_t = \frac{\sum_{k=0}^{p-1} (p - k)\, x_{t-k}}{p(p+1)/2}
+$$
+
+On Jan 04, **A** is (3 × 12 + 2 × 11 + 1 × 10) / 6.
 
 ```toy
 close()

@@ -444,7 +444,7 @@ _ORDINAL = {1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"}
 
 def _check_args(func_name: str, args: list) -> list:
     """The arguments, each constant one checked against its operator's rule. Values pass through unchanged (20.0 stays
-    20.0: an expression's cache key, which qexarena hashes as its identity, must not change). Raises ValueError naming
+    20.0: an expression's cache key, which callers may hash as its identity, must not change). Raises ValueError naming
     the operator, the argument and what it must be."""
     rules = _ARG_RULES.get(func_name, ())
     out = list(args)

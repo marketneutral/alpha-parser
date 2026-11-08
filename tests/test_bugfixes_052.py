@@ -1,4 +1,4 @@
-"""Regression tests for the 0.5.2 bug fixes (reported in qexarena's IDEAS.md).
+"""Regression tests for the 0.5.2 bug fixes.
 
 Each bug test is built from the bug's minimal repro and fails on 0.5.1. The tests named
 "unchanged" or "reference", and the math cases that already worked, check that behavior away

@@ -24,7 +24,7 @@ def test_a_comment_ends_at_the_end_of_its_line(src, reads):
 
 
 def test_collapse_whitespace_strips_comments_first():
-    # qexarena's notebook joins cells with this function: a comment must not swallow the lines after it
+    # tools join several lines into one expression with this function: a comment must not swallow the lines after it
     assert _collapse_whitespace("a  # x\n + b") == "a + b"
     assert _collapse_whitespace("'#1' # c\n'#2'") == "'#1' '#2'"
 
@@ -93,7 +93,7 @@ def test_good_arguments_pass(src):
 
 
 def test_values_pass_through_unchanged():
-    # 20.0 stays 20.0: qexarena hashes an expression's cache key as its identity
+    # 20.0 stays 20.0: callers may hash an expression's cache key as its identity
     assert qex("ts_mean(returns(1), 20.0)")._cache_key() == ("TsMean", ("Returns", 1, "close"), 20.0, 20)
     assert repr(qex("ts_mean(returns(1), 20.0)")._cache_key()) != repr(qex("ts_mean(returns(1), 20)")._cache_key())
 

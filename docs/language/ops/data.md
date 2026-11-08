@@ -50,8 +50,15 @@ market()
 
 <p class="sig"><code>returns(period[, 'field'])</code></p>
 
-The return over `period` days: today's price over the last price at or before `period` days ago, minus 1. The price is
-`close` unless another field is named; `returns(1, 'market')` is the market's daily return.
+The return over `period` days: today's price over the last price at or before `period` days ago, minus 1,
+
+$$
+r_t = \frac{p_t}{p_{t'}} - 1,
+\qquad
+t' = \text{the last day at or before } t - \text{period with a price}
+$$
+
+The price is `close` unless another field is named; `returns(1, 'market')` is the market's daily return.
 
 On a day with no price there is no return, so a halted stock drops out of `rank` and the group operators instead of
 counting as 0%. The day it trades again carries the whole move since its last price: below, **C** on Jan 05 is
@@ -72,8 +79,13 @@ returns(1, 'market')        # the market's daily return
 
 <p class="sig"><code>volatility(period[, 'field'])</code></p>
 
-Annualized volatility: the standard deviation of daily returns over `period` days, times √252. Daily returns follow the
-rule above. Part of the window ([window rules](time-series.md#window-rules)).
+Annualized volatility: the standard deviation of daily returns over `period` days, times √252,
+
+$$
+\sigma_t = \sqrt{252} \cdot \operatorname{std}(r_{t-\text{period}+1}, \ldots, r_t)
+$$
+
+Daily returns follow the rule above. Part of the window ([window rules](time-series.md#window-rules)).
 
 ```qex
 volatility(60)

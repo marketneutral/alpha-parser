@@ -14,7 +14,7 @@ to the end of the data. On 2000-01-03 AAPL traded at $111.94 and NVDA at $46.81;
 0.84 and 0.09. NVDA's is tiny because NVDA later rose enough to split six times, and every split divides its past.
 
 So on any past day, a low adjusted level partly means *this stock will do well*. `rank(-close())` (buy the lowest
-adjusted price) had a validation Sharpe of 1.34 in qexarena; `rank(-field('price'))`, the same idea on the price that
+adjusted price) had a validation Sharpe of 1.34 in one backtest; `rank(-field('price'))`, the same idea on the price that
 traded, had 0.34. The difference is the future.
 
 Returns are safe. Between two days the part of A that differs is the events between them, which the later day
