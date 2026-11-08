@@ -1,9 +1,19 @@
 # Excel to qex
 
-If you can build a signal in a spreadsheet, you can write it in qex. This page builds one signal both ways, step by
-step, so you can see that a qex expression is the same thing you already do in Excel, written as one line.
+*A walkthrough for spreadsheet people.*
 
-[Download the workbook](excel/excel-to-qex.xlsx){ .md-button .md-button--primary }
+If you know how to use Excel, you are well on your way to expressing quant ideas in the qex language! A sheet of
+prices, a few columns of formulas, a ranking at the end: that's how qex thinks too. It just writes it down
+differently.
+
+To be clear about what qex is: it isn't an Excel add-in, and it doesn't run inside a spreadsheet. It's a short
+language for describing a signal. You write the steps as one line, and qex works them out for every stock and every
+day at once.
+
+This page builds one signal twice: first the way you would in Excel, then the way you'd write it in qex. Same idea,
+same numbers. If you'd like to follow along, the workbook has every step as ordinary Excel formulas.
+
+[Download the Excel workbook](excel/excel-to-qex.xlsx){ .md-button .md-button--primary }
 
 ## The idea
 
@@ -23,7 +33,7 @@ show the last five days.
 close()
 ```
 
-## In Excel
+## Step by step in Excel
 
 The workbook has one sheet per step. Every sheet has the same layout: dates down column A from row 3, one stock per
 column from B to G, and each stock's sector in row 2. Each step is one formula, written in one cell and filled across
@@ -120,9 +130,9 @@ sector: the one to buy.
 rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))
 ```
 
-## In qex
+## The same signal in qex
 
-The whole workbook is one line:
+Now the qex side. Everything you just built, six sheets of formulas, is one line:
 
 ```qex
 rank(group_demean(-returns(5) / ts_std(returns(1), 20), 'sector'))
@@ -140,6 +150,9 @@ in rank(neutral)                                # sheet Rank
 ```
 
 The numbers are the same too: the workbook's values match qex's to the 15th decimal place.
+
+You don't type this into Excel. You hand it to qex together with your price data, and qex fills in every stock and
+every day. The [Quick Start](python-examples/quickstart.md) shows how.
 
 ## The translation
 
