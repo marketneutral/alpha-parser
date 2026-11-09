@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.0
+
+The language reference ships in the package: `qex/docs/OPERATORS.md` lists every operator, one line each, each line
+linked to the operator's own entry in `qex/docs/ops/<family>.md`, with the other language pages beside them (syntax,
+concepts, missing values, groups, adjusted data, universes). Plain Markdown, readable in an editor, on GitHub, or by an
+agent that has only the installed package: the worked examples are evaluated into tables, and links to the Python
+pages point to the site. `scripts/build_agent_docs.py` writes it from `docs/language/`, and `tests/test_agent_docs.py`
+checks it is current, that every operator has a linked line, and that every link resolves. The language only: no
+Python, and no book settings. No change to any operator.
+
 ## 0.16.1
 
 Messages name `gaussrank` and `group_gaussrank` as they are written (they said `gauss_rank()`). Both are

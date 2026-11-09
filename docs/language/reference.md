@@ -16,7 +16,7 @@ Four stocks, **A** to **D**, over six trading days. **C** has no price on Jan 04
 **D** are Energy. `surprise` is an earnings surprise, reported on four days; `beta` is each stock's market beta (1.4, 0.7, 1.1 and 0.8);
 `price` is the as-traded close (with no splits or dividends, the same as `close()`); and the data also has a `market`
 series.
-The worked examples evaluate their expressions on this data when the site is built, so every number is what qex
+The worked examples evaluate their expressions on this data when the docs are built, so every number is what qex
 computes. A dot is a missing value.
 
 ```toy inputs

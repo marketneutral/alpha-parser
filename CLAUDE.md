@@ -213,6 +213,13 @@ qex). qex code goes in ```` ```qex ```` blocks, Python in ```` ```python ```` bl
 every operator has a reference row (two-column `| \`name(args)\` | description |`, a stable form that tools can parse), that every qex block parses, that every Python block compiles and its `qex("...")` strings parse, and that the
 Quick Start and Backtesting the Examples pages run. A new operator needs a reference row and an entry (`### name`) on its family's page.
 
+The Language section also ships inside the package, as plain Markdown, in `src/qex/docs/` (`OPERATORS.md`, the
+reference with each operator's row linked to its entry, `ops/*.md` and the other language pages), for readers and
+agents with only the installed package. `scripts/build_agent_docs.py` writes it from `docs/language/` (toy examples
+evaluated into tables, notes as quotes, links outside the language pointed at the site); never edit it by hand.
+`tests/test_agent_docs.py` fails when it is out of date, when an operator has no linked row, or when a link does not
+resolve: after changing `docs/language/`, run `PYTHONPATH=src python scripts/build_agent_docs.py`.
+
 ## Data Fetching
 
 ```bash
