@@ -122,7 +122,7 @@ returns(1, 'market')        # the market's daily return
 Annualized volatility: the standard deviation of daily returns over `period` days, times √252,
 
 $$
-\sigma_t = \sqrt{252} \cdot \operatorname{std}(r_{t-\text{period}+1}, \ldots, r_t)
+\sigma_t = \sqrt{252} \cdot \mathrm{std}(r_{t-\text{period}+1}, \ldots, r_t)
 $$
 
 Daily returns follow the rule above. Part of the window ([window rules](time-series.md#window-rules)).

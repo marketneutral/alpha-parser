@@ -369,7 +369,7 @@ L^A_t = a + \beta L^B_t + e_t,
 \qquad
 \Delta e_t = \gamma\, e_{t-1} + u_t,
 \qquad
-t = \frac{\hat\gamma}{\operatorname{se}(\hat\gamma)}
+t = \frac{\hat\gamma}{\mathrm{se}(\hat\gamma)}
 $$
 
 The first regression gives the hedge ratio $\beta$ and the spread $e$; the second asks whether the spread is pulled

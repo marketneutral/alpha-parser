@@ -67,6 +67,12 @@ def test_plain_markdown_only(page):
     assert "```toy" not in text and "!!! " not in text, "a site-only construct left in"
 
 
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: str(p.relative_to(SHIPPED)))
+def test_math_renders_on_github(page):
+    """GitHub's math refuses some LaTeX macros and shows an error in their place: \\operatorname is one."""
+    assert "\\operatorname" not in page.read_text(), "use \\mathrm{name} instead"
+
+
 def test_operators_is_the_language_only():
     text = (SHIPPED / "OPERATORS.md").read_text()
     for word in ("```python", "import qex", "build_book", "BookSettings", "LazyData"):

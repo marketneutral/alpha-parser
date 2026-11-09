@@ -14,7 +14,7 @@ Each stock's percentile among the day's stocks with a value, from `1/n` (the low
 their average rank. An infinity ranks first or last. With $n$ stocks:
 
 $$
-\operatorname{rank}(x)_i = \frac{1}{n}\left(\#\{j : x_j < x_i\} + \frac{\#\{j : x_j = x_i\} + 1}{2}\right)
+\mathrm{rank}(x)_i = \frac{1}{n}\left(\#\{j : x_j < x_i\} + \frac{\#\{j : x_j = x_i\} + 1}{2}\right)
 $$
 
 ```toy
@@ -52,7 +52,7 @@ The day's rank mapped through the inverse of the normal distribution: a z-score'
 $r_i$ the stock's rank from 1 to $n$ among the day's stocks with a value,
 
 $$
-\operatorname{gaussrank}(x)_i = \Phi^{-1}\!\left(\frac{r_i - 0.5}{n}\right)
+\mathrm{gaussrank}(x)_i = \Phi^{-1}\!\left(\frac{r_i - 0.5}{n}\right)
 $$
 
 ```toy
@@ -311,10 +311,10 @@ C \, v_k = \lambda_k \, v_k,
 $$
 
 The k-th factor's return is the eigenportfolio $f_{kt} = \sum_i v_{ik} \, z_{ti}$, with variance $\lambda_k$. Since
-$\operatorname{cov}(z_i, f_k) = (C v_k)_i = \lambda_k v_{ik}$, each stock's beta to it, in $x$'s units, is simply
+$\mathrm{cov}(z_i, f_k) = (C v_k)_i = \lambda_k v_{ik}$, each stock's beta to it, in $x$'s units, is simply
 
 $$
-\beta_{ik} = \frac{\operatorname{cov}(x_i, f_k)}{\operatorname{var}(f_k)} = \sigma_i \, v_{ik}
+\beta_{ik} = \frac{\mathrm{cov}(x_i, f_k)}{\mathrm{var}(f_k)} = \sigma_i \, v_{ik}
 $$
 
 ```qex
