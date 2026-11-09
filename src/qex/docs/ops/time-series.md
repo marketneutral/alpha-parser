@@ -282,7 +282,7 @@ ts_corr(abs(returns(1)), volume(1), 60)    # do big moves come with volume?
 The covariance of `x` and `y` over the window. Part of the window.
 
 $$
-\operatorname{cov}(x, y) = \frac{1}{n - 1} \sum_t (x_t - \bar x)(y_t - \bar y)
+\mathrm{cov}(x, y) = \frac{1}{n - 1} \sum_t (x_t - \bar x)(y_t - \bar y)
 $$
 
 ### ts_beta
@@ -293,7 +293,7 @@ The least-squares slope of `y` on `x` over the window: the $\beta$ of $y_t = \al
 on the paired days. Part of the window.
 
 $$
-\beta = \frac{\operatorname{cov}(y, x)}{\operatorname{var}(x)} = \frac{\sum_t (x_t - \bar x)(y_t - \bar y)}{\sum_t (x_t - \bar x)^2}
+\beta = \frac{\mathrm{cov}(y, x)}{\mathrm{var}(x)} = \frac{\sum_t (x_t - \bar x)(y_t - \bar y)}{\sum_t (x_t - \bar x)^2}
 $$
 
 ```qex
@@ -318,9 +318,9 @@ $$
 - $s_i^2$ is the sampling variance of stock $i$'s own estimate, from its residual variance $\hat\sigma_i^2$:
 
 $$
-s_i^2 = \frac{\hat\sigma_i^2}{(n_i - 1)\operatorname{var}(x)},
+s_i^2 = \frac{\hat\sigma_i^2}{(n_i - 1)\mathrm{var}(x)},
 \qquad
-\hat\sigma_i^2 = \frac{n_i - 1}{n_i - 2}\left(\operatorname{var}(y_i) - \beta_i^2 \operatorname{var}(x)\right)
+\hat\sigma_i^2 = \frac{n_i - 1}{n_i - 2}\left(\mathrm{var}(y_i) - \beta_i^2 \mathrm{var}(x)\right)
 $$
 
 This is the posterior mean of $\beta_i$ under a normal prior $N(\bar\beta, \tau^2)$. A precise estimate ($s_i^2$ small
@@ -371,7 +371,7 @@ y_t = \alpha + \sum_{j=1}^{k} \beta_j \, x_{j,t} + \varepsilon_t
 \alpha = \bar y - \sum_{j=1}^{k} \beta_j \, \bar x_j
 $$
 
-with the $\beta_j$ solving the window's normal equations, $\operatorname{cov}(x, x)\,\beta = \operatorname{cov}(x, y)$.
+with the $\beta_j$ solving the window's normal equations, $\mathrm{cov}(x, x)\,\beta = \mathrm{cov}(x, y)$.
 The alpha is net of all the regressors at once, which is not the same as taking them out one at a time when they are
 correlated. A window needs at least $k + 2$ such days (and `min_periods`); regressors that duplicate each other get
 the minimum-norm fit. A multi-factor alpha, with factor returns supplied once per day for every stock
@@ -508,7 +508,7 @@ The exponentially weighted covariance, over the days both have a value.
 The exponentially weighted version of `ts_beta`, over the days both have a value:
 
 $$
-\beta_t = \frac{\operatorname{cov}_h(y, x)}{\operatorname{var}_h(x)}
+\beta_t = \frac{\mathrm{cov}_h(y, x)}{\mathrm{var}_h(x)}
 $$
 
 ```qex
