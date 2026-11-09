@@ -73,7 +73,7 @@ def _classes():
 
 _PRESERVE = ("TsMean", "TsSum", "TsMax", "TsMin", "Delay", "Ewma", "DecayLinear", "FillForward", "TsMeanEvents",
              "TsSumEvents", "TsStd", "TsStdEvents", "TsQuantile")
-_FREE_TS = ("TsRank", "TsArgmax", "TsArgmin", "TsCorr", "TsSkew", "TsKurt", "TsCountEvents", "Latch")
+_FREE_TS = ("TsRank", "TsArgmax", "TsArgmin", "TsCorr", "TsSkew", "TsKurt", "TsCountEvents", "Latch", "DaysSince")
 _SQUARE = ("TsVar", "EwmaVar")
 _PAIR_SUM = ("TsCov", "EwmaCov")
 _PAIR_DIFF = ("TsBeta", "TsBetaShrunk", "TsBetaEwma")

@@ -93,3 +93,29 @@ ts_count_events(field('surprise'), 3)
 ```qex
 ts_count_events(field('surprise'), 252) >= 3    # three reports in a year
 ```
+
+### days_since
+
+<p class="sig"><code>days_since(x)</code></p>
+
+How many trading days since `x` was last nonzero: 0 on a day it is, 1 the day after, and so on. A day counts when `x`
+has a value that is not 0 (a negative value counts; so does an infinity, as in `where`). A missing day is not an
+event, and it neither resets nor stops the count, so a halt between two events still counts its days. Before `x` is
+first nonzero the answer is missing. There is no window: the count runs however far back the last event is.
+
+Days are rows of the data, trading days, not calendar days. Below, **C**'s report on Jan 05 starts its count, and **B**
+and **D** have no count until their reports on Jan 08.
+
+```toy
+field('surprise')
+days_since(field('surprise'))
+```
+
+```qex
+days_since(field('surprise')) <= 5                    # a report in the last week
+where(days_since(field('surprise')) < 10, field('surprise'), None)    # the latest report, for ten days
+days_since(close() >= ts_max(close(), 252))          # days since a 52-week high
+```
+
+For "days since the latest", use `days_since`, not `ts_argmax`: given two events in its window, `ts_argmax` counts
+back to the older one.
