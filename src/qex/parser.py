@@ -12,7 +12,7 @@ from .operators import Constant, NoneValue, is_valid, is_finite
 from .data import close, open, high, low, field, market, day_of_week, day_of_month, month_of_year
 from .primitives import returns, volatility, volume, adv
 from .timeseries import (
-    ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward, latch,
+    ts_mean, ts_std, ts_sum, ts_max, ts_min, delay, delta, ts_rank, fill_forward, latch, days_since,
     ts_corr, ts_cov, ts_var, ewma, ewma_var, ewma_cov, ts_beta, ts_beta_shrunk, ts_beta_ewma,
     ts_alpha, ts_alpha_shrunk, ts_resid, ts_resid_shrunk,
     ts_argmax, ts_argmin, ts_skew, ts_kurt, decay_linear, ts_quantile,
@@ -120,6 +120,7 @@ class QexParser:
             'where': where,
             'coalesce': coalesce,
             'latch': latch,
+            'days_since': days_since,
 
             # Group ops
             'group': group,

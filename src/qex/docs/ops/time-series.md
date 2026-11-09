@@ -213,7 +213,8 @@ ts_rank(volume(1), 20)                     # is today's volume unusual for this 
 
 <p class="sig"><code>ts_argmax(x, period)</code></p>
 
-How many days ago the window's largest value was, 0 if it is today. The whole window.
+How many days ago the window's largest value was, 0 if it is today; on a tie, the oldest. The whole window. For
+"days since the latest event", use [days_since](events.md#days_since).
 
 `close()`
 

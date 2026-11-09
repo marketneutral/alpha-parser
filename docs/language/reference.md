@@ -86,7 +86,7 @@ Each stock's own history. Each operator follows one of three [window rules](ops/
 | Operation | Description |
 |-----------|-------------|
 | `ts_rank(x, period)` | Today's percentile among the last `period` values, from 1/period to 1; ties share their average rank. The whole window |
-| `ts_argmax(x, period)` | Days since the largest value in the window, 0 if it is today. The whole window |
+| `ts_argmax(x, period)` | Days since the largest value in the window (the oldest of a tie), 0 if it is today; for the latest event, `days_since`. The whole window |
 | `ts_argmin(x, period)` | Days since the smallest value in the window. The whole window |
 
 ### Pairs of series
@@ -134,6 +134,7 @@ the stocks on each day, see `regression_neut` under Cross-sectional.
 | `ts_std_events(x, n[, min_n])` | Standard deviation of the last `n` values, once there are `min_n` |
 | `ts_sum_events(x, n[, min_n])` | Sum of the last `n` values, once there are `min_n` |
 | `ts_count_events(x, period)` | How many values `x` has in the last `period` days; an answer every day once `period` days have passed |
+| `days_since(x)` | Trading days since `x` was last nonzero: 0 on the day, 1 the day after; missing before it first is; no window |
 
 ## Cross-sectional
 

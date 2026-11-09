@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.18.0
+
+`days_since(x)`, in Events and state: trading days since `x` was last nonzero, 0 on the day, 1 the day after. A day
+counts when `x` has a value that is not 0 (a negative value or an infinity counts); a missing day neither resets nor
+stops the count; before the first event it is missing; there is no window. It answers "days since the latest event"
+(an earnings release, a 52-week high), which `ts_argmax` does not: given two events in its window, `ts_argmax` counts
+back to the older one (its entry now says so). Unit-free for the adjustment check, like `ts_count_events`. Tests in
+`tests/test_days_since.py`; the shipped reference is regenerated. No change to any other operator.
+
 ## 0.17.0
 
 The language reference ships in the package: `qex/docs/OPERATORS.md` lists every operator, one line each, each line

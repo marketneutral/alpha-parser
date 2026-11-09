@@ -801,6 +801,43 @@ def latch(on: Signal, off: Signal) -> Latch:
     return Latch(on, off)
 
 
+class DaysSince(Signal):
+    """Trading days since x was last nonzero: 0 on a day it is nonzero, 1 the day after, and so on.
+
+    A day counts as true when x has a value and it is not 0 (an infinity is true, as in where); a missing day is not
+    true, and it neither resets nor stops the count. Missing before x is first true. There is no window: the count runs
+    however far back the last true day is. Days are rows of the data's calendar, so trading days, not calendar days.
+    For "days since the latest" this is the operator: ts_argmax, given two events in its window, counts back to the
+    older one.
+    """
+
+    def __init__(self, signal: Signal):
+        from .conditional import _ensure_signal
+        self.signal = _ensure_signal(signal)
+
+    def _compute(self, data):
+        import numpy as np
+        x = self.signal.evaluate(data)
+        if not isinstance(x, (pd.DataFrame, pd.Series)):
+            raise ValueError("days_since needs a value per day, not a constant")
+        true = x.notna() & (x != 0)
+        if isinstance(x, pd.DataFrame):
+            pos = pd.DataFrame(np.arange(len(x), dtype=float)[:, None].repeat(x.shape[1], axis=1),
+                               index=x.index, columns=x.columns)
+        else:
+            pos = pd.Series(np.arange(len(x), dtype=float), index=x.index)
+        last = pos.where(true).ffill()                      # the row of the latest true day, at or before each row
+        return pos - last
+
+    def _cache_key(self):
+        return ('DaysSince', self.signal._cache_key())
+
+
+def days_since(signal: Signal) -> DaysSince:
+    """Trading days since signal was last nonzero (0 on the day); missing before it first is; no window."""
+    return DaysSince(signal)
+
+
 class TsQuantile(Signal):
     """Rolling q-quantile of a signal over its last ``period`` values.
 
