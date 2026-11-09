@@ -5,7 +5,9 @@
 
 src/qex/docs/ is the language only, plain Markdown readable anywhere (an editor, GitHub, an agent reading files):
 
-    OPERATORS.md        docs/language/reference.md: every operator, one line each, each linked to its own entry
+    OPERATORS.md        docs/language/reference.md: every operator, one line each (a list, not the site's tables),
+                        each linked to its own entry
+    toy-data.md         reference.md's toy data, which the entries' worked examples run on
     ops/*.md            docs/language/ops/: the families, an entry per operator
     syntax.md, ...      the other docs/language pages the entries link to
 
@@ -93,6 +95,8 @@ def links(text, depth):
             elif p not in ("", "."):
                 norm.append(p)
         norm = "/".join(norm)
+        if norm == "language/reference.md" and anchor == "the-toy-data":
+            return f"]({up}toy-data.md)"
         if norm == "language/reference.md":
             new = f"{up}OPERATORS.md"
         elif norm.startswith("language/"):
@@ -140,13 +144,36 @@ def operators(text):
     return re.sub(r"^\| `(([a-z_0-9]+)(?:\([^`]*\))?)` \|", row, text, flags=re.M)
 
 
+def as_list(text):
+    """The rendered reference as one line per operator: its toy data cut out (returned separately), each table row
+    `| op | what it does |` a list line `- op: what it does`, the tables' header and rule rows gone."""
+    m = re.search(r"^## The toy data\n(.*?)(?=^## )", text, flags=re.S | re.M)
+    toy = "# The toy data\n" + m.group(1).rstrip() + "\n"
+    text = text[:m.start()] + text[m.end():]
+    text = re.sub(r"Every operator in qex, one line each\..*?\n\n",
+                  "Every operator in qex, one line each, linked to its entry: its signature, what it does, how it treats "
+                  "missing\nvalues, and examples, most worked on the [toy data](toy-data.md).\n\n", text, count=1, flags=re.S)
+    out = []
+    for line in text.splitlines():
+        if re.fullmatch(r"\|\s*(Operation|Operator)\s*\|\s*Description\s*\|", line) or re.fullmatch(r"\|[-|\s]+\|", line):
+            continue
+        row = re.fullmatch(r"\| (.+?) \| (.+) \|", line)
+        if row:
+            op, what = (c.replace("\\|", "|").replace("<code>&#124;</code>", "`|`") for c in row.groups())
+            line = f"- {op}: {what}"
+        out.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).rstrip() + "\n", toy
+
+
 def build(out=OUT):
     toy = _toy()
     out = Path(out)
     (out / "ops").mkdir(parents=True, exist_ok=True)
     written = {}
     ref = render(operators((LANG / "reference.md").read_text()), toy, 0)
-    written["OPERATORS.md"] = HEADER.format(src="reference.md") + ref
+    ops, toy_data = as_list(ref)
+    written["OPERATORS.md"] = HEADER.format(src="reference.md") + ops
+    written["toy-data.md"] = HEADER.format(src="reference.md (The toy data)") + toy_data
     for p in PAGES:
         written[p] = HEADER.format(src=p) + render((LANG / p).read_text(), toy, 0)
     for p in sorted((LANG / "ops").glob("*.md")):

@@ -3,7 +3,7 @@
 # Data and Primitives
 
 Where every expression starts: prices, fields from the data, and the returns, volatility and volume built from them.
-The panels run on the [toy data](../OPERATORS.md#the-toy-data).
+The panels run on the [toy data](../toy-data.md).
 
 ## Prices and fields
 

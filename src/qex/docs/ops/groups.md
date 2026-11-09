@@ -3,7 +3,7 @@
 # Groups
 
 Like the cross-sectional operators, but within groups: each stock is compared only with the stocks sharing its label
-that day. In the [toy data](../OPERATORS.md#the-toy-data), **A** and **B** are Tech, **C** and **D** are Energy.
+that day. In the [toy data](../toy-data.md), **A** and **B** are Tech, **C** and **D** are Energy.
 
 `groups` is a group's name (`'sector'`) or any expression giving labels: `quantile(field('mcap'), 5)`,
 `coalesce(group('sector'), 'Other')`, `group_cross(...)`. A stock with no label, or outside the universe, gets no value.

@@ -30,7 +30,7 @@ def _anchors(page):
 
 def test_every_operator_has_a_linked_line():
     text = (SHIPPED / "OPERATORS.md").read_text()
-    linked = dict(re.findall(r"^\| \[`([a-z_0-9]+)(?:\([^`]*\))?`\]\((ops/[^)]+)\) \|", text, re.M))
+    linked = dict(re.findall(r"^- \[`([a-z_0-9]+)(?:\([^`]*\))?`\]\((ops/[^)]+)\): \S", text, re.M))
     missing = sorted(set(QexParser().functions) - set(linked))
     assert missing == [], f"operators with no linked line in OPERATORS.md: {missing}"
     for name, target in linked.items():
@@ -50,6 +50,15 @@ def test_links_resolve(page):
         assert SHIPPED.resolve() in dest.parents or dest.parent == SHIPPED.resolve(), f"{page.name}: {target} leaves the docs"
         if anchor:
             assert anchor in _anchors(dest), f"{page.name}: {target} has no such heading"
+
+
+def test_operators_is_one_line_each():
+    """No tables and no toy data: a heading, a sentence of context, then one list line per operator."""
+    text = (SHIPPED / "OPERATORS.md").read_text()
+    assert not re.search(r"^\|", text, re.M), "a table row in OPERATORS.md"
+    assert "Jan 02" not in text, "toy data in OPERATORS.md"
+    lines = [l for l in text.splitlines() if l.startswith("- [`")]
+    assert len(lines) >= len(QexParser().functions)
 
 
 @pytest.mark.parametrize("page", PAGES, ids=lambda p: str(p.relative_to(SHIPPED)))

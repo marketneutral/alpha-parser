@@ -3,7 +3,7 @@
 # Events and State
 
 For data that arrives now and then, such as quarterly earnings, and for signals that hold a state from one day to the
-next. In the [toy data](../OPERATORS.md#the-toy-data), `field('surprise')` has four reports: **A** on Jan 03, **C** on
+next. In the [toy data](../toy-data.md), `field('surprise')` has four reports: **A** on Jan 03, **C** on
 Jan 05, **B** and **D** on Jan 08.
 
 ## Holding values
