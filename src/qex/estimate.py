@@ -181,13 +181,14 @@ def register_estimator(cls: type) -> type:
 
 
 def estimators() -> pd.DataFrame:
-    """Every registered estimator: name, version, axis, outputs and what it measures."""
+    """Every registered estimator: name, version, axis, outputs, the dof it learns and what it measures."""
+    from . import fits  # noqa: F401  (the built-ins, registered on first use)
     rows = []
     for name, versions in sorted(_REGISTRY.items()):
         for v, cls in versions.items():
             e = cls()
             outs = e.outputs_for(e.n_inputs[1] or e.n_inputs[0] + 1) if not cls.outputs else cls.outputs
-            rows.append(dict(name=name, version=v, axis=cls.axis, outputs=", ".join(outs), about=cls.about))
+            rows.append(dict(name=name, version=v, axis=cls.axis, outputs=", ".join(outs), dof=cls.dof, about=cls.about))
     return pd.DataFrame(rows)
 
 

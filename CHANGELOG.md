@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.22.1
+
+- `qex.estimators()` listed nothing until an estimator had been used: it now registers the built-ins first, and its table gains each estimator's `dof`.
+
 ## 0.22.0
 
 **`stump_xs`: a learned split of the stocks between two signals, on each stock's own state.** The stump learns
