@@ -150,10 +150,10 @@ def test_an_estimator_builds_or_fits_not_both():
     with pytest.raises(TypeError, match="either build, or fit and step"):
         register_estimator(Neither)
 
-    class StockAxis(_MeanGap):
-        name, axis = "test_stock_axis", "stock"
-    with pytest.raises(ValueError, match="'series' axis"):
-        register_estimator(StockAxis)
+    class NoAxis(_MeanGap):
+        name, axis = "test_no_axis", "sideways"
+    with pytest.raises(ValueError, match="its axis is"):
+        register_estimator(NoAxis)
 
 
 def test_the_latest_version_by_default():
@@ -255,3 +255,113 @@ def test_the_stump_s_options(panel):
     assert none.isna().all().all()                                        # no shuffles, no p
     fine = _ev("estimate('stump', 'threshold', field('s'), field('a'), field('b'), window=504, refit=63, quantiles=50)", d)
     assert fine.notna().any().any()
+
+
+# --- the protocol, per stock -------------------------------------------------------------------------------------------
+
+class _StockZ(Estimator):
+    """Each stock's value today against its own window: (x - mean) / sd, fitted on the window's rows."""
+    name, version, axis = "test_stock_z", "1", "stock"
+    n_inputs, outputs = (1, 1), ("z",)
+
+    def fit(self, window, hyper, rng):
+        x = window[:, 0][np.isfinite(window[:, 0])]
+        return None if len(x) < 10 else (x.mean(), x.std(ddof=1))
+
+    def step(self, state, row, hyper):
+        return {"z": (row[0] - state[0]) / state[1]}
+
+
+class _StockZFast(_StockZ):
+    """The same, every stock at once: what fit_many and step_many are for."""
+    name = "test_stock_z_fast"
+
+    def fit_many(self, window, hyper, rngs):
+        x = window[:, :, 0]                                               # stocks x rows
+        n = np.isfinite(x).sum(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mean, sd = np.nanmean(x, axis=1), np.nanstd(x, axis=1, ddof=1)
+        return [None if k < 10 else (m, v) for k, m, v in zip(n, mean, sd)]
+
+
+def _reg(cls):
+    if cls.name not in _REGISTRY:
+        register_estimator(cls)
+
+
+def test_a_per_stock_estimator_fits_each_stock_s_own_window(panel):
+    _reg(_StockZ)
+    expr = "estimate('test_stock_z', 'z', returns(5), window=40, refit=10)"
+    z, x = _ev(expr, panel), _ev("returns(5)", panel)
+    assert z.notna().to_numpy().sum() > 1000
+    assert (z.nunique(axis=1) > 1).any()                                  # each stock its own
+    t = z.index.get_loc(z["S03"].dropna().index[0])                       # the first refit with a fit
+    for c in ("S03", "S17"):
+        w = x[c].iloc[t - 39:t + 1]
+        assert z[c].iloc[t] == pytest.approx((x[c].iloc[t] - w.mean()) / w.std(ddof=1))
+        assert z[c].iloc[t + 3] == pytest.approx((x[c].iloc[t + 3] - w.mean()) / w.std(ddof=1))   # held to the next refit
+
+
+def test_fit_many_is_the_same_as_fit_stock_by_stock(panel):
+    _reg(_StockZ), _reg(_StockZFast)
+    a = _ev("estimate('test_stock_z', 'z', returns(5), window=40, refit=10)", panel)
+    b = _ev("estimate('test_stock_z_fast', 'z', returns(5), window=40, refit=10)", panel)
+    assert np.allclose(a.to_numpy(), b.to_numpy(), equal_nan=True)
+
+
+def test_a_per_stock_estimator_is_point_in_time_and_start_independent(panel):
+    _reg(_StockZ)
+    expr = "estimate('test_stock_z', 'z', returns(1), window=40, refit=10)"
+    base = _ev(expr, panel)
+    later = dict(panel, close=panel["close"].copy())
+    later["close"].iloc[401:, :] = later["close"].iloc[401:, :] * np.exp(np.random.default_rng(4).normal(0, .05, (len(base) - 401, base.shape[1])))
+    moved = _ev(expr, later)
+    assert np.allclose(base.iloc[:401].to_numpy(), moved.iloc[:401].to_numpy(), equal_nan=True)
+    assert not np.allclose(base.iloc[402:].to_numpy(), moved.iloc[402:].to_numpy(), equal_nan=True)
+    short = _ev(expr, {k: (v.iloc[100:] if isinstance(v, (pd.DataFrame, pd.Series)) else v) for k, v in panel.items()})
+    common = short.dropna(how="all").index
+    assert len(common) > 300
+    assert np.allclose(base.loc[common].to_numpy(), short.loc[common].to_numpy(), equal_nan=True)
+
+
+# --- the protocol, across stocks ---------------------------------------------------------------------------------------
+
+class _XsGap(Estimator):
+    """Each stock's value against the median of the universe's values over the window (pooled): a cross-sectional
+    (window 1) or panel (longer) estimator."""
+    name, version, axis = "test_xs_gap", "1", "cross_section"
+    n_inputs, outputs = (1, 1), ("gap",)
+
+    def fit(self, window, hyper, rng, members=None):
+        v = window[:, :, 0][members]
+        return None if v.size < 5 else float(np.median(v))
+
+    def step(self, state, row, hyper, members=None):
+        return {"gap": row[:, 0] - state}
+
+
+def test_a_cross_sectional_estimator_sees_the_day_s_universe(panel):
+    from qex import cross_section_universe
+    _reg(_XsGap)
+    x = _ev("returns(5)", panel)
+    uni = pd.DataFrame(True, x.index, x.columns)
+    uni.iloc[:, :6] = False                                               # six stocks never in the universe
+    with compute_context(), cross_section_universe(uni):
+        g = qex("estimate('test_xs_gap', 'gap', returns(5), window=1, refit=1)").evaluate(panel)
+    assert g.iloc[:, :6].isna().all().all()                               # none outside the universe
+    t = 200
+    inside = x.iloc[t, 6:]
+    assert np.allclose(g.iloc[t, 6:], inside - inside.median())           # the day's members' median
+
+
+def test_a_panel_estimator_pools_the_window_and_is_point_in_time(panel):
+    _reg(_XsGap)
+    expr = "estimate('test_xs_gap', 'gap', returns(5), window=20, refit=5)"
+    g, x = _ev(expr, panel), _ev("returns(5)", panel)
+    r = [i for i in range(len(g)) if g.iloc[i].notna().any()][0]          # the first refit
+    assert np.allclose(g.iloc[r], x.iloc[r] - np.nanmedian(x.iloc[r - 19:r + 1].to_numpy()))
+    later = dict(panel, close=panel["close"].copy())
+    later["close"].iloc[301:, :] = later["close"].iloc[301:, :] * 1.5 * np.exp(np.random.default_rng(6).normal(0, .1, (len(g) - 301, g.shape[1])))
+    m = _ev(expr, later)
+    assert np.allclose(g.iloc[:301].to_numpy(), m.iloc[:301].to_numpy(), equal_nan=True)
+    assert not np.allclose(g.iloc[302:].to_numpy(), m.iloc[302:].to_numpy(), equal_nan=True)

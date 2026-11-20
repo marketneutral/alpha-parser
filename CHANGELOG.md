@@ -21,8 +21,10 @@ read by small operators. An *estimator* is that pattern with a name, registered 
 - **The protocol, for estimators not built from qex's operators:** `fit` gets only the rows of the window ending on the
   refit day and `step` one day's row, the schedule is the engine's (on the calendar, `schedule.py`), and randomness is
   seeded by the call and the refit's date. Point in time by construction, deterministic, and independent of where the
-  data starts; all three tested on the stump. This version supports the `series` axis (market-level inputs, outputs
-  given to every stock); the built-ins cover the others through their own nodes.
+  data starts. Every axis: `series` (market-level inputs, each output given to every stock), `stock` (`fit` and
+  `step` per stock, with optional vectorized `fit_many` and `step_many`), and `cross_section` and `panel` (`fit` gets
+  the window's rows x stocks x inputs and the universe's members, `step` the day's cross-section; no value outside the
+  universe). The three properties are tested on the stump and on a per-stock and a cross-sectional estimator.
 - **The registry:** `qex.Estimator`, `qex.register_estimator`, `qex.estimators()`, `qex.get_estimator`;
   `'name@version'` picks a version; a name and version register once. `explain_missing` names estimate nodes as
   written and calls the days before a first fit a short history; the look-ahead and kind checks cover them.

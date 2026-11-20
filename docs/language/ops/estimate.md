@@ -108,8 +108,22 @@ An estimator that is not built from qex's own operators is written to a protocol
 hands the estimator only what was known: `fit` gets the rows of the window ending on the refit day, and `step` gets one
 day's row, with the parameters fixed until the next refit. So an estimator cannot use a later day, even by mistake;
 an HMM written this way can only give filtered probabilities, never the smoothed ones that leak the future. A
-randomized fit (the stump's shuffles) draws from a generator seeded by the call and the refit's date, so one expression
-always gives one number, whatever day the data starts on.
+randomized fit (the stump's shuffles) draws from a generator seeded by the call and the refit's date (and, per stock,
+the stock's name), so one expression always gives one number, whatever day the data starts on.
+
+What `fit` and `step` are handed follows the estimator's **axis**:
+
+| Axis | `fit(window, ...)` gets | `step(state, row, ...)` gets | Each output |
+|---|---|---|---|
+| `series` | rows × inputs, market-level (the same for every stock) | that day's inputs | one number, for every stock |
+| `stock` | one stock's rows × inputs, called for each stock | that stock's inputs that day | the stock's number |
+| `cross_section` | rows × stocks × inputs, and `members` (rows × stocks: in the universe, with every input) | the day's stocks × inputs, and that day's `members` | a number per stock, none outside the universe |
+| `panel` | the same as `cross_section`, over a window of more than a day | the same | the same |
+
+The window and the rows are read-only. A per-stock estimator may also define `fit_many(window, hyper, rngs)` and
+`step_many(states, row, hyper)`, the same for every stock at once (the window stocks × rows × inputs, the row stocks ×
+inputs), to fit in one vectorized step instead of a loop over stocks; by default they call `fit` and `step` stock by
+stock.
 
 ## Writing an estimator (Python)
 
@@ -137,8 +151,33 @@ qex.register_estimator(MeanGap)
 qex.qex("estimate('mean_gap', 'z', returns(1, 'market'), window=252)")
 ```
 
+Per stock, the same idea against each stock's own history, and across stocks against the day's universe:
+
+```python
+class OwnGap(qex.Estimator):
+    """Each stock's value today against its own mean over the window."""
+    name, axis, n_inputs, outputs = "own_gap", "stock", (1, 1), ("gap",)
+
+    def fit(self, window, hyper, rng):             # one stock's rows x inputs
+        x = window[:, 0][np.isfinite(window[:, 0])]
+        return None if len(x) < 20 else x.mean()
+
+    def step(self, state, row, hyper):             # that stock's inputs today
+        return {"gap": row[0] - state}
+
+class MedianGap(qex.Estimator):
+    """Each stock's value today against the median of the universe's values over the window."""
+    name, axis, n_inputs, outputs = "median_gap", "cross_section", (1, 1), ("gap",)
+
+    def fit(self, window, hyper, rng, members=None):     # rows x stocks x inputs; members: rows x stocks
+        v = window[:, :, 0][members]
+        return None if v.size < 5 else float(np.median(v))
+
+    def step(self, state, row, hyper, members=None):     # the day's stocks x inputs
+        return {"gap": row[:, 0] - state}
+```
+
 `qex.estimators()` lists what is registered. A name and version can be registered once; a change ships as a new
-version beside the old one, so an expression that names `'mean_gap@1'` keeps its numbers. The protocol covers the
-`series` axis in this version; the built-ins cover each stock's own series, the cross-section and the panel.
+version beside the old one, so an expression that names `'mean_gap@1'` keeps its numbers.
 
 **Reference.** Hansen, B. E. (2000). Sample splitting and threshold estimation. *Econometrica* 68(3), 575-603.

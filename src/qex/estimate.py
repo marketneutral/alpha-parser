@@ -19,15 +19,23 @@ slope of a joint fit).
 (`register_estimator`). An estimator is a class with a name, a version, its outputs, the axis it fits along, and either
 
 - `build(output, inputs, window, refit, hyper)`: the node it is (the built-ins: compositions of existing nodes), or
-- `fit(window, hyper, rng)` and `step(state, row, hyper)`: **the protocol.** The engine (EstimateFit) owns the
-  schedule (refits on the calendar, qex.schedule), and hands `fit` only the rows of the window ending on the refit day
-  and `step` only one day's row, with the parameters fixed until the next refit. An estimator written this way cannot
-  see a later day even by mistake. Randomness comes from a generator seeded by the call's cache key, so one expression
-  always gives one number.
+- `fit(window, hyper, rng, members)` and `step(state, row, hyper, members)`: **the protocol.** The engine
+  (EstimateFit) owns the schedule (refits on the calendar, qex.schedule), and hands `fit` only the rows of the window
+  ending on the refit day and `step` only one day's row, with the parameters fixed until the next refit. An estimator
+  written this way cannot see a later day even by mistake. Randomness comes from a generator seeded by the call and
+  the refit's date (and the stock's name, per stock), so one expression always gives one number, wherever the data
+  starts.
 
-The protocol supports the `series` axis in this version: an estimator of market-level series (each input the same
-for every stock that day, like `returns(1, 'market')` or a `regression_beta`), its outputs given to every stock. The
-built-ins cover a stock's own series, the day's cross-section and the panel through their own nodes.
+What `fit` and `step` see follows the estimator's axis:
+
+    axis            fit(window, ...)                      step(state, row, ...)            each output
+    series          rows x inputs (market-level)          inputs                           a number, for every stock
+    stock           rows x inputs, one stock, per stock   that stock's inputs              that stock's number
+    cross_section   rows x stocks x inputs, and members   stocks x inputs, and members     a number per stock
+    (and panel)     (rows x stocks: in the universe)      (in the universe that day)       (none outside the universe)
+
+A per-stock estimator may also give `fit_many` and `step_many`, the same over every stock at once (stocks first), to
+avoid a loop in Python; by default they call `fit` and `step` stock by stock.
 """
 import hashlib
 from typing import Dict, Optional
@@ -79,14 +87,32 @@ class Estimator:
         raise NotImplementedError
 
     # or these (the protocol)
-    def fit(self, window: np.ndarray, hyper: dict, rng: np.random.Generator):
-        """The parameters, from `window` (rows x inputs: the days up to and including the refit day). None when the
-        window cannot be fitted (too few days): the outputs have no value until the next refit."""
+    def fit(self, window: np.ndarray, hyper: dict, rng: np.random.Generator, members=None):
+        """The parameters, from the window: the days up to and including the refit day, read-only. Its shape follows
+        the axis: rows x inputs (series; stock, one stock's), rows x stocks x inputs (cross_section, panel, with
+        members, rows x stocks, true where a stock was in the universe). None when it cannot be fitted (too few days):
+        the outputs have no value until the next refit."""
         raise NotImplementedError
 
-    def step(self, state, row: np.ndarray, hyper: dict) -> dict:
-        """One day's outputs, {output: number}, from the fit in force and that day's inputs (row) only."""
+    def step(self, state, row: np.ndarray, hyper: dict, members=None) -> dict:
+        """One day's outputs from the fit in force and that day's inputs only: {output: number} (series; stock, for
+        the stock), or {output: one number per stock} (cross_section, panel; members: the day's universe)."""
         raise NotImplementedError
+
+    def fit_many(self, window: np.ndarray, hyper: dict, rngs: list):
+        """Per-stock estimators: every stock's fit at once, from window (stocks x rows x inputs); a list of states,
+        None for a stock with no fit. By default, fit stock by stock."""
+        return [self.fit(window[i], hyper, rngs[i]) for i in range(window.shape[0])]
+
+    def step_many(self, states: list, row: np.ndarray, hyper: dict) -> dict:
+        """Per-stock estimators: every stock's outputs on one day at once, from row (stocks x inputs);
+        {output: one number per stock}, NaN where a stock has no fit. By default, step stock by stock."""
+        outs = {o: np.full(row.shape[0], np.nan) for o in self.outputs_for(row.shape[1])}
+        for i, st in enumerate(states):
+            if st is not None:
+                for o, v in self.step(st, row[i], hyper).items():
+                    outs[o][i] = v
+        return outs
 
 
 def register_estimator(cls: type) -> type:
@@ -104,8 +130,9 @@ def register_estimator(cls: type) -> type:
     steps = cls.fit is not Estimator.fit and cls.step is not Estimator.step
     if builds == steps:
         raise TypeError(f"estimator {cls.name!r} implements either build, or fit and step")
-    if steps and cls.axis != "series":
-        raise ValueError(f"estimator {cls.name!r}: fit and step support the 'series' axis in this version")
+    if cls.axis not in ("series", "stock", "cross_section", "panel"):
+        raise ValueError(f"estimator {cls.name!r}: its axis is 'series', 'stock', 'cross_section' or 'panel' "
+                         f"(got {cls.axis!r})")
     versions[cls.version] = cls
     return cls
 
@@ -193,11 +220,15 @@ def _schedule_arg(label, what, rule, value, default):
 # --- the protocol's engine: one fit node, read by output --------------------------------------------------------------
 
 class EstimateResult:
-    """An EstimateFit's value: each output as a dates array (the series axis), with the dates and the stocks to give
-    it to."""
+    """An EstimateFit's value: each output as a dates array (series) or a dates x stocks array, with the dates and the
+    stocks."""
 
     def __init__(self, index, columns, outputs: Dict[str, np.ndarray]):
         self.index, self.columns, self.outputs = index, columns, outputs
+
+
+def _stock_seed(name) -> int:
+    return int(hashlib.sha256(str(name).encode()).hexdigest()[:8], 16)
 
 
 class EstimateFit(Signal):
@@ -232,23 +263,57 @@ class EstimateFit(Signal):
         ref = next((v for v in values if isinstance(v, pd.DataFrame)), None)
         index = ref.index if ref is not None else values[0].index
         columns = ref.columns if ref is not None else pd.Index([])
-        X = np.column_stack([self._series(v.reindex(index) if isinstance(v, (pd.Series, pd.DataFrame)) else v)
-                             for v in values])
-        T = len(index)
-        est, hyper = self.estimator, self.hyper
-        outs = {o: np.full(T, np.nan) for o in est.outputs_for(len(self.inputs))}
+        est, hyper, T, N = self.estimator, self.hyper, len(index), len(columns)
+        names = est.outputs_for(len(self.inputs))
         rows = refit_rows(index, self.window - 1, self.refit)
         seed = int(hashlib.sha256(repr(self._cache_key()).encode()).hexdigest()[:16], 16)
-        for i, r in enumerate(rows):
-            day = int(np.datetime64(index[r], "D").astype(int)) if isinstance(index, pd.DatetimeIndex) else int(r)
-            rng = np.random.default_rng([seed, day])                  # by the date, so a later start draws the same
-            state = est.fit(X[r - self.window + 1:r + 1].copy(), hyper, rng)
+        dated = isinstance(index, pd.DatetimeIndex)
+        day_of = lambda r: int(np.datetime64(index[r], "D").astype(int)) if dated else int(r)
+        ends = list(rows[1:]) + [T]
+        if est.axis == "series":
+            X = np.column_stack([self._series(v.reindex(index) if isinstance(v, (pd.Series, pd.DataFrame)) else v)
+                                 for v in values])
+            X.flags.writeable = False
+            outs = {o: np.full(T, np.nan) for o in names}
+            for r, end in zip(rows, ends):
+                state = est.fit(X[r - self.window + 1:r + 1], hyper, np.random.default_rng([seed, day_of(r)]))
+                if state is None:
+                    continue
+                for t in range(r, end):
+                    for o, val in est.step(state, X[t], hyper).items():
+                        outs[o][t] = val
+            return EstimateResult(index, columns, outs)
+        # stock, cross_section, panel: every input as dates x stocks, stacked once (windows are views of it)
+        frames = [v.reindex(index=index, columns=columns) if isinstance(v, pd.DataFrame)
+                  else pd.DataFrame(np.repeat(v.reindex(index).to_numpy(float)[:, None], N, axis=1), index, columns)
+                  for v in values]
+        X = np.stack([f.to_numpy(dtype=float) for f in frames], axis=2)          # dates x stocks x inputs
+        X.flags.writeable = False
+        outs = {o: np.full((T, N), np.nan) for o in names}
+        if est.axis == "stock":
+            stock_seeds = [_stock_seed(c) for c in columns]
+            for r, end in zip(rows, ends):
+                day = day_of(r)
+                window = X[r - self.window + 1:r + 1].transpose(1, 0, 2)          # stocks x rows x inputs
+                states = est.fit_many(window, hyper, [np.random.default_rng([seed, day, k]) for k in stock_seeds])
+                for t in range(r, end):
+                    for o, val in est.step_many(states, X[t], hyper).items():
+                        outs[o][t] = val
+            return EstimateResult(index, columns, outs)
+        from .universe import universe_members                                   # cross_section, panel
+        members = universe_members(index, columns)
+        if members is None:
+            members = np.ones((T, N), bool)
+        members = members & np.isfinite(X).all(axis=2)                           # in the universe, with every input
+        members.flags.writeable = False
+        for r, end in zip(rows, ends):
+            lo = r - self.window + 1
+            state = est.fit(X[lo:r + 1], hyper, np.random.default_rng([seed, day_of(r)]), members=members[lo:r + 1])
             if state is None:
                 continue
-            end = rows[i + 1] if i + 1 < len(rows) else T
             for t in range(r, end):
-                for o, val in est.step(state, X[t].copy(), hyper).items():
-                    outs[o][t] = val
+                for o, val in est.step(state, X[t], hyper, members=members[t]).items():
+                    outs[o][t] = np.where(members[t], val, np.nan)               # none outside the universe
         return EstimateResult(index, columns, outs)
 
     def _cache_key(self):
@@ -271,7 +336,9 @@ class EstimateOutput(Signal):
     def _compute(self, data):
         res = self.fit.evaluate(data)
         v = res.outputs[self.output]
-        return pd.DataFrame(np.repeat(v[:, None], len(res.columns), axis=1), index=res.index, columns=res.columns)
+        if v.ndim == 1:                                                           # a series: every stock's
+            v = np.repeat(v[:, None], len(res.columns), axis=1)
+        return pd.DataFrame(v, index=res.index, columns=res.columns)
 
     def _cache_key(self):
         return ('EstimateOutput', self.fit._cache_key(), self.output)
@@ -448,7 +515,7 @@ class Stump(Estimator):
         k = int(np.argmax(gain))
         return gain[k], k
 
-    def fit(self, window, hyper, rng):
+    def fit(self, window, hyper, rng, members=None):
         s, r1, r2 = window[:-1, 0], window[1:, 1], window[1:, 2]      # the state at u - 1, the returns on day u
         d = r1 - r2
         ok = np.isfinite(s) & np.isfinite(d)
@@ -478,7 +545,7 @@ class Stump(Estimator):
         return dict(threshold=float(c), w_lo=1.0 if lo > 0 else 0.0, w_hi=1.0 if hi > 0 else 0.0,
                     gap=float(hi - lo), p=float(p))
 
-    def step(self, state, row, hyper):
+    def step(self, state, row, hyper, members=None):
         s = row[0]
         w1 = np.nan if not np.isfinite(s) else (state["w_lo"] if s <= state["threshold"] else state["w_hi"])
         return dict(w1=w1, threshold=state["threshold"], gap=state["gap"], p=state["p"])
