@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.0
+
+**The learned estimators move out of qex.** `stump`, `stump_xs` and `tree` (with its regularizers and its realized
+dof) now live in their own package, `qex-estimators`, registered by `import qex_estimators`, as IDEAS section 14
+decided: qex keeps the `Estimator` protocol, the engine, the registry, `qex.complexity` (with realized dof) and the
+built-ins behind its named operators (`ols`, `ols_shrunk`, `xs_ols`, `pca`). Their code, tests and docs moved
+unchanged, so an expression that uses them gives the same numbers and the same cache key once the package is
+imported. Without it, `estimate('stump', ...)` is refused: not registered. qex's own tests use a small stand-in
+learner. **Upgrading:** depend on `qex-estimators` and import it wherever qex evaluates expressions that use them.
+
 ## 0.23.0
 
 **`qex.complexity(signal, data)`: realized dof.** With data, the charge for an estimator is the dof its fits actually

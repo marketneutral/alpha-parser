@@ -7,13 +7,12 @@ daily cross-sectional fit (regression_neut, regression_alpha, regression_beta) a
 
     estimate('ols', 'beta1', returns(1), returns(1, 'market'), window=252)        # ts_beta(..., 252) is this
     estimate('pca', 'beta2', returns(1), window=252, refit=21)                  # pca_factor(returns(1), 252, 2) is this
-    estimate('stump', 'w1', vol, mom_ret, rev_ret, window=1260, refit=63)       # a new one
 
 **The named operators are sugar.** ts_beta, regression_neut, pca_factor and the rest are spellings of estimate: each
 calls it, and the maths lives in the estimator (qex/fits.py). They keep their names, their classes (each a view of
 one output, with no maths of its own) and their cache keys, so an expression's identity and numbers are what they
 were. **For readability, prefer the named operator wherever one exists**; write `estimate` for what has no name (an
-estimator such as the stump, or an output such as one slope of a joint fit).
+estimator registered by a package, or an output such as one slope of a joint fit).
 
 **Python in a registry, never in the string.** An expression names an estimator; Python registers it
 (`register_estimator`). An estimator is a class with a name, a version, its outputs, the axis it fits along, and either
@@ -92,7 +91,7 @@ class Estimator:
         return self.dof
 
     def realized_dof(self, state, fit) -> Optional[float]:
-        """The dof one fitted state actually used, when it can be fewer than dof_of (a tree that made fewer splits,
+        """The dof one fitted state actually used, when it can be fewer than dof_of (fewer splits or thresholds than it may make,
         leaves that hold back toward the blend); None to charge dof_of. qex.complexity(signal, data) averages it
         over the refits."""
         return None

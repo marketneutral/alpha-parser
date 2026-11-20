@@ -1,5 +1,6 @@
 """estimate(name, output, inputs..., window=, refit=, ...): the built-in estimators are today's operators (the same
-node, the same numbers), the registry, and the stump."""
+node, the same numbers), the registry, the protocol on every axis, and complexity. Learned estimators (the stump, the
+tree) live in qex-estimators, with their own tests; here a small learned switch stands in for one."""
 import numpy as np
 import pandas as pd
 import pytest
@@ -25,6 +26,31 @@ def panel():
 def _ev(expr, d):
     with compute_context():
         return qex(expr).evaluate(d)
+
+
+class _Switch(Estimator):
+    """A stand-in learned estimator: hold r1 if it beat r2 on average over the window, else r2. It learns one side
+    (dof 1, declared 3 to stand for a stump), and measures what it used: |2w - 1|, w the share of days r1 won."""
+    name, version, axis = "test_switch", "1", "series"
+    n_inputs, outputs = (3, 3), ("w1", "p")
+    dof = 3
+
+    def fit(self, window, hyper, rng):
+        d = window[1:, 1] - window[1:, 2]
+        d = d[np.isfinite(d)]
+        return None if len(d) < 10 else {"w": float(d.mean() > 0), "share": float((d > 0).mean())}
+
+    def step(self, state, row, hyper):
+        return {"w1": state["w"], "p": 0.5}
+
+    def realized_dof(self, state, fit):
+        return abs(2 * state["share"] - 1)
+
+
+if "test_switch" not in _REGISTRY:
+    register_estimator(_Switch)
+
+SW = "estimate('test_switch', '{}', returns(1, 'market'), returns(1, 'market'), returns(5, 'market'), window=60)"
 
 
 # --- the built-ins are the operators ----------------------------------------------------------------------------------
@@ -83,8 +109,7 @@ def test_a_joint_fit_s_slopes_are_its_regression(panel):
 
 
 def test_outputs_of_one_fit_share_it(panel):
-    a = qex("estimate('stump', 'w1', returns(1, 'market'), returns(1, 'market'), returns(5, 'market'), window=60)")
-    b = qex("estimate('stump', 'p', returns(1, 'market'), returns(1, 'market'), returns(5, 'market'), window=60)")
+    a, b = qex(SW.format("w1")), qex(SW.format("p"))
     assert a.fit._cache_key() == b.fit._cache_key() and a._cache_key() != b._cache_key()
 
 
@@ -102,8 +127,7 @@ def test_outputs_of_one_fit_share_it(panel):
     ("estimate('xs_ols', 'resid', returns(1), returns(5), window=5)", "window is 1"),
     ("estimate('ols@2', 'beta1', returns(1), returns(5), window=63)", "no version '2'"),
     ("estimate('ols', 'beta1', returns(1), 5, window=63)", "inputs are expressions"),
-    ("estimate('stump', 'w1', returns(1), returns(5), returns(20), window=200, min_leaf=150)", "leaves no split"),
-    ("estimate('stump', 'w1', group('sector'), returns(5), returns(20), window=200)", "labels"),
+    ("estimate('test_switch', 'w1', group('sector'), returns(5), returns(20), window=200)", "labels"),
     ("ts_beta(returns(1), returns(5), period=63)", "by position"),
 ])
 def test_refused_with_a_message(expr, says):
@@ -172,90 +196,7 @@ def test_the_latest_version_by_default():
 
 def test_estimators_lists_them():
     t = Q.estimators()
-    assert {"ols", "ols_shrunk", "xs_ols", "pca", "stump"} <= set(t.name)
-
-
-# --- the stump ---------------------------------------------------------------------------------------------------------
-
-def _regime(seed=1, T=2000, effect=0.004, threshold=6.0):
-    """A wandering state (0 to 10) and two return series; r1 beats r2 the day after the state is above `threshold`."""
-    rng = np.random.default_rng(seed)
-    idx = pd.bdate_range("2010-01-01", periods=T)
-    state = pd.Series(np.abs(np.cumsum(rng.normal(0, 1, T))) % 10, idx)
-    high = state.shift(1) > threshold
-    r1 = pd.Series(rng.normal(0, 0.01, T), idx) + np.where(high, effect, -effect)
-    r2 = pd.Series(rng.normal(0, 0.01, T), idx)
-    frame = lambda s: pd.DataFrame({c: s for c in ("A", "B", "C")})
-    return {"close": frame(pd.Series(100.0, idx)), "s": frame(state), "a": frame(r1), "b": frame(r2)}, state
-
-
-STUMP = "estimate('stump', '{}', field('s'), field('a'), field('b'), window=504, refit=63)"
-
-
-def test_the_stump_finds_a_planted_threshold():
-    d, state = _regime()
-    out = {o: _ev(STUMP.format(o), d)["A"] for o in ("w1", "threshold", "gap", "p")}
-    th = out["threshold"].dropna()
-    assert ((th > 5.0) & (th < 7.0)).all()                                # planted at 6; the grid is 20 quantiles
-    assert (out["p"].dropna() < 0.01).all()
-    assert (out["gap"].dropna() > 0).all()                                # r1's edge is larger above it
-    w = out["w1"].dropna()
-    assert (w == (state[w.index] > out["threshold"][w.index])).all()     # w1 follows today's side of the threshold
-    assert (w == (state[w.index] > 6)).mean() > 0.95
-
-
-def test_with_no_regime_p_is_mostly_large():
-    d, _ = _regime(seed=5, effect=0.0)
-    p = _ev(STUMP.format("p"), d)["A"].dropna()
-    assert p.drop_duplicates().median() > 0.2
-
-
-def test_the_stump_is_point_in_time():
-    """Change every input after day 1200: no output changes through day 1200."""
-    d, _ = _regime()
-    rng = np.random.default_rng(9)
-    later = {}
-    for k, v in d.items():
-        v = v.copy()
-        if k != "close":
-            v.iloc[1201:, :] = rng.normal(0, 1, len(v) - 1201)[:, None]
-        later[k] = v
-    for o in ("w1", "threshold", "gap", "p"):
-        a, b = _ev(STUMP.format(o), d)["A"], _ev(STUMP.format(o), later)["A"]
-        assert a.iloc[:1201].equals(b.iloc[:1201])
-        assert not a.iloc[1201:].equals(b.iloc[1201:])
-
-
-def test_the_stump_does_not_depend_on_where_the_data_starts_and_repeats():
-    d, _ = _regime()
-    short = {k: v.iloc[300:] for k, v in d.items()}
-    for o in ("w1", "p"):
-        a, b = _ev(STUMP.format(o), d)["A"], _ev(STUMP.format(o), short)["A"]
-        common = b.dropna().index
-        assert len(common) > 1000 and np.allclose(a[common], b[common])
-    assert _ev(STUMP.format("p"), d).equals(_ev(STUMP.format("p"), d))
-
-
-def test_the_stump_fits_one_series():
-    d, _ = _regime()
-    d = dict(d, own=pd.DataFrame(np.random.default_rng(2).normal(size=d["s"].shape), d["s"].index, d["s"].columns))
-    with pytest.raises(ValueError, match="fits one series"):
-        _ev("estimate('stump', 'w1', field('own'), field('a'), field('b'), window=504)", d)
-
-
-def test_before_the_first_fit_is_a_short_history():
-    d, _ = _regime()
-    r = explain_missing(qex(STUMP.format("w1")), d)
-    assert list(r.summary().index) == ["short history"]
-    assert r.nodes[-1].startswith("estimate('stump', 'w1', field('s')")
-
-
-def test_the_stump_s_options(panel):
-    d, _ = _regime()
-    none = _ev("estimate('stump', 'p', field('s'), field('a'), field('b'), window=504, refit=63, permutations=0)", d)
-    assert none.isna().all().all()                                        # no shuffles, no p
-    fine = _ev("estimate('stump', 'threshold', field('s'), field('a'), field('b'), window=504, refit=63, quantiles=50)", d)
-    assert fine.notna().any().any()
+    assert {"ols", "ols_shrunk", "xs_ols", "pca"} <= set(t["name"])
 
 
 # --- the protocol, per stock -------------------------------------------------------------------------------------------
@@ -455,9 +396,9 @@ def test_a_vectorized_estimator(panel):
     ("ts_beta(returns(1), returns(1, 'market'), 252) + ts_resid(returns(1), returns(1, 'market'), 252)", 5, 0),
     ("pca_factor(returns(1), 252, 1) - pca_factor(returns(1), 252, 2)", 4, 0),
     ("ts_match(returns(5), returns(1), 120)", 3, 0),
-    ("estimate('stump', 'w1', returns(1, 'market'), returns(1, 'market'), returns(5, 'market'), window=200)", 3, 3),     # the two series and the stump
+    ("estimate('test_switch', 'w1', returns(1, 'market'), returns(1, 'market'), returns(5, 'market'), window=200)", 3, 3),
     ("let s = returns(1, 'market'), a = returns(5, 'market') "
-     "in estimate('stump', 'w1', s, s, a, window=200) * estimate('stump', 'p', s, s, a, window=200)", 5, 3),     # one fit, read twice: 3 dof
+     "in estimate('test_switch', 'w1', s, s, a, window=200) * estimate('test_switch', 'p', s, s, a, window=200)", 5, 3),
 ])
 def test_complexity_counts_what_is_written_and_what_is_learned(expr, operators, dof):
     c = Q.complexity(qex(expr))
@@ -481,190 +422,18 @@ def test_an_estimator_must_say_what_it_learns():
         register_estimator(Silent)
 
 
-# --- the stump across stocks -------------------------------------------------------------------------------------------
-
-def _planted_xs(seed=1, T=700, N=200, effect=0.004, cut=0.9):
-    """Returns follow y for stocks in the top (1 - cut) of x that day, and z for the rest."""
-    rng = np.random.default_rng(seed)
-    idx = pd.bdate_range("2012-01-02", periods=T)
-    cols = [f"S{i:03d}" for i in range(N)]
-    x = pd.DataFrame(np.cumsum(rng.normal(0, .3, (T, N)), 0), idx, cols)
-    y, z = (pd.DataFrame(rng.normal(size=(T, N)), idx, cols) for _ in range(2))
-    sig = pd.DataFrame(np.where(x.rank(axis=1, pct=True) > cut, y, z), idx, cols)
-    r = effect * sig.shift(1) + pd.DataFrame(rng.normal(0, .02, (T, N)), idx, cols)
-    return {"close": 50 * np.exp(r.fillna(0).cumsum()), "x": x, "y": y, "z": z}
-
-
-XS = "estimate('stump_xs', '{}', rank(field('x')), field('y'), field('z'), returns(1), window=252, refit=63)"
-
-
-def test_the_cross_sectional_stump_finds_a_planted_split():
-    d = _planted_xs()
-    out = {o: _ev(XS.format(o), d) for o in ("w1", "threshold", "p")}
-    assert set(out["threshold"].stack().dropna().round(3)) == {0.9}                # the top 10%, in rank units
-    assert (out["p"].stack().dropna() < 1e-6).all()
-    rk = _ev("rank(field('x'))", d)
-    w = out["w1"]
-    assert ((w == 1) == (rk > 0.9))[w.notna()].stack().all()             # y above, z below, stock by stock
-    assert (w.nunique(axis=1) == 2).any()
-
-
-def test_with_no_split_its_p_is_not_small():
-    p = _ev(XS.format("p"), _planted_xs(seed=3, effect=0.0)).iloc[:, 0].dropna().drop_duplicates()
-    assert p.median() > 0.1
-
-
-def test_the_cross_sectional_stump_is_point_in_time_and_start_independent():
-    d = _planted_xs()
-    later = {k: v.copy() for k, v in d.items()}
-    rng = np.random.default_rng(5)
-    for k in ("x", "y", "z"):
-        later[k].iloc[451:] = rng.normal(size=later[k].iloc[451:].shape)
-    for o in ("w1", "threshold", "p"):
-        a, b = _ev(XS.format(o), d), _ev(XS.format(o), later)
-        assert np.array_equal(a.iloc[:451].to_numpy(), b.iloc[:451].to_numpy(), equal_nan=True)
-    short = {k: v.iloc[100:] for k, v in d.items()}
-    a, b = _ev(XS.format("w1"), d), _ev(XS.format("w1"), short)
-    common = b.dropna(how="all").index
-    assert len(common) > 200 and np.array_equal(a.loc[common].to_numpy(), b.loc[common].to_numpy(), equal_nan=True)
-
-
-def test_the_cross_sectional_stump_s_options_and_cost():
-    with pytest.raises(ValueError, match="min_share"):
-        qex(XS.format("w1").replace("refit=63", "refit=63, min_share=0.6"))
-    with pytest.raises(ValueError, match="no option 'permutations'"):
-        qex(XS.format("w1").replace("refit=63", "refit=63, permutations=10"))
-    assert Q.complexity(qex(XS.format("w1"))).dof == 3
-
-
 def test_estimators_lists_the_built_ins_in_a_fresh_process():
     import subprocess, sys
     out = subprocess.run([sys.executable, "-c", "import qex; print(sorted(qex.estimators()['name']))"],
                          capture_output=True, text=True, check=True).stdout
-    for name in ("ols", "ols_shrunk", "xs_ols", "pca", "stump", "stump_xs"):
+    for name in ("ols", "ols_shrunk", "xs_ols", "pca"):
         assert repr(name) in out
 
 
-# --- the tree --------------------------------------------------------------------------------------------------------
-
-def _two_states(seed=2, T=2500, effect=0.004):
-    """r1 beats r2 only where a > 6 and b < 0 (the day before): a region a stump cannot draw and a depth-2 tree can."""
-    rng = np.random.default_rng(seed)
-    idx = pd.bdate_range("2008-01-01", periods=T)
-    a = pd.Series(np.abs(np.cumsum(rng.normal(0, 1, T))) % 10, idx)
-    b = pd.Series(np.cumsum(rng.normal(0, .3, T)) % 6 - 3, idx)
-    region = (a.shift(1) > 6) & (b.shift(1) < 0)
-    r1 = pd.Series(rng.normal(0, .01, T), idx) + np.where(region, effect, -effect / 2)
-    r2 = pd.Series(rng.normal(0, .01, T), idx)
-    frame = lambda s: pd.DataFrame({c: s for c in "ABC"})
-    return {"close": frame(pd.Series(100.0, idx)), "a": frame(a), "b": frame(b), "r1": frame(r1), "r2": frame(r2)}, a, b
-
-
-TREE = "estimate('tree', '{}', field('a'), field('b'), field('r1'), field('r2'), window=1260, refit=63{})"
-
-
-def test_the_tree_finds_a_two_state_region():
-    d, a, b = _two_states()
-    w, leaf = (_ev(TREE.format(o, ""), d)["A"] for o in ("w1", "leaf"))
-    m = w.dropna().index
-    assert (w[m] == ((a > 6) & (b < 0))[m]).mean() > 0.9
-    assert set(leaf.dropna().unique()) <= {0.0, 1.0, 2.0, 3.0} and leaf.dropna().nunique() >= 3
-    stump = _ev("estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)", d)["A"]
-    assert (stump[m] == ((a > 6) & (b < 0))[m]).mean() < (w[m] == ((a > 6) & (b < 0))[m]).mean()
-
-
-def test_a_tree_of_depth_one_on_one_state_is_the_stump():
-    d, _, _ = _two_states()
-    t = _ev("estimate('tree', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63, depth=1)", d)
-    s = _ev("estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)", d)
-    assert t.equals(s)
-
-
-def test_the_tree_is_point_in_time_start_independent_and_repeatable():
-    d, _, _ = _two_states()
-    later = {k: v.copy() for k, v in d.items()}
-    rng = np.random.default_rng(4)
-    for k in ("a", "b", "r1", "r2"):
-        later[k].iloc[1801:, :] = rng.normal(0, 1, len(later[k]) - 1801)[:, None]
-    for o in ("w1", "leaf", "p"):
-        x, y = _ev(TREE.format(o, ""), d)["A"], _ev(TREE.format(o, ""), later)["A"]
-        assert x.iloc[:1801].equals(y.iloc[:1801])
-    short = {k: v.iloc[200:] for k, v in d.items()}
-    x, y = _ev(TREE.format("w1", ""), d)["A"], _ev(TREE.format("w1", ""), short)["A"]
-    common = y.dropna().index
-    assert len(common) > 500 and x[common].equals(y[common])
-    assert _ev(TREE.format("p", ""), d).equals(_ev(TREE.format("p", ""), d))
-
-
-def test_the_tree_s_cost_and_options():
-    assert Q.complexity(qex(TREE.format("w1", ""))).dof == 10                       # 3 splits x (cut, state) + 4 leaves
-    assert Q.complexity(qex(TREE.format("w1", ", depth=3"))).dof == 7 * 2 + 8
-    assert Q.complexity(qex("estimate('tree', 'w1', field('a'), field('r1'), field('r2'), window=252)")).dof == 7
-    with pytest.raises(ValueError, match="depth is 1, 2 or 3"):
-        qex(TREE.format("w1", ", depth=4"))
-    with pytest.raises(ValueError, match="min_leaf"):
-        qex(TREE.format("w1", ", min_leaf=1"))
-    d, _, _ = _two_states()
-    big = _ev(TREE.format("leaf", ", min_leaf=600"), d)["A"].dropna()                # leaves of 600 days: fewer splits
-    assert big.nunique() <= _ev(TREE.format("leaf", ""), d)["A"].dropna().nunique()
-
-
-# --- the tree's regularizers -------------------------------------------------------------------------------------------
-
-def _churn(expr, d):
-    w = _ev(expr, d)["A"].dropna()
-    return w, w.diff().abs().mean()
-
-
-def test_alpha_keeps_the_tree_from_splitting_on_noise():
-    d, _, _ = _two_states(seed=7, effect=0.0)
-    _, plain = _churn(TREE.format("w1", ""), d)
-    w, tested = _churn(TREE.format("w1", ", alpha=0.05"), d)
-    assert tested < plain / 10                                      # no splits: the book stops switching
-    assert _ev(TREE.format("leaf", ", alpha=0.05"), d)["A"].dropna().nunique() == 1
-
-
-def test_alpha_keeps_a_real_split():
-    d, a, b = _two_states()
-    w = _ev(TREE.format("w1", ", alpha=0.05"), d)["A"].dropna()
-    inside = ((a > 6) & (b < 0))[w.index]
-    assert (w[inside] > 0.5).mean() > 0.5 and (w[~inside] <= 0.5).mean() > 0.85
-
-
-def test_soft_and_honest_shrink_toward_the_blend_on_noise():
-    d, _, _ = _two_states(seed=7, effect=0.0)
-    w, _ = _churn(TREE.format("w1", ", soft=1, honest=1"), d)
-    assert ((w > 0.02) & (w < 0.98)).mean() > 0.9                    # fractional weights, not 0 or 1
-
-
-def test_honest_still_finds_the_planted_region():
-    d, a, b = _two_states()
-    w = _ev(TREE.format("w1", ", honest=1"), d)["A"].dropna()
-    inside = ((a > 6) & (b < 0))[w.index]
-    assert (w[inside] > 0.5).mean() > 0.7 and (w[~inside] <= 0.5).mean() > 0.8
-
-
-def test_the_regularizers_options():
-    with pytest.raises(ValueError, match="soft is on or off"):
-        qex(TREE.format("w1", ", soft=2"))
-    with pytest.raises(ValueError, match="alpha is a significance level"):
-        qex(TREE.format("w1", ", alpha=1.5"))
-    with pytest.raises(ValueError, match="needs permutations above 0"):
-        qex(TREE.format("w1", ", alpha=0.05, permutations=0"))
-    assert Q.complexity(qex(TREE.format("w1", ", alpha=0.05, soft=1, honest=1"))).dof == 10   # searched all the same
-
-
-def test_complexity_with_data_charges_the_dof_a_tree_used():
-    d, _, _ = _two_states(seed=7, effect=0.0)
+def test_complexity_with_data_charges_what_a_fit_realized(panel):
+    e = qex(SW.format("w1"))
     with compute_context():
-        nominal = Q.complexity(qex(TREE.format("w1", ", alpha=0.05"))).dof
-        plain = Q.complexity(qex(TREE.format("w1", "")), d).dof
-        tested = Q.complexity(qex(TREE.format("w1", ", alpha=0.05")), d).dof
-        shrunk = Q.complexity(qex(TREE.format("w1", ", soft=1, honest=1")), d).dof
-        honest = Q.complexity(qex(TREE.format("w1", ", honest=1")), d).dof
-    assert nominal == plain == honest == 10                         # without data, and a hard tree: the full size
-    assert tested <= 1.5                                            # on noise alpha leaves one leaf
-    assert shrunk < plain                                           # leaves that hold back commit less
-    stump = "estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)"
+        nominal, realized = Q.complexity(e).dof, Q.complexity(e, panel).dof
+    assert nominal == 3 and 0 <= realized < 1                         # the share of days won, near a half
     with compute_context():
-        assert Q.complexity(qex(stump), d).dof == 3                 # an estimator that does not measure it: nominal
+        assert Q.complexity(qex("ts_beta(returns(1), returns(1, 'market'), 63)"), panel).dof == 0

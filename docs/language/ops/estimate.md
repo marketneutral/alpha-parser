@@ -24,7 +24,7 @@ for three outputs of one fit costs one fit.
 
 **Prefer the named operator where there is one.** `ts_beta(y, x, 252)` says what it is in a way
 `estimate('ols', 'beta1', y, x, window=252)` does not, and it is that estimate, written short. Write `estimate` for what
-has no name: an estimator such as the stump, or an output such as one slope of a joint fit.
+has no name: a learned estimator from a package, or an output such as one slope of a joint fit.
 
 `name@version` picks a version (`estimate('ols@1', ...)`); the name alone is the latest. An unknown estimator, output or
 option is refused when the expression is read, with the list of what there is.
@@ -60,193 +60,18 @@ and the way to the outputs that have no name, such as one slope of a joint fit.
 | `ols_shrunk` | the same, the slope shrunk toward the day's (or its group's) mean | y, x | `alpha`, `resid`, `beta1` | required / 1 | `min_periods`, `groups` |
 | `xs_ols` | each day's least squares across stocks | y, then one or more regressors | `resid`, `alpha`, `beta1` ... `betak` | 1 / 1 | |
 | `pca` | principal components across stocks | x | `beta1` ... `beta20` | required / 21 | |
-| `stump` | a learned switch on a market state (below) | state, r1, r2 | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_leaf`, `quantiles`, `permutations` |
-| `tree` | a learned decision tree on one or more market states (below) | states..., r1, r2 | `w1`, `leaf`, `p` | required / 21 | `depth`, `min_leaf`, `quantiles`, `permutations` |
-| `stump_xs` | a learned split of the stocks on each stock's own state (below) | state, y, z, return | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_share`, `quantiles` |
 
 `ts_match` stays its own operator: it reads *another* stock's value through the twins it chose, which is not an
 output of a fit.
 
-## The stump: a learned switch between two signals
+## Learned estimators live in packages
 
-A switching model in its smallest learned form: one market state, one threshold, and on each side the signal that has
-done better there. It is threshold regression (Hansen 2000), a decision stump:
-
-```qex
-let v   = sqrt(ewma(power(returns(1, 'market'), 2), 11)),          # the state: market volatility
-    mom = zscore(rank(delay(returns(252), 20))),
-    rev = zscore(rank(-returns(5))),
-    pm  = regression_beta(returns(1), delay(mom, 1)),               # each signal's daily return
-    pr  = regression_beta(returns(1), delay(rev, 1)),
-    w   = estimate('stump', 'w1', v, pm, pr, window=1260, refit=63)
-in w * mom + (1 - w) * rev
-```
-
-**What it fits.** On each refit day, over the window, it pairs the state on day *u* − 1 with the two signals' returns
-on day *u*, and tries thresholds at the state's quantiles. For each, the days split into those at or below it and
-those above; the threshold kept is the one that best separates how `r1` did against `r2` on the two sides (the largest
-cut in the squared error of `r1 − r2` around each side's mean: least squares with one break). Each side keeps the
-signal that earned more there.
-
-| Output | Is |
-|---|---|
-| `w1` | 1 when today's state is on the side where `r1` earned more, else 0: the weight on the first signal |
-| `threshold` | the threshold in force, in the state's units; watch it drift |
-| `gap` | `r1`'s edge over `r2` above the threshold, less its edge below: a day's return |
-| `p` | a permutation test inside the window: how often a split on the state, shuffled, separates as well |
-
-| Option | Default | |
-|---|---|---|
-| `min_leaf` | a fifth of the window | the fewest paired days on each side |
-| `quantiles` | 20 | the thresholds tried: the state's quantiles at 1/20, 2/20, ... |
-| `permutations` | 200 | the shuffles behind `p` (0: no `p`) |
-
-**One series.** The stump fits market-level series: each input must be the same for every stock on a day
-(`returns(1, 'market')`, an `ewma` of it, a `regression_beta`). Its outputs are given to every stock. A stock's own
-series is refused, with a message.
-
-**Small samples.** Regimes are rare, and a side that learned from two crises learned two anecdotes: hence `min_leaf`,
-and `p` to say whether the switch is real. Fix the state for an economic reason and let the stump learn only where to
-cut it; trying state after state is a search, and each is a trial.
-
-## The tree: twenty questions about the market
-
-A stump asks the market one question ("is volatility above 15%?") and holds one signal for each answer. A **tree**
-asks a second question, and which question depends on the first answer: the way a trader thinks, "if the market is
-calm, hold momentum; if it is nervous, it depends how nervous". Each final answer, a **leaf**, holds the signal that
-earned more on the days that ended there.
-
-```qex
-let mom = zscore(rank(delay(returns(231), 21))),
-    rev = zscore(rank(-ts_mean(returns(21), 21))),
-    pm  = regression_beta(returns(1), delay(mom, 1)),                    # each signal's daily return
-    pr  = regression_beta(returns(1), delay(rev, 1)),
-    vol = sqrt(ewma(power(returns(1, 'market'), 2), 11)) * sqrt(252),     # the market's volatility, a year
-    up  = returns(504, 'market'),                                         # the market's two-year return
-    w   = estimate('tree', 'w1', vol, up, pm, pr, window=1260, refit=63, depth=2)
-in w * mom + (1 - w) * rev
-```
-
-Fitted on US stocks (the 3,000 largest) over the five years to the end of 2015, this tree learned:
-
-```
-                     market volatility ≤ 15.7% a year?
-                  ┌─────────── yes ──┴── no ───────────┐
-       2-year market return ≤ 34%?           volatility ≤ 22.6%?
-          ┌── yes ──┴── no ──┐              ┌── yes ──┴── no ──┐
-      MOMENTUM          MOMENTUM        REVERSAL          MOMENTUM
-   403 days, +19%/yr  605 days, +8%/yr  126 days, −33%/yr  126 days, +2%/yr
-                  (momentum's return over reversal's, a year, on those days)
-```
-
-Read it top down. On calm days, hold momentum: it beat reversal by 8 to 19% a year there. When the market gets
-nervous (volatility between 16% and 23%), switch to reversal: momentum lagged it by 33% a year on those days, the
-momentum crash of Daniel and Moskowitz (2016). In the most violent days the call is close to a coin flip (+2% a year
-on 126 days). Its `p` was 0.01: a tree grown the same way on shuffled days fit this well once in a hundred.
-
-Three things the picture teaches:
-
-- **A split can decide nothing.** Both of the calm side's leaves hold momentum, so the question about the two-year
-  return changes no position. It still costs dof: the tree was searched for it.
-- **Deep leaves are small.** Each level halves the data. The nervous leaf holds 126 days, about six months of a
-  five-year window, which is the floor (`min_leaf`) at depth 2: a leaf below it is not allowed. Read a leaf's
-  number of days before believing its side.
-- **Trees are greedy.** The first split is chosen alone, the best single question; the second is the best question
-  *given* the first answer. It is fitted only on that side's days, which is what makes it a tree and not two stumps
-  added together.
-
-**Outputs.** `w1`: 1 when today's market leads to a leaf that holds the first signal, else 0. `leaf`: which leaf
-today is in, numbered left to right from 0 (0 to 3 at depth 2), to see the regime the tree thinks the market is in.
-`p`: the permutation test of the whole tree.
-
-| Option | Default | |
-|---|---|---|
-| `depth` | 2 | how many questions: 1 (the stump), 2 or 3 |
-| `min_leaf` | a fifth of the window, halved per level | the fewest days on each side of a split, at each level (LightGBM's `min_data_in_leaf`); given, the same at every level |
-| `quantiles` | 20 | the thresholds tried at each node: its states' quantiles at 5%, 10%, ... 95% |
-| `permutations` | 100 | the shuffles behind `p` (0: no `p`) |
-| `alpha` | off | a split is made only if it is real on its own days (below) |
-| `soft` | off | a leaf's weight is its confidence, not 0 or 1 (below) |
-| `honest` | off | splits chosen on half the days, leaves judged on the other half (below) |
-
-**Regularizing a tree.** Five years hold one or two crises, so a deep leaf can learn an anecdote. Three options make
-the tree harder to fool, each off by default:
-
-- `alpha=0.05`: **split only if it is real.** At each node the days are shuffled and the best split found again,
-  `permutations` times; the split is made only if fewer than 5% of the shuffles split as well. Otherwise the node is
-  a leaf (conditional inference trees: Hothorn, Hornik and Zeileis 2006). `p` is then the root split's test.
-- `soft=1`: **a leaf holds its confidence.** Its weight is the probability, from its t-statistic, that the first
-  signal beats the second there: near 1 or 0 for a large, clear leaf, near 0.5 (the blend) for a small, noisy one.
-  The book moves gradually instead of flipping.
-- `honest=1`: **don't judge a leaf on the days that drew it.** The splits are chosen on alternate months and each
-  leaf's side decided on the others (Wager and Athey 2018).
-
-On made-up data (a region of 12% of days where the first signal wins, and pure noise, 2,500 days, a five-year
-window):
-
-| | finds the region (inside / outside) | on noise: how much the weight moves a day |
-|---|---|---|
-| plain | 0.90 / 0.94 | 0.134: it switches on noise |
-| `alpha=0.05` | 0.66 / 0.91 | 0.003: no splits, one leaf |
-| `soft=1` | 0.90 / 0.94 | 0.120 |
-| `honest=1` | 0.86 / 0.88 | 0.131 |
-| all three | 0.00 / 1.00: finds nothing | 0.002, weights 0.01 to 0.65 |
-
-So `alpha` does what it says, at a cost in power. **`soft` alone barely matters**, and that is worth knowing: a
-leaf the tree *chose* looks confident by construction, since its split was picked to separate the two sides. It
-needs `honest`: judged on other days, a noisy leaf's weight falls toward 0.5. All three at once, on five years, are
-too strict to find a real 12% region. Use `alpha`, or `soft` with `honest`.
-
-The inputs are any number of market states, then the two signals' returns. With one state and `depth=1` it is the
-stump, exactly. Its dof grow fast: depth 2 on two states is 10, depth 3 is 22, so the charge asks a deep tree to
-earn a great deal more than a stump.
-
-**A regularized tree is charged for what it used.** `qex.complexity(signal, data)` charges the dof each fit actually
-used, averaged over the refits: the splits it made (each a threshold, and a choice of state with several) and how
-much each leaf commits, |2w − 1| (a hard leaf 1, a leaf at the blend 0). Without data it charges the full size. On
-the made-up data above:
-
-| realized dof | plain | `alpha` | `soft` | `honest` | `soft` + `honest` | all three |
-|---|---|---|---|---|---|---|
-| a real region | 10 | 4.8 | 9.8 | 10 | 9.1 | 1.0 |
-| pure noise | 10 | 1.0 | 8.7 | 10 | 7.8 | 0.4 |
-
-So the charge rewards what regularizes: `alpha` pays only for the splits it makes, and leaves that hold back pay
-less. `honest` alone pays in full, as it barely changes what the tree does.
-
-## The stump across stocks: which signal for which stocks
-
-The stump learns *when*, on one state for the whole market. `stump_xs` learns *which stocks*, on each stock's own
-state: "when a stock is in the top 10% by x, rank it by y, otherwise by z", with the 10% learned.
-
-```qex
-let mom = zscore(rank(delay(returns(231), 21))),
-    rev = zscore(rank(-ts_mean(returns(21), 21))),
-    w   = estimate('stump_xs', 'w1', rank(field('mcap')), mom, rev, returns(1), window=1260, refit=63)
-in w * mom + (1 - w) * rev                         # momentum on one side of a learned size cut, reversal on the other
-```
-
-**What it fits.** On each refit day it pools every (stock, day) of the window: the stock's state, `y` and `z` on day
-*u* − 1 (each signal z-scored across that day's stocks) and its return on day *u*. With
-d = (y − z) × return, how much ranking that stock by `y` instead of `z` earned, it tries thresholds at the state's
-quantiles and keeps the one that best separates where `y` beat `z` from where it did not (least squares with one
-break, as the stump). Each side keeps the signal that earned more there. With `rank(x)` as the state the threshold is
-in rank units: 0.9 is the top 10%. The state, `y` and `z` are each stock's own, and the fourth input is each stock's
-daily return (`returns(1)`).
-
-| Output | Is |
-|---|---|
-| `w1` | per stock: 1 when the stock's state today is on the side where `y` earned more, else 0 |
-| `threshold` | the threshold in force, in the state's units |
-| `gap` | the average day's gap: `y`'s edge over `z` among the stocks above the threshold, less its edge among those below |
-| `p` | whether the gap is real: a Fama-MacBeth t-test on the days' gaps (one number a day: a day's stocks are not independent draws), two-sided, times the number of thresholds tried (for having chosen the best), at most 1 |
-
-| Option | Default | |
-|---|---|---|
-| `min_share` | 0.05 | the smallest share of the window's (stock, day) pairs on a side |
-| `quantiles` | 20 | the thresholds tried: the state's quantiles at 5%, 10%, ... 95% |
-
-It uses every pair and no randomness. On the US 3000 a fit of five years takes about half a second.
+The built-ins describe the data: a beta, a residual, a component. An estimator that *learns a decision* from the data
+(when to switch between two signals, which stocks to treat differently) is written to the same protocol outside qex,
+in a package of estimators that a deployment installs and registers, with its own documentation and tests. qex keeps
+the protocol, the engine, the registry and the built-ins, so a deployment chooses exactly which learned estimators it
+runs, at a pinned version (*Writing an estimator*, below). An expression that names an estimator no package has
+registered is refused: not registered.
 
 ## What an estimate costs: operators and degrees of freedom
 
@@ -256,22 +81,21 @@ not for how qex builds its graph. `qex.complexity(signal)` gives two counts:
 - **operators**: the distinct operations written, each shared subexpression once. `ts_beta(y, x, 252)` is one, and so
   is `ts_resid(y, x, 252)` or `pca_factor(r, 252, 2)`. The fit nodes qex builds inside them are not counted, and
   `ts_beta(...)` and `estimate('ols', 'beta1', ...)` are one node, so the readable spelling costs nothing more.
-- **dof**: the degrees of freedom the expression's estimators learn by searching the data for what works. The stump
-  learns 3 per fit (its threshold, and the side each leaf takes). A beta, a residual or a principal component is a
-  description of the data, not a search for returns, and learns none. One fit counts once, however many of its
+- **dof**: the degrees of freedom the expression's estimators learn by searching the data for what works: a threshold
+  chosen because it separated the returns, a side chosen because it earned more. A beta, a residual or a principal
+  component is a description of the data, not a search for returns, and learns none. One fit counts once, however many of its
   outputs are read.
 
 | Estimator | dof |
 |---|---|
 | `ols`, `ols_shrunk`, `xs_ols`, `pca` | 0 |
-| `stump`, `stump_xs` | 3 |
-| `tree` | each split's threshold (and its choice of state, with several), and each leaf's side: depth 2 on two states, 3 × 2 + 4 = 10 |
+| a learned estimator | what it declares: one threshold and a side on each of its two sides is 3 |
 
-The stump fits on the past only, so its own choices don't inflate a backtest the way an in-sample fit would. A dof
-charge prices flexibility instead: a model that can learn more gives an author's search more ways to find noise, and
+A learned estimator written to the protocol fits on the past only, so its own choices don't inflate a backtest the way
+an in-sample fit would. A dof charge prices flexibility instead: a model that can learn more gives an author's search more ways to find noise, and
 holds up less well. Every estimator must declare its `dof`; registering one without it is refused. With data,
-`qex.complexity(signal, data)` charges what each fit realized where the estimator measures it (`realized_dof`: the
-tree does, below); otherwise the declared `dof`.
+`qex.complexity(signal, data)` charges what each fit realized where the estimator measures it (`realized_dof`: an
+estimator that made fewer of the choices it may make, or held back from them, used fewer); otherwise the declared `dof`.
 
 ## Point in time, by protocol
 
@@ -279,7 +103,7 @@ An estimator can be written to a protocol (or vectorized, as the built-ins are: 
 hands the estimator only what was known: `fit` gets the rows of the window ending on the refit day, and `step` gets one
 day's row, with the parameters fixed until the next refit. So an estimator cannot use a later day, even by mistake;
 an HMM written this way can only give filtered probabilities, never the smoothed ones that leak the future. A
-randomized fit (the stump's shuffles) draws from a generator seeded by the call and the refit's date (and, per stock,
+randomized fit (a permutation test's shuffles) draws from a generator seeded by the call and the refit's date (and, per stock,
 the stock's name), so one expression always gives one number, whatever day the data starts on.
 
 What `fit` and `step` are handed follows the estimator's **axis**:

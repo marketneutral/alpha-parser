@@ -9,17 +9,16 @@ under ts_resid) while every number stayed the same. complexity() counts instead:
                 nodes: ts_beta(y, x, 252) is one, ts_resid(y, x, 252) is one, pca_factor(r, 252, 2) is one,
                 and estimate('ols', 'beta1', ...) is the same one as ts_beta
     dof         the degrees of freedom the expression's estimators learn from the data by searching for what works:
-                the stump's threshold and the side each leaf takes (3). Descriptive statistics, a beta, a residual,
+                a threshold and the side on each of its sides (3 for one threshold). Descriptive statistics, a beta, a residual,
                 a principal component, are not searched for and learn none. Each distinct fit counts once, however
                 many of its outputs are read.
 
 With data, complexity(signal, data) charges the dof the estimators actually used, averaged over their refits, where
-an estimator measures it (realized_dof): a tree charges the splits it made and how much each leaf commits (|2w - 1|:
-a leaf at the blend commits nothing), so a regularized tree that splits only when it must, or whose leaves hold back,
-is charged less. An estimator that does not measure it is charged its nominal dof, as without data.
+an estimator measures it (realized_dof): one that made fewer of the choices it may make, or committed less to them
+(a weight at the blend commits nothing), is charged less. An estimator that does not measure it is charged its nominal dof, as without data.
 
-A model that learns more can fit more noise, so a score can charge for each dof as well as each operator. The stump
-fits on the past only, so its own choices do not inflate a backtest the way an in-sample fit would; what a dof charge
+A model that learns more can fit more noise, so a score can charge for each dof as well as each operator. A learned
+estimator fits on the past only, so its own choices do not inflate a backtest the way an in-sample fit would; what a dof charge
 prices is flexibility: a more flexible model gives an author's search more ways to find noise, and holds up less well.
 """
 from dataclasses import dataclass
