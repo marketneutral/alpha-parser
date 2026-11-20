@@ -543,3 +543,128 @@ def test_estimators_lists_the_built_ins_in_a_fresh_process():
                          capture_output=True, text=True, check=True).stdout
     for name in ("ols", "ols_shrunk", "xs_ols", "pca", "stump", "stump_xs"):
         assert repr(name) in out
+
+
+# --- the tree --------------------------------------------------------------------------------------------------------
+
+def _two_states(seed=2, T=2500, effect=0.004):
+    """r1 beats r2 only where a > 6 and b < 0 (the day before): a region a stump cannot draw and a depth-2 tree can."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2008-01-01", periods=T)
+    a = pd.Series(np.abs(np.cumsum(rng.normal(0, 1, T))) % 10, idx)
+    b = pd.Series(np.cumsum(rng.normal(0, .3, T)) % 6 - 3, idx)
+    region = (a.shift(1) > 6) & (b.shift(1) < 0)
+    r1 = pd.Series(rng.normal(0, .01, T), idx) + np.where(region, effect, -effect / 2)
+    r2 = pd.Series(rng.normal(0, .01, T), idx)
+    frame = lambda s: pd.DataFrame({c: s for c in "ABC"})
+    return {"close": frame(pd.Series(100.0, idx)), "a": frame(a), "b": frame(b), "r1": frame(r1), "r2": frame(r2)}, a, b
+
+
+TREE = "estimate('tree', '{}', field('a'), field('b'), field('r1'), field('r2'), window=1260, refit=63{})"
+
+
+def test_the_tree_finds_a_two_state_region():
+    d, a, b = _two_states()
+    w, leaf = (_ev(TREE.format(o, ""), d)["A"] for o in ("w1", "leaf"))
+    m = w.dropna().index
+    assert (w[m] == ((a > 6) & (b < 0))[m]).mean() > 0.9
+    assert set(leaf.dropna().unique()) <= {0.0, 1.0, 2.0, 3.0} and leaf.dropna().nunique() >= 3
+    stump = _ev("estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)", d)["A"]
+    assert (stump[m] == ((a > 6) & (b < 0))[m]).mean() < (w[m] == ((a > 6) & (b < 0))[m]).mean()
+
+
+def test_a_tree_of_depth_one_on_one_state_is_the_stump():
+    d, _, _ = _two_states()
+    t = _ev("estimate('tree', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63, depth=1)", d)
+    s = _ev("estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)", d)
+    assert t.equals(s)
+
+
+def test_the_tree_is_point_in_time_start_independent_and_repeatable():
+    d, _, _ = _two_states()
+    later = {k: v.copy() for k, v in d.items()}
+    rng = np.random.default_rng(4)
+    for k in ("a", "b", "r1", "r2"):
+        later[k].iloc[1801:, :] = rng.normal(0, 1, len(later[k]) - 1801)[:, None]
+    for o in ("w1", "leaf", "p"):
+        x, y = _ev(TREE.format(o, ""), d)["A"], _ev(TREE.format(o, ""), later)["A"]
+        assert x.iloc[:1801].equals(y.iloc[:1801])
+    short = {k: v.iloc[200:] for k, v in d.items()}
+    x, y = _ev(TREE.format("w1", ""), d)["A"], _ev(TREE.format("w1", ""), short)["A"]
+    common = y.dropna().index
+    assert len(common) > 500 and x[common].equals(y[common])
+    assert _ev(TREE.format("p", ""), d).equals(_ev(TREE.format("p", ""), d))
+
+
+def test_the_tree_s_cost_and_options():
+    assert Q.complexity(qex(TREE.format("w1", ""))).dof == 10                       # 3 splits x (cut, state) + 4 leaves
+    assert Q.complexity(qex(TREE.format("w1", ", depth=3"))).dof == 7 * 2 + 8
+    assert Q.complexity(qex("estimate('tree', 'w1', field('a'), field('r1'), field('r2'), window=252)")).dof == 7
+    with pytest.raises(ValueError, match="depth is 1, 2 or 3"):
+        qex(TREE.format("w1", ", depth=4"))
+    with pytest.raises(ValueError, match="min_leaf"):
+        qex(TREE.format("w1", ", min_leaf=1"))
+    d, _, _ = _two_states()
+    big = _ev(TREE.format("leaf", ", min_leaf=600"), d)["A"].dropna()                # leaves of 600 days: fewer splits
+    assert big.nunique() <= _ev(TREE.format("leaf", ""), d)["A"].dropna().nunique()
+
+
+# --- the tree's regularizers -------------------------------------------------------------------------------------------
+
+def _churn(expr, d):
+    w = _ev(expr, d)["A"].dropna()
+    return w, w.diff().abs().mean()
+
+
+def test_alpha_keeps_the_tree_from_splitting_on_noise():
+    d, _, _ = _two_states(seed=7, effect=0.0)
+    _, plain = _churn(TREE.format("w1", ""), d)
+    w, tested = _churn(TREE.format("w1", ", alpha=0.05"), d)
+    assert tested < plain / 10                                      # no splits: the book stops switching
+    assert _ev(TREE.format("leaf", ", alpha=0.05"), d)["A"].dropna().nunique() == 1
+
+
+def test_alpha_keeps_a_real_split():
+    d, a, b = _two_states()
+    w = _ev(TREE.format("w1", ", alpha=0.05"), d)["A"].dropna()
+    inside = ((a > 6) & (b < 0))[w.index]
+    assert (w[inside] > 0.5).mean() > 0.5 and (w[~inside] <= 0.5).mean() > 0.85
+
+
+def test_soft_and_honest_shrink_toward_the_blend_on_noise():
+    d, _, _ = _two_states(seed=7, effect=0.0)
+    w, _ = _churn(TREE.format("w1", ", soft=1, honest=1"), d)
+    assert ((w > 0.02) & (w < 0.98)).mean() > 0.9                    # fractional weights, not 0 or 1
+
+
+def test_honest_still_finds_the_planted_region():
+    d, a, b = _two_states()
+    w = _ev(TREE.format("w1", ", honest=1"), d)["A"].dropna()
+    inside = ((a > 6) & (b < 0))[w.index]
+    assert (w[inside] > 0.5).mean() > 0.7 and (w[~inside] <= 0.5).mean() > 0.8
+
+
+def test_the_regularizers_options():
+    with pytest.raises(ValueError, match="soft is on or off"):
+        qex(TREE.format("w1", ", soft=2"))
+    with pytest.raises(ValueError, match="alpha is a significance level"):
+        qex(TREE.format("w1", ", alpha=1.5"))
+    with pytest.raises(ValueError, match="needs permutations above 0"):
+        qex(TREE.format("w1", ", alpha=0.05, permutations=0"))
+    assert Q.complexity(qex(TREE.format("w1", ", alpha=0.05, soft=1, honest=1"))).dof == 10   # searched all the same
+
+
+def test_complexity_with_data_charges_the_dof_a_tree_used():
+    d, _, _ = _two_states(seed=7, effect=0.0)
+    with compute_context():
+        nominal = Q.complexity(qex(TREE.format("w1", ", alpha=0.05"))).dof
+        plain = Q.complexity(qex(TREE.format("w1", "")), d).dof
+        tested = Q.complexity(qex(TREE.format("w1", ", alpha=0.05")), d).dof
+        shrunk = Q.complexity(qex(TREE.format("w1", ", soft=1, honest=1")), d).dof
+        honest = Q.complexity(qex(TREE.format("w1", ", honest=1")), d).dof
+    assert nominal == plain == honest == 10                         # without data, and a hard tree: the full size
+    assert tested <= 1.5                                            # on noise alpha leaves one leaf
+    assert shrunk < plain                                           # leaves that hold back commit less
+    stump = "estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)"
+    with compute_context():
+        assert Q.complexity(qex(stump), d).dof == 3                 # an estimator that does not measure it: nominal

@@ -91,6 +91,12 @@ class Estimator:
         """The dof one fit learns (it may depend on the fit's options); by default the class's dof."""
         return self.dof
 
+    def realized_dof(self, state, fit) -> Optional[float]:
+        """The dof one fitted state actually used, when it can be fewer than dof_of (a tree that made fewer splits,
+        leaves that hold back toward the blend); None to charge dof_of. qex.complexity(signal, data) averages it
+        over the refits."""
+        return None
+
     def outputs_for(self, n_inputs: int) -> tuple:
         return tuple(self.outputs)
 
@@ -275,9 +281,10 @@ class EstimateResult:
     """An EstimateFit's value: its outputs, each a dates x stocks frame, computed when first read. Outputs read at
     once on several threads (Dask tasks) wait for one another, so a shared part is computed once."""
 
-    def __init__(self, outputs: dict):
+    def __init__(self, outputs: dict, realized_dof=None):
         self._make, self._done = dict(outputs), {}
         self._lock = threading.RLock()
+        self.realized_dof = realized_dof          # the dof the fits used, averaged over the refits (None: not measured)
 
     def get(self, name: str) -> pd.DataFrame:
         with self._lock:
@@ -344,6 +351,7 @@ class EstimateFit(Signal):
         dated = isinstance(index, pd.DatetimeIndex)
         day_of = lambda r: int(np.datetime64(index[r], "D").astype(int)) if dated else int(r)
         ends = list(rows[1:]) + [T]
+        used = []                                                                # each fit's realized dof
         if est.axis == "series":
             X = np.column_stack([self._series(v.reindex(index) if isinstance(v, (pd.Series, pd.DataFrame)) else v)
                                  for v in values])
@@ -353,11 +361,12 @@ class EstimateFit(Signal):
                 state = est.fit(X[r - self.window + 1:r + 1], hyper, np.random.default_rng([seed, day_of(r)]))
                 if state is None:
                     continue
+                used.append(est.realized_dof(state, self))
                 for t in range(r, end):
                     for o, val in est.step(state, X[t], hyper).items():
                         outs[o][t] = val
             return EstimateResult({o: pd.DataFrame(np.repeat(v[:, None], N, axis=1), index, columns)
-                                   for o, v in outs.items()})
+                                   for o, v in outs.items()}, _mean_dof(used))
         # stock, cross_section, panel: every input as dates x stocks, stacked once (windows are views of it)
         frames = [v.reindex(index=index, columns=columns) if isinstance(v, pd.DataFrame)
                   else pd.DataFrame(np.repeat(v.reindex(index).to_numpy(float)[:, None], N, axis=1), index, columns)
@@ -371,10 +380,11 @@ class EstimateFit(Signal):
                 day = day_of(r)
                 window = X[r - self.window + 1:r + 1].transpose(1, 0, 2)          # stocks x rows x inputs
                 states = est.fit_many(window, hyper, [np.random.default_rng([seed, day, k]) for k in stock_seeds])
+                used.extend(est.realized_dof(st, self) for st in states if st is not None)
                 for t in range(r, end):
                     for o, val in est.step_many(states, X[t], hyper).items():
                         outs[o][t] = val
-            return EstimateResult({o: pd.DataFrame(v, index, columns) for o, v in outs.items()})
+            return EstimateResult({o: pd.DataFrame(v, index, columns) for o, v in outs.items()}, _mean_dof(used))
         from .universe import universe_members                                   # cross_section, panel
         members = universe_members(index, columns)
         if members is None:
@@ -386,10 +396,11 @@ class EstimateFit(Signal):
             state = est.fit(X[lo:r + 1], hyper, np.random.default_rng([seed, day_of(r)]), members=members[lo:r + 1])
             if state is None:
                 continue
+            used.append(est.realized_dof(state, self))
             for t in range(r, end):
                 for o, val in est.step(state, X[t], hyper, members=members[t]).items():
                     outs[o][t] = np.where(members[t], val, np.nan)               # none outside the universe
-        return EstimateResult({o: pd.DataFrame(v, index, columns) for o, v in outs.items()})
+        return EstimateResult({o: pd.DataFrame(v, index, columns) for o, v in outs.items()}, _mean_dof(used))
 
     def _cache_key(self):
         e = self.estimator
@@ -398,6 +409,12 @@ class EstimateFit(Signal):
             return key
         return ('EstimateFit', e.name, e.version, tuple(x._cache_key() for x in self.inputs), self.window,
                 self.refit, tuple(sorted((k, _key(v)) for k, v in self.hyper.items())))
+
+
+def _mean_dof(used):
+    """The realized dof averaged over the fits, or None when the estimator does not measure it (or never fitted)."""
+    used = [u for u in used if u is not None]
+    return float(np.mean(used)) if used else None
 
 
 def _key(v):

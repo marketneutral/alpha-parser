@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.23.0
+
+**`qex.complexity(signal, data)`: realized dof.** With data, the charge for an estimator is the dof its fits actually
+used, averaged over the refits, where it measures them (`Estimator.realized_dof(state, fit)`); without data, or for an
+estimator that does not measure them, the declared dof as before. The tree measures them: the splits it made and each
+leaf's commitment |2w - 1|, so a regularized tree is charged less (on noise, `alpha` about 1 instead of 10).
+
+**`tree`: the stump, grown to a depth, on several market states.**
+`estimate('tree', 'w1', state1, state2, ..., r1, r2, window=, refit=, depth=2)` grows a decision tree greedily by the
+stump's rule (at each node, over every state and its quantiles, the split that most reduces the squared error of
+r1 - r2 on each side), each split fitted only on the days the one above sent to its side. Each leaf holds the signal
+that earned more there. Outputs `w1`, `leaf` (which leaf today is in) and `p` (a permutation test of the whole tree).
+Regularizers, each off by default: `alpha` (a split only if its own permutation test passes), `soft` (a leaf's weight is its confidence, Phi(t)), `honest` (splits on alternate months, leaves judged on the others); measured on made-up data in `ops/estimate.md`. Options `depth` (1 to 3), `min_leaf` (the fewest days on each side of a split; by default a fifth of the window,
+halved per level; given, the same at every level), `quantiles`, `permutations`. With one state and depth 1 it is the
+stump, exactly (tested). dof per fit: each split's threshold, and its choice of state when there are several, and
+each leaf's side: depth 2 on two states is 10. Point in time, start-independent and repeatable (tested).
+`ops/estimate.md` draws a tree learned on US stocks, 2011-2015: momentum when calm, reversal when the market is
+nervous.
+
 ## 0.22.1
 
 - `qex.estimators()` listed nothing until an estimator had been used: it now registers the built-ins first, and its table gains each estimator's `dof`.

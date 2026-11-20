@@ -703,3 +703,213 @@ class StumpXs(Estimator):
         w1 = np.where(np.isfinite(s), np.where(s <= state["threshold"], state["w_lo"], state["w_hi"]), np.nan)
         full = lambda v: np.full(len(s), v)
         return dict(w1=w1, threshold=full(state["threshold"]), gap=full(state["gap"]), p=full(state["p"]))
+
+
+# --- a tree: the stump, deeper, on several market states ----------------------------------------------------------
+
+@register_estimator
+class Tree(Estimator):
+    """A learned decision tree between two signals on one or more market states: the stump, grown to a depth.
+
+        estimate('tree', 'w1', state1, state2, ..., r1, r2, window=1260, refit=63, depth=2)
+
+    The last two inputs are the two signals' daily returns, as for the stump; every input before them is a market
+    state. On each refit day it pairs the states on day u - 1 with the returns on day u over the window and grows a
+    tree by the stump's rule, greedily: at each node, over every state and its quantiles there, the split that most
+    reduces the squared error of r1 - r2 against its mean on each side; then the same on each side, to `depth`. A
+    node stops early when no split leaves `min_leaf` days on each side. Each leaf keeps the signal that earned more on
+    its days. The second split is fitted only on the days the first sent to its side: a tree, not stumps added.
+
+        w1      the weight on the first signal: 1 if today's states lead to a leaf where r1 earned more, else 0
+                (with soft=True, between 0 and 1)
+        leaf    which leaf today's states lead to, numbered left to right from 0 (to see the regime the tree is in)
+        p       a permutation test of the whole tree: how often a tree grown the same way on shuffled days fits as
+                well (with alpha, the root split's own test)
+
+    With one state and depth 1 it is the stump. Options: `depth` (1 to 3, default 2), `min_leaf` (the fewest days on
+    each side of a split, LightGBM's min_data_in_leaf; given, the same at every level; by default a fifth of the
+    days the splits are chosen on, halved at each level below the first), `quantiles` (20), `permutations` (100; 0 for
+    none). Three regularizers, each off by default:
+
+        alpha=0.05      a split is made only if it is real on its own days: a permutation test at the node (the
+                        node's days shuffled, the best split found again, `permutations` times) gives p below alpha;
+                        otherwise the node is a leaf (conditional inference trees, Hothorn, Hornik and Zeileis 2006)
+        soft=True       each leaf's weight is the probability, from its t-statistic, that r1 beats r2 there:
+                        Phi(mean / (sd / sqrt(n))). A large, clear leaf gives about 0 or 1; a small, noisy one about
+                        0.5, the blend. Positions move gradually, not 0 to 1
+        honest=True     the splits are chosen on half the window's days (alternate months) and each leaf's side is
+                        decided on the other half, so a leaf is not judged on the days that chose its cut (Wager and
+                        Athey 2018). A leaf with no days in that half holds the blend, 0.5
+
+    dof: each split's threshold, and its choice of state when there are several, and each leaf's side, for the tree's
+    full size (depth 2 on two states, 3 x 2 + 4 = 10), whatever the regularizers leave: they were searched for.
+    """
+    name, axis, n_inputs = "tree", "series", (3, None)
+    window, refit, refit_default = "required", "optional", 21
+    outputs = ("w1", "leaf", "p")
+    hyper = {"depth": 2, "min_leaf": None, "quantiles": 20, "permutations": 100, "alpha": None, "soft": False,
+             "honest": False}
+    dof = 7                                          # depth 2 on one state; each fit's own count is dof_of
+    about = "a learned decision tree on market states that picks, in each leaf, the better of two signals"
+
+    def dof_of(self, fit):
+        depth, k = fit.hyper["depth"], len(fit.inputs) - 2
+        return (2 ** depth - 1) * (2 if k > 1 else 1) + 2 ** depth
+
+    def realized_dof(self, state, fit):
+        """The splits this fit made (each a threshold, and a choice of state with several) and how much each leaf
+        commits, |2w - 1|: a hard leaf 1, a leaf at the blend 0. A tree that split less, or whose leaves hold back,
+        used fewer than its nominal dof."""
+        per_split = 2 if len(fit.inputs) - 2 > 1 else 1
+
+        def walk(node):
+            if node[0] == "leaf":
+                return abs(2 * node[2] - 1)
+            return per_split + walk(node[3]) + walk(node[4])
+        return float(walk(state["tree"]))
+
+    def check(self, inputs, window, refit, hyper):
+        depth, ml, q, b = hyper["depth"], hyper["min_leaf"], hyper["quantiles"], hyper["permutations"]
+        if not _whole(depth, 1) or depth > 3:
+            raise ValueError(f"estimate('tree')'s depth is 1, 2 or 3 (got {depth!r}): a deeper tree has leaves of a "
+                             f"few days each")
+        if ml is not None and not _whole(ml, 2):
+            raise ValueError(f"estimate('tree')'s min_leaf must be a whole number of days, at least 2 (got {ml!r})")
+        if not _whole(q, 2):
+            raise ValueError(f"estimate('tree')'s quantiles must be a whole number, at least 2 (got {q!r})")
+        if not _whole(b, 0):
+            raise ValueError(f"estimate('tree')'s permutations must be a whole number, 0 or more (got {b!r})")
+        a = hyper["alpha"]
+        if a is not None and (isinstance(a, bool) or not isinstance(a, (int, float)) or not 0 < a < 1):
+            raise ValueError(f"estimate('tree')'s alpha is a significance level, above 0 and below 1 (got {a!r})")
+        if a is not None and not b:
+            raise ValueError("estimate('tree')'s alpha tests each split by permutation: it needs permutations above 0")
+        for flag in ("soft", "honest"):
+            v = hyper[flag]
+            if not (isinstance(v, bool) or (isinstance(v, (int, float)) and v in (0, 1))):
+                raise ValueError(f"estimate('tree')'s {flag} is on or off, written 1 or 0 (got {v!r})")
+        if window < 10:
+            raise ValueError("estimate('tree')'s window must be at least 10 days")
+
+    def normalize(self, inputs, window, refit, hyper):
+        return dict(hyper, soft=bool(hyper["soft"]), honest=bool(hyper["honest"]))
+
+    @staticmethod
+    def _best_split(S, d, idx, min_n, levels):
+        """(gain, state, threshold) of the best split of the days idx, or None."""
+        best = None
+        for j in range(S.shape[1]):
+            s = S[idx, j]
+            order = np.argsort(s, kind="mergesort")
+            s_sorted, d_sorted = s[order], d[idx][order]
+            thresholds = np.unique(np.quantile(s_sorted, levels))
+            cuts = np.searchsorted(s_sorted, thresholds, side="right")
+            keep = (cuts >= min_n) & (len(idx) - cuts >= min_n)
+            if not keep.any():
+                continue
+            gain, k = Stump._best(s_sorted, d_sorted, cuts[keep])
+            if best is None or gain > best[0]:
+                best = (gain, j, float(thresholds[keep][k]))
+        return best
+
+    @classmethod
+    def _grow(cls, S, d, idx, depth, min_leaf, levels, alpha=None, b=0, rng=None, tests=None):
+        """The tree's shape on the days idx: ("leaf",) or ("split", state, threshold, low, high). With alpha, a split
+        is made only if its own permutation test gives p < alpha; each test's p is appended to tests."""
+        if depth == 0 or len(idx) < 2 * min_leaf[0]:
+            return ("leaf",)
+        best = cls._best_split(S, d, idx, min_leaf[0], levels)
+        if best is None:
+            return ("leaf",)
+        gain, j, c = best
+        if alpha is not None:
+            dd, beaten = d.copy(), 0
+            for _ in range(b):
+                dd[idx] = rng.permutation(d[idx])
+                other = cls._best_split(S, dd, idx, min_leaf[0], levels)
+                beaten += other is not None and other[0] >= gain - 1e-15
+            p = (1 + beaten) / (b + 1)
+            tests.append(p)
+            if p >= alpha:
+                return ("leaf",)
+        lo, hi = idx[S[idx, j] <= c], idx[S[idx, j] > c]
+        return ("split", j, c, cls._grow(S, d, lo, depth - 1, min_leaf[1:], levels, alpha, b, rng, tests),
+                cls._grow(S, d, hi, depth - 1, min_leaf[1:], levels, alpha, b, rng, tests))
+
+    @classmethod
+    def _label(cls, node, S, d, idx, soft):
+        """The shape with each leaf's mean and weight, from the days idx."""
+        if node[0] == "split":
+            _, j, c, lo, hi = node
+            return ("split", j, c, cls._label(lo, S, d, idx[S[idx, j] <= c], soft),
+                    cls._label(hi, S, d, idx[S[idx, j] > c], soft))
+        x = d[idx]
+        if not len(x):
+            return ("leaf", np.nan, 0.5)                                 # no days to judge it on: the blend
+        m = float(x.mean())
+        if not soft:
+            return ("leaf", m, 1.0 if m > 0 else 0.0)
+        sd = x.std(ddof=1) if len(x) >= 3 else 0.0
+        w = 0.5 * math.erfc(-m / (sd / math.sqrt(len(x))) / math.sqrt(2)) if sd > 0 else 0.5
+        return ("leaf", m, float(w))
+
+    @classmethod
+    def _fit_gain(cls, node, S, d, idx):
+        """sum over leaves of n * mean^2: the tree's reduction of squared error, up to a constant."""
+        if node[0] == "leaf":
+            return len(idx) * d[idx].mean() ** 2 if len(idx) else 0.0
+        _, j, c, lo, hi = node[:5]
+        return cls._fit_gain(lo, S, d, idx[S[idx, j] <= c]) + cls._fit_gain(hi, S, d, idx[S[idx, j] > c])
+
+    def fit(self, window, hyper, rng, members=None):
+        k = window.shape[1] - 2
+        S, d = window[:-1, :k], window[1:, k] - window[1:, k + 1]       # the states at u - 1, the returns on day u
+        ok = np.isfinite(S).all(axis=1) & np.isfinite(d)
+        S, d = S[ok], d[ok]
+        depth, honest = int(hyper["depth"]), hyper["honest"]
+        idx = np.arange(len(d))
+        if honest:                                                     # alternate months: shape, then sides
+            shape_idx, side_idx = idx[(idx // 21) % 2 == 0], idx[(idx // 21) % 2 == 1]
+        else:
+            shape_idx = side_idx = idx
+        n_shape = (len(window) - 1) // 2 if honest else len(window) - 1
+        if hyper["min_leaf"] is not None:                              # given: the same at every level
+            min_leaf = [int(hyper["min_leaf"])] * depth
+        else:                                                          # a fifth of the shape's days, halved per level
+            min_leaf = [max(2, n_shape // 5 // 2 ** i) for i in range(depth)]
+        if len(shape_idx) < 2 * min_leaf[0]:
+            return None
+        levels = np.linspace(0, 1, int(hyper["quantiles"]) + 1)[1:-1]
+        alpha, b, tests = hyper["alpha"], int(hyper["permutations"]), []
+        shape = self._grow(S, d, shape_idx, depth, min_leaf, levels, alpha, b, rng, tests)
+        if shape[0] == "leaf" and alpha is None:
+            return None
+        tree = self._label(shape, S, d, side_idx, hyper["soft"])
+        p = np.nan
+        if alpha is not None:
+            p = tests[0] if tests else np.nan                          # the root split's own test
+        elif b:
+            gain, beaten = self._fit_gain(shape, S, d, shape_idx), 0
+            for _ in range(b):
+                dp = d.copy()
+                dp[shape_idx] = rng.permutation(d[shape_idx])
+                t = self._grow(S, dp, shape_idx, depth, min_leaf, levels)
+                beaten += self._fit_gain(t, S, dp, shape_idx) >= gain - 1e-15
+            p = (1 + beaten) / (b + 1)
+        return dict(tree=tree, p=float(p))
+
+    def step(self, state, row, hyper, members=None):
+        s = row[:-2]
+        if not np.isfinite(s).all():
+            return dict(w1=np.nan, leaf=np.nan, p=state["p"])
+        node, leaf, width = state["tree"], 0, 2 ** int(hyper["depth"])
+        while node[0] == "split":
+            width //= 2
+            if s[node[1]] > node[2]:
+                leaf += width
+                node = node[4]
+            else:
+                node = node[3]
+        return dict(w1=node[2], leaf=float(leaf), p=state["p"])
+
+

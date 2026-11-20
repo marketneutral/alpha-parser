@@ -61,6 +61,7 @@ and the way to the outputs that have no name, such as one slope of a joint fit.
 | `xs_ols` | each day's least squares across stocks | y, then one or more regressors | `resid`, `alpha`, `beta1` ... `betak` | 1 / 1 | |
 | `pca` | principal components across stocks | x | `beta1` ... `beta20` | required / 21 | |
 | `stump` | a learned switch on a market state (below) | state, r1, r2 | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_leaf`, `quantiles`, `permutations` |
+| `tree` | a learned decision tree on one or more market states (below) | states..., r1, r2 | `w1`, `leaf`, `p` | required / 21 | `depth`, `min_leaf`, `quantiles`, `permutations` |
 | `stump_xs` | a learned split of the stocks on each stock's own state (below) | state, y, z, return | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_share`, `quantiles` |
 
 `ts_match` stays its own operator: it reads *another* stock's value through the twins it chose, which is not an
@@ -107,6 +108,111 @@ series is refused, with a message.
 **Small samples.** Regimes are rare, and a side that learned from two crises learned two anecdotes: hence `min_leaf`,
 and `p` to say whether the switch is real. Fix the state for an economic reason and let the stump learn only where to
 cut it; trying state after state is a search, and each is a trial.
+
+## The tree: twenty questions about the market
+
+A stump asks the market one question ("is volatility above 15%?") and holds one signal for each answer. A **tree**
+asks a second question, and which question depends on the first answer: the way a trader thinks, "if the market is
+calm, hold momentum; if it is nervous, it depends how nervous". Each final answer, a **leaf**, holds the signal that
+earned more on the days that ended there.
+
+```qex
+let mom = zscore(rank(delay(returns(231), 21))),
+    rev = zscore(rank(-ts_mean(returns(21), 21))),
+    pm  = regression_beta(returns(1), delay(mom, 1)),                    # each signal's daily return
+    pr  = regression_beta(returns(1), delay(rev, 1)),
+    vol = sqrt(ewma(power(returns(1, 'market'), 2), 11)) * sqrt(252),     # the market's volatility, a year
+    up  = returns(504, 'market'),                                         # the market's two-year return
+    w   = estimate('tree', 'w1', vol, up, pm, pr, window=1260, refit=63, depth=2)
+in w * mom + (1 - w) * rev
+```
+
+Fitted on US stocks (the 3,000 largest) over the five years to the end of 2015, this tree learned:
+
+```
+                     market volatility ≤ 15.7% a year?
+                  ┌─────────── yes ──┴── no ───────────┐
+       2-year market return ≤ 34%?           volatility ≤ 22.6%?
+          ┌── yes ──┴── no ──┐              ┌── yes ──┴── no ──┐
+      MOMENTUM          MOMENTUM        REVERSAL          MOMENTUM
+   403 days, +19%/yr  605 days, +8%/yr  126 days, −33%/yr  126 days, +2%/yr
+                  (momentum's return over reversal's, a year, on those days)
+```
+
+Read it top down. On calm days, hold momentum: it beat reversal by 8 to 19% a year there. When the market gets
+nervous (volatility between 16% and 23%), switch to reversal: momentum lagged it by 33% a year on those days, the
+momentum crash of Daniel and Moskowitz (2016). In the most violent days the call is close to a coin flip (+2% a year
+on 126 days). Its `p` was 0.01: a tree grown the same way on shuffled days fit this well once in a hundred.
+
+Three things the picture teaches:
+
+- **A split can decide nothing.** Both of the calm side's leaves hold momentum, so the question about the two-year
+  return changes no position. It still costs dof: the tree was searched for it.
+- **Deep leaves are small.** Each level halves the data. The nervous leaf holds 126 days, about six months of a
+  five-year window, which is the floor (`min_leaf`) at depth 2: a leaf below it is not allowed. Read a leaf's
+  number of days before believing its side.
+- **Trees are greedy.** The first split is chosen alone, the best single question; the second is the best question
+  *given* the first answer. It is fitted only on that side's days, which is what makes it a tree and not two stumps
+  added together.
+
+**Outputs.** `w1`: 1 when today's market leads to a leaf that holds the first signal, else 0. `leaf`: which leaf
+today is in, numbered left to right from 0 (0 to 3 at depth 2), to see the regime the tree thinks the market is in.
+`p`: the permutation test of the whole tree.
+
+| Option | Default | |
+|---|---|---|
+| `depth` | 2 | how many questions: 1 (the stump), 2 or 3 |
+| `min_leaf` | a fifth of the window, halved per level | the fewest days on each side of a split, at each level (LightGBM's `min_data_in_leaf`); given, the same at every level |
+| `quantiles` | 20 | the thresholds tried at each node: its states' quantiles at 5%, 10%, ... 95% |
+| `permutations` | 100 | the shuffles behind `p` (0: no `p`) |
+| `alpha` | off | a split is made only if it is real on its own days (below) |
+| `soft` | off | a leaf's weight is its confidence, not 0 or 1 (below) |
+| `honest` | off | splits chosen on half the days, leaves judged on the other half (below) |
+
+**Regularizing a tree.** Five years hold one or two crises, so a deep leaf can learn an anecdote. Three options make
+the tree harder to fool, each off by default:
+
+- `alpha=0.05`: **split only if it is real.** At each node the days are shuffled and the best split found again,
+  `permutations` times; the split is made only if fewer than 5% of the shuffles split as well. Otherwise the node is
+  a leaf (conditional inference trees: Hothorn, Hornik and Zeileis 2006). `p` is then the root split's test.
+- `soft=1`: **a leaf holds its confidence.** Its weight is the probability, from its t-statistic, that the first
+  signal beats the second there: near 1 or 0 for a large, clear leaf, near 0.5 (the blend) for a small, noisy one.
+  The book moves gradually instead of flipping.
+- `honest=1`: **don't judge a leaf on the days that drew it.** The splits are chosen on alternate months and each
+  leaf's side decided on the others (Wager and Athey 2018).
+
+On made-up data (a region of 12% of days where the first signal wins, and pure noise, 2,500 days, a five-year
+window):
+
+| | finds the region (inside / outside) | on noise: how much the weight moves a day |
+|---|---|---|
+| plain | 0.90 / 0.94 | 0.134: it switches on noise |
+| `alpha=0.05` | 0.66 / 0.91 | 0.003: no splits, one leaf |
+| `soft=1` | 0.90 / 0.94 | 0.120 |
+| `honest=1` | 0.86 / 0.88 | 0.131 |
+| all three | 0.00 / 1.00: finds nothing | 0.002, weights 0.01 to 0.65 |
+
+So `alpha` does what it says, at a cost in power. **`soft` alone barely matters**, and that is worth knowing: a
+leaf the tree *chose* looks confident by construction, since its split was picked to separate the two sides. It
+needs `honest`: judged on other days, a noisy leaf's weight falls toward 0.5. All three at once, on five years, are
+too strict to find a real 12% region. Use `alpha`, or `soft` with `honest`.
+
+The inputs are any number of market states, then the two signals' returns. With one state and `depth=1` it is the
+stump, exactly. Its dof grow fast: depth 2 on two states is 10, depth 3 is 22, so the charge asks a deep tree to
+earn a great deal more than a stump.
+
+**A regularized tree is charged for what it used.** `qex.complexity(signal, data)` charges the dof each fit actually
+used, averaged over the refits: the splits it made (each a threshold, and a choice of state with several) and how
+much each leaf commits, |2w − 1| (a hard leaf 1, a leaf at the blend 0). Without data it charges the full size. On
+the made-up data above:
+
+| realized dof | plain | `alpha` | `soft` | `honest` | `soft` + `honest` | all three |
+|---|---|---|---|---|---|---|
+| a real region | 10 | 4.8 | 9.8 | 10 | 9.1 | 1.0 |
+| pure noise | 10 | 1.0 | 8.7 | 10 | 7.8 | 0.4 |
+
+So the charge rewards what regularizes: `alpha` pays only for the splits it makes, and leaves that hold back pay
+less. `honest` alone pays in full, as it barely changes what the tree does.
 
 ## The stump across stocks: which signal for which stocks
 
@@ -159,10 +265,13 @@ not for how qex builds its graph. `qex.complexity(signal)` gives two counts:
 |---|---|
 | `ols`, `ols_shrunk`, `xs_ols`, `pca` | 0 |
 | `stump`, `stump_xs` | 3 |
+| `tree` | each split's threshold (and its choice of state, with several), and each leaf's side: depth 2 on two states, 3 × 2 + 4 = 10 |
 
 The stump fits on the past only, so its own choices don't inflate a backtest the way an in-sample fit would. A dof
 charge prices flexibility instead: a model that can learn more gives an author's search more ways to find noise, and
-holds up less well. Every estimator must declare its `dof`; registering one without it is refused.
+holds up less well. Every estimator must declare its `dof`; registering one without it is refused. With data,
+`qex.complexity(signal, data)` charges what each fit realized where the estimator measures it (`realized_dof`: the
+tree does, below); otherwise the declared `dof`.
 
 ## Point in time, by protocol
 
