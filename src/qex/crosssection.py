@@ -5,6 +5,7 @@ import pandas as pd
 
 from .signal import Signal
 from .universe import in_universe, finite_in_universe, universe_members
+from .schedule import refit_rows
 
 
 class Rank(Signal):
@@ -438,7 +439,7 @@ def _pca_fits(values, window: int, refit: int, members):
     v = np.where(np.isfinite(v), v, np.nan)
     T, N = v.shape
     fits, prev = [], None                              # prev: (names, unit eigenvectors) of the last fit
-    for p in range(window - 1, T, refit):
+    for p in refit_rows(values.index, window - 1, refit):          # on the calendar, not from the first row (schedule.py)
         w = v[p - window + 1:p + 1]
         ok = np.isfinite(w).sum(axis=0) >= np.ceil(PCA_MIN_COVERAGE * window)
         if members is not None:

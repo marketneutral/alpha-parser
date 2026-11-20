@@ -25,6 +25,7 @@ import pandas as pd
 
 from .signal import Signal
 from .universe import universe_members
+from .schedule import refit_rows
 
 METRICS = ("corr", "euclidean", "path", "coint")
 MATCHINGS = ("nearest", "exclusive")
@@ -200,8 +201,9 @@ class MatchSelection(Signal):
         coint = self.metric == "coint"
         stats = {k: np.full((T, N), np.nan) for k in COINT_STATS} if coint else {}
         current_stats = {k: np.full(N, np.nan) for k in stats}
+        refits = set(refit_rows(key.index, self.lookback, self.rebalance).tolist())   # on the calendar (schedule.py)
         for t in range(self.lookback, T):
-            if (t - self.lookback) % self.rebalance == 0:
+            if t in refits:
                 window = values[t - self.lookback:t]                  # up to t - 1: point in time
                 current = np.full(N, -1)
                 current_score = np.full(N, np.nan)

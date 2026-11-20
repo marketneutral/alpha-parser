@@ -7,6 +7,7 @@ ended by leaving the universe, no value without a twin, and a selection shared b
 
 from collections import Counter
 
+from qex.schedule import refit_rows
 import numpy as np
 import pandas as pd
 import pytest
@@ -121,7 +122,7 @@ def test_exclusive_pairs_are_reciprocal(pairs_data):
 def test_matches_change_only_on_rebalance_days(pairs_data):
     p = peers(", rebalance=21", pairs_data)
     changed = (p != p.shift(1)) & (p.shift(1) >= 0) & (p >= 0)
-    rebalance_days = set(range(LOOK, len(p), 21))
+    rebalance_days = set(refit_rows(p.index, LOOK, 21).tolist())        # the calendar's (qex/schedule.py)
     off = [t for t in range(LOOK + 1, len(p)) if changed.iloc[t].any() and t not in rebalance_days]
     assert off == []
 
@@ -279,7 +280,7 @@ def test_the_score_is_the_pairs_similarity_at_selection(pairs_data, metric):
     score = ev(f"ts_match_score(returns(1), {LOOK}, metric='{metric}', min_overlap=40)", d)
     p = peers(f", metric='{metric}', min_overlap=40", d)
     r = ev("returns(1)", d)
-    for t in range(LOOK, len(r), 21):                                  # each rebalance day
+    for t in refit_rows(r.index, LOOK, 21):                            # each rebalance day
         window = r.iloc[t - LOOK:t]
         for i in range(24):
             j = p.iloc[t, i]
@@ -356,7 +357,7 @@ def test_path_twins_are_the_closest_paths():
     d = _tracking_pairs(0.004)                                         # loose pairs: path and correlation differ
     p = peers(", metric='path'", d)
     r = ev("returns(1)", d)
-    t = LOOK + 21 * 2
+    t = refit_rows(r.index, LOOK, 21)[2]                               # the third rebalance day
     paths = 100 * (1 + r.iloc[t - LOOK:t].fillna(0)).cumprod()
     valid = r.iloc[t - LOOK:t].notna()
     for i in range(24):
@@ -370,7 +371,7 @@ def test_path_score_is_the_distance_between_paths_in_index_points(pairs_data):
     score = ev(f"ts_match_score(returns(1), {LOOK}, metric='path', min_overlap=40)", d)
     p = peers(", metric='path', min_overlap=40", d)
     r = ev("returns(1)", d)
-    t = LOOK + 21 * 3                                                  # a rebalance day
+    t = refit_rows(r.index, LOOK, 21)[3]                               # a rebalance day
     window = r.iloc[t - LOOK:t]
     for i in range(24):
         j = p.iloc[t, i]
