@@ -13,6 +13,11 @@ under ts_resid) while every number stayed the same. complexity() counts instead:
                 a principal component, are not searched for and learn none. Each distinct fit counts once, however
                 many of its outputs are read.
 
+With data, complexity(signal, data) charges the dof the estimators actually used, averaged over their refits, where
+an estimator measures it (realized_dof): a tree charges the splits it made and how much each leaf commits (|2w - 1|:
+a leaf at the blend commits nothing), so a regularized tree that splits only when it must, or whose leaves hold back,
+is charged less. An estimator that does not measure it is charged its nominal dof, as without data.
+
 A model that learns more can fit more noise, so a score can charge for each dof as well as each operator. The stump
 fits on the past only, so its own choices do not inflate a backtest the way an in-sample fit would; what a dof charge
 prices is flexibility: a more flexible model gives an author's search more ways to find noise, and holds up less well.
@@ -25,15 +30,17 @@ from .signal import Signal
 @dataclass(frozen=True)
 class Complexity:
     operators: int
-    dof: int
+    dof: float
 
     def charge(self, per_operator: float, per_dof: float) -> float:
         """The charge at these rates: per_operator * operators + per_dof * dof."""
         return per_operator * self.operators + per_dof * self.dof
 
 
-def complexity(signal: Signal) -> Complexity:
-    """The operators an expression writes and the dof its estimators learn (see the module's notes)."""
+def complexity(signal: Signal, data=None) -> Complexity:
+    """The operators an expression writes and the dof its estimators learn (see the module's notes). With data, the
+    dof each fit realized on it where its estimator measures that; evaluated in the caller's compute_context (and
+    universe), so a fit the score has computed is not computed again."""
     from .estimate import EstimateFit
     from .missing import children
     seen, stack = {}, [signal]
@@ -45,5 +52,10 @@ def complexity(signal: Signal) -> Complexity:
         seen[k] = s
         stack.extend(children(s))
     operators = sum(1 for s in seen.values() if getattr(type(s), "value_is_frame", True))
-    dof = sum(s.estimator.dof_of(s) for s in seen.values() if isinstance(s, EstimateFit))
+    dof = 0
+    for s in seen.values():
+        if not isinstance(s, EstimateFit):
+            continue
+        realized = s.evaluate(data).realized_dof if data is not None else None
+        dof += s.estimator.dof_of(s) if realized is None else realized
     return Complexity(operators, dof)

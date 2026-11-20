@@ -203,6 +203,19 @@ The inputs are any number of market states, then the two signals' returns. With 
 stump, exactly. Its dof grow fast: depth 2 on two states is 10, depth 3 is 22, so the charge asks a deep tree to
 earn a great deal more than a stump.
 
+**A regularized tree is charged for what it used.** `qex.complexity(signal, data)` charges the dof each fit actually
+used, averaged over the refits: the splits it made (each a threshold, and a choice of state with several) and how
+much each leaf commits, |2w − 1| (a hard leaf 1, a leaf at the blend 0). Without data it charges the full size. On
+the made-up data above:
+
+| realized dof | plain | `alpha` | `soft` | `honest` | `soft` + `honest` | all three |
+|---|---|---|---|---|---|---|
+| a real region | 10 | 4.8 | 9.8 | 10 | 9.1 | 1.0 |
+| pure noise | 10 | 1.0 | 8.7 | 10 | 7.8 | 0.4 |
+
+So the charge rewards what regularizes: `alpha` pays only for the splits it makes, and leaves that hold back pay
+less. `honest` alone pays in full, as it barely changes what the tree does.
+
 ## The stump across stocks: which signal for which stocks
 
 The stump learns *when*, on one state for the whole market. `stump_xs` learns *which stocks*, on each stock's own
@@ -258,7 +271,9 @@ not for how qex builds its graph. `qex.complexity(signal)` gives two counts:
 
 The stump fits on the past only, so its own choices don't inflate a backtest the way an in-sample fit would. A dof
 charge prices flexibility instead: a model that can learn more gives an author's search more ways to find noise, and
-holds up less well. Every estimator must declare its `dof`; registering one without it is refused.
+holds up less well. Every estimator must declare its `dof`; registering one without it is refused. With data,
+`qex.complexity(signal, data)` charges what each fit realized where the estimator measures it (`realized_dof`: the
+tree does, below); otherwise the declared `dof`.
 
 ## Point in time, by protocol
 

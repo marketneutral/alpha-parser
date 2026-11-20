@@ -756,6 +756,18 @@ class Tree(Estimator):
         depth, k = fit.hyper["depth"], len(fit.inputs) - 2
         return (2 ** depth - 1) * (2 if k > 1 else 1) + 2 ** depth
 
+    def realized_dof(self, state, fit):
+        """The splits this fit made (each a threshold, and a choice of state with several) and how much each leaf
+        commits, |2w - 1|: a hard leaf 1, a leaf at the blend 0. A tree that split less, or whose leaves hold back,
+        used fewer than its nominal dof."""
+        per_split = 2 if len(fit.inputs) - 2 > 1 else 1
+
+        def walk(node):
+            if node[0] == "leaf":
+                return abs(2 * node[2] - 1)
+            return per_split + walk(node[3]) + walk(node[4])
+        return float(walk(state["tree"]))
+
     def check(self, inputs, window, refit, hyper):
         depth, ml, q, b = hyper["depth"], hyper["min_leaf"], hyper["quantiles"], hyper["permutations"]
         if not _whole(depth, 1) or depth > 3:

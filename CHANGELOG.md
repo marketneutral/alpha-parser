@@ -2,6 +2,11 @@
 
 ## 0.23.0
 
+**`qex.complexity(signal, data)`: realized dof.** With data, the charge for an estimator is the dof its fits actually
+used, averaged over the refits, where it measures them (`Estimator.realized_dof(state, fit)`); without data, or for an
+estimator that does not measure them, the declared dof as before. The tree measures them: the splits it made and each
+leaf's commitment |2w - 1|, so a regularized tree is charged less (on noise, `alpha` about 1 instead of 10).
+
 **`tree`: the stump, grown to a depth, on several market states.**
 `estimate('tree', 'w1', state1, state2, ..., r1, r2, window=, refit=, depth=2)` grows a decision tree greedily by the
 stump's rule (at each node, over every state and its quantiles, the split that most reduces the squared error of

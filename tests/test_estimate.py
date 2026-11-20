@@ -652,3 +652,19 @@ def test_the_regularizers_options():
     with pytest.raises(ValueError, match="needs permutations above 0"):
         qex(TREE.format("w1", ", alpha=0.05, permutations=0"))
     assert Q.complexity(qex(TREE.format("w1", ", alpha=0.05, soft=1, honest=1"))).dof == 10   # searched all the same
+
+
+def test_complexity_with_data_charges_the_dof_a_tree_used():
+    d, _, _ = _two_states(seed=7, effect=0.0)
+    with compute_context():
+        nominal = Q.complexity(qex(TREE.format("w1", ", alpha=0.05"))).dof
+        plain = Q.complexity(qex(TREE.format("w1", "")), d).dof
+        tested = Q.complexity(qex(TREE.format("w1", ", alpha=0.05")), d).dof
+        shrunk = Q.complexity(qex(TREE.format("w1", ", soft=1, honest=1")), d).dof
+        honest = Q.complexity(qex(TREE.format("w1", ", honest=1")), d).dof
+    assert nominal == plain == honest == 10                         # without data, and a hard tree: the full size
+    assert tested <= 1.5                                            # on noise alpha leaves one leaf
+    assert shrunk < plain                                           # leaves that hold back commit less
+    stump = "estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)"
+    with compute_context():
+        assert Q.complexity(qex(stump), d).dof == 3                 # an estimator that does not measure it: nominal
