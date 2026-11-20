@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.19.0
+
+**Refits on a calendar: `ts_match` and `pca_factor` no longer depend on where the data starts.** Both re-fit on a
+schedule (`rebalance=`, `refit=`, default 21), which was counted in rows from the data's first row. So one expression
+was different books on different data: evaluated on data loaded from 2020-01-01 and from 2020-01-20, a `ts_match` chose
+the same twin for only 23% of stocks on 2021-12-31 (the US 3000, `metric='path'`, within sector, exclusive). Nothing
+looked ahead, but a backtest's start date changed every number after it, and a validation, a test and a live record
+that load from different dates scored different twins.
+
+Now the refit days come from a fixed calendar (`qex/schedule.py`): the weekdays counted from Monday 1970-01-05, cut into
+blocks of `rebalance` (or `refit`) weekdays, a refit on the first trading day of each block (a holiday moves it to the
+next trading day), the first one with a full window before it. The same day has the same refit and, given the window's
+history, the same fit, whatever row the data begins on: on the case above, the same twin for 100% of stocks, and the
+same `pca_factor` betas. An index that is not dates keeps the old rule.
+
+What changes for an existing expression:
+
+- **The numbers move.** Refits fall on different days, so twins and factors differ from 0.18's on most days. Sealed
+  or published results that use `ts_match`, `ts_match_score` or `pca_factor` should be rescored.
+- **Blocks are weekdays, not rows**: `rebalance=21` is 21 weekdays, about 20 trading days in a year with holidays.
+- **The first fit can come later**: the first block start with a full window, up to `rebalance - 1` days after the old
+  first fit, with no value before it.
+- **`pca_factor` still follows its factors' identity from the first refit in the data** (matched to the previous refit,
+  signed to agree), so a later start can number or sign the factors differently, though each refit's decomposition is
+  now the same. The docs say so.
+
+Tests in `tests/test_refit_anchor.py`; the tests that hard-coded the old schedule read it from `refit_rows`. Docs
+(`ops/matching.md`, `ops/cross-sectional.md`, the reference) and the shipped reference regenerated.
+
 ## 0.18.0
 
 `days_since(x)`, in Events and state: trading days since `x` was last nonzero, 0 on the day, 1 the day after. A day

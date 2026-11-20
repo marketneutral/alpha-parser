@@ -33,11 +33,11 @@ Result: `ts_match(returns(5), returns(1), 15, within='sector', rebalance=5)`
 
 | | AAA | BBB | CCC | DDD | EEE | FFF |
 |---|---:|---:|---:|---:|---:|---:|
-| Apr 05 | −0.006 | −0.027 | −0.027 | 0.007 | 0.036 | 0.036 |
-| Apr 08 | −0.027 | −0.077 | −0.077 | 0.016 | 0.080 | 0.080 |
-| Apr 09 | −0.041 | −0.063 | −0.063 | 0.005 | 0.009 | 0.009 |
-| Apr 10 | −0.014 | −0.071 | −0.071 | 0.062 | 0.043 | 0.043 |
-| Apr 11 | 0.010 | −0.036 | −0.036 | 0.107 | 0.032 | 0.032 |
+| Apr 05 | −0.006 | −0.027 | −0.027 | −0.004 | 0.036 | 0.036 |
+| Apr 08 | −0.027 | −0.077 | −0.077 | 0.014 | 0.014 | 0.016 |
+| Apr 09 | −0.041 | −0.063 | −0.063 | −0.010 | −0.010 | 0.005 |
+| Apr 10 | −0.014 | −0.071 | −0.071 | −0.025 | −0.025 | 0.062 |
+| Apr 11 | 0.010 | −0.036 | −0.036 | 0.000 | 0.000 | 0.107 |
 
 Read the result column by column. AAA's twin is BBB, so AAA's cell holds BBB's five-day return; CCC's twin is AAA, so
 CCC's cell holds AAA's. The windows here are short so the toy data has twins; in practice `lookback` is a year.
@@ -56,7 +56,7 @@ expression as leaving it out.
 | `metric` | `'corr'` | How to measure alike: `'corr'`, `'euclidean'`, `'path'`, `'coint'` |
 | `within` | `None` | A group the twin must share: a group's name (`'sector'`) or any labels expression |
 | `matching` | `'nearest'` | `'nearest'`: each stock's closest; `'exclusive'`: reciprocal pairs that don't overlap |
-| `rebalance` | `21` | Choose twins every this many days, and hold them in between |
+| `rebalance` | `21` | Choose twins every this many weekdays, on a fixed calendar, and hold them in between |
 | `min_overlap` | `lookback` | The fewest days a pair must share for it to be compared, at least 2 |
 
 ```qex
@@ -69,7 +69,11 @@ The options can also go by position, in the order above, but a name says what it
 
 ## How a twin is chosen
 
-1. **On a rebalance day.** The first is the day `lookback` days of data exist; then every `rebalance` days.
+1. **On a rebalance day, from a fixed calendar.** The weekdays are counted from Monday 5 January 1970 and cut into
+   blocks of `rebalance`; twins are chosen on the first trading day of each block (a holiday moves it to the next
+   trading day), from the first one with `lookback` days of data before it. The calendar, not the data, fixes the
+   days, so a backtest that starts later chooses the same twins on the same days. (Before qex 0.19 the schedule was
+   counted in rows from the data's first day, so the twins depended on where the data began.)
 2. **From the past only.** The window is the `lookback` days *before* the rebalance day: twins used on day $t$ are
    chosen from `key` up to day $t - 1$, so a twin can't be chosen for having moved with the stock on the day it is
    used.
@@ -120,21 +124,21 @@ stocks one is left without a twin:
 
 | | AAA | BBB | CCC | DDD | EEE | FFF |
 |---|---:|---:|---:|---:|---:|---:|
-| Apr 05 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 08 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 09 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 10 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 11 | BBB | AAA | AAA | EEE | DDD | DDD |
+| Apr 05 | BBB | AAA | AAA | FFF | DDD | DDD |
+| Apr 08 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 09 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 10 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 11 | BBB | AAA | AAA | FFF | FFF | EEE |
 
 `ts_match(identifier(), returns(1), 15, within='sector', rebalance=5, matching='exclusive')`
 
 | | AAA | BBB | CCC | DDD | EEE | FFF |
 |---|---:|---:|---:|---:|---:|---:|
-| Apr 05 | BBB | AAA | · | EEE | DDD | · |
-| Apr 08 | BBB | AAA | · | EEE | DDD | · |
-| Apr 09 | BBB | AAA | · | EEE | DDD | · |
-| Apr 10 | BBB | AAA | · | EEE | DDD | · |
-| Apr 11 | BBB | AAA | · | EEE | DDD | · |
+| Apr 05 | BBB | AAA | · | FFF | · | DDD |
+| Apr 08 | BBB | AAA | · | · | FFF | EEE |
+| Apr 09 | BBB | AAA | · | · | FFF | EEE |
+| Apr 10 | BBB | AAA | · | · | FFF | EEE |
+| Apr 11 | BBB | AAA | · | · | FFF | EEE |
 
 In the first, CCC chose AAA, which chose BBB. In the second the pairs are mutual, and CCC and FFF, one stock too many
 in each sector, have none.
@@ -176,11 +180,11 @@ identifier: the matches themselves, as an ordinary table.
 
 | | AAA | BBB | CCC | DDD | EEE | FFF |
 |---|---:|---:|---:|---:|---:|---:|
-| Apr 05 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 08 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 09 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 10 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 11 | BBB | AAA | AAA | EEE | DDD | DDD |
+| Apr 05 | BBB | AAA | AAA | FFF | DDD | DDD |
+| Apr 08 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 09 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 10 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 11 | BBB | AAA | AAA | FFF | FFF | EEE |
 
 This is how to see and check the twins in a research notebook. It reads the same cached selection as every other
 `ts_match` with the same `key` and options, so looking costs nothing extra. Because the result is labels, it can be
@@ -206,21 +210,21 @@ nothing more.
 
 | | AAA | BBB | CCC | DDD | EEE | FFF |
 |---|---:|---:|---:|---:|---:|---:|
-| Apr 05 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 08 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 09 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 10 | BBB | AAA | AAA | EEE | DDD | DDD |
-| Apr 11 | BBB | AAA | AAA | EEE | DDD | DDD |
+| Apr 05 | BBB | AAA | AAA | FFF | DDD | DDD |
+| Apr 08 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 09 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 10 | BBB | AAA | AAA | FFF | FFF | EEE |
+| Apr 11 | BBB | AAA | AAA | FFF | FFF | EEE |
 
 `ts_match_score(returns(1), 15, within='sector', rebalance=5)`
 
 | | AAA | BBB | CCC | DDD | EEE | FFF |
 |---|---:|---:|---:|---:|---:|---:|
-| Apr 05 | 0.565 | 0.565 | 0.356 | 0.451 | 0.451 | 0.447 |
-| Apr 08 | 0.565 | 0.565 | 0.356 | 0.451 | 0.451 | 0.447 |
-| Apr 09 | 0.565 | 0.565 | 0.356 | 0.451 | 0.451 | 0.447 |
-| Apr 10 | 0.565 | 0.565 | 0.356 | 0.451 | 0.451 | 0.447 |
-| Apr 11 | 0.565 | 0.565 | 0.356 | 0.451 | 0.451 | 0.447 |
+| Apr 05 | 0.727 | 0.727 | 0.391 | 0.566 | 0.220 | 0.566 |
+| Apr 08 | 0.548 | 0.548 | 0.385 | 0.597 | 0.622 | 0.622 |
+| Apr 09 | 0.548 | 0.548 | 0.385 | 0.597 | 0.622 | 0.622 |
+| Apr 10 | 0.548 | 0.548 | 0.385 | 0.597 | 0.622 | 0.622 |
+| Apr 11 | 0.548 | 0.548 | 0.385 | 0.597 | 0.622 | 0.622 |
 
 AAA and BBB are each other's twins, with one score, their correlation over the matching window; CCC's twin is AAA, a
 weaker match. The score is in the metric's own units:

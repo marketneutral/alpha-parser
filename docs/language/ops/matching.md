@@ -39,7 +39,7 @@ expression as leaving it out.
 | `metric` | `'corr'` | How to measure alike: `'corr'`, `'euclidean'`, `'path'`, `'coint'` |
 | `within` | `None` | A group the twin must share: a group's name (`'sector'`) or any labels expression |
 | `matching` | `'nearest'` | `'nearest'`: each stock's closest; `'exclusive'`: reciprocal pairs that don't overlap |
-| `rebalance` | `21` | Choose twins every this many days, and hold them in between |
+| `rebalance` | `21` | Choose twins every this many weekdays, on a fixed calendar, and hold them in between |
 | `min_overlap` | `lookback` | The fewest days a pair must share for it to be compared, at least 2 |
 
 ```qex
@@ -52,7 +52,11 @@ The options can also go by position, in the order above, but a name says what it
 
 ## How a twin is chosen
 
-1. **On a rebalance day.** The first is the day `lookback` days of data exist; then every `rebalance` days.
+1. **On a rebalance day, from a fixed calendar.** The weekdays are counted from Monday 5 January 1970 and cut into
+   blocks of `rebalance`; twins are chosen on the first trading day of each block (a holiday moves it to the next
+   trading day), from the first one with `lookback` days of data before it. The calendar, not the data, fixes the
+   days, so a backtest that starts later chooses the same twins on the same days. (Before qex 0.19 the schedule was
+   counted in rows from the data's first day, so the twins depended on where the data began.)
 2. **From the past only.** The window is the `lookback` days *before* the rebalance day: twins used on day $t$ are
    chosen from `key` up to day $t - 1$, so a twin can't be chosen for having moved with the stock on the day it is
    used.

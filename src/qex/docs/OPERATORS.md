@@ -119,7 +119,7 @@ Across the stocks in the universe, one day at a time. [Cross-sectional in detail
 - [`regression_neut(y, x1, x2, ...)`](ops/cross-sectional.md#regression_neut): One regression per day, across the stocks (not through time): `y` with its least-squares fit on the regressors (and an intercept) taken out
 - [`regression_alpha(y, x1, ..., xk)`](ops/cross-sectional.md#regression_alpha): The intercept of `regression_neut`'s fit: one number per day, the same for every stock
 - [`regression_beta(y, x1, ..., xk, j)`](ops/cross-sectional.md#regression_beta): The `j`-th slope of `regression_neut`'s fit: one number per day, the same for every stock; with one regressor `j` may be left out
-- [`pca_factor(x, window, k[, refit])`](ops/cross-sectional.md#pca_factor): Each stock's beta to the k-th statistical factor of `x`, from a principal component analysis across stocks, refit every `refit` days (default 21)
+- [`pca_factor(x, window, k[, refit])`](ops/cross-sectional.md#pca_factor): Each stock's beta to the k-th statistical factor of `x`, from a principal component analysis across stocks, refit every `refit` weekdays on a fixed calendar (default 21)
 
 ## Groups
 
@@ -140,7 +140,7 @@ Within groups of stocks sharing a label, one day at a time. [Groups in detail â†
 
 Each stock's statistical twin: one particular other stock, chosen from history. [Matching in detail â†’](ops/matching.md)
 
-- [`ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)`](ops/matching.md#ts_match): The `value` of each stock's twin: the stock whose `key` over the last `lookback` days was most alike, chosen every `rebalance` days from the past only; options by name
+- [`ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)`](ops/matching.md#ts_match): The `value` of each stock's twin: the stock whose `key` over the last `lookback` days was most alike, chosen every `rebalance` weekdays on a fixed calendar, from the past only; options by name
 - [`ts_match_score(key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)`](ops/matching.md#ts_match_score): How alike each stock and its twin were when chosen: a correlation, or a distance for the distance metrics; reads the same selection as `ts_match`; options by name
 
 ## Logic and conditions

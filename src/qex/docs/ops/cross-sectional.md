@@ -448,8 +448,12 @@ $y - \hat a - \sum_j \hat b_j x_j$.
 Each stock's beta to the k-th statistical factor of `x` (usually `returns(1)`): the common factors are found from the
 data alone, by a principal component analysis across stocks.
 
-- **Point in time.** Every `refit` days (default 21; the first once `window` days exist), the analysis uses the last
-  `window` days of `x`, ending that day, and holds until the next refit. Before the first, no value.
+- **Point in time.** On the first trading day of every block of `refit` weekdays (default 21), counted from a fixed
+  calendar (Monday 5 January 1970) and starting with the first such day that has `window` days of data, the analysis
+  uses the last `window` days of `x`, ending that day, and holds until the next refit. Before the first, no value.
+  The calendar fixes the refit days, whatever day the data starts on. The factors' identity is followed from one
+  refit to the next (below), so it still starts from the first refit in the data: a backtest that starts later can
+  number or sign the factors differently, though each refit's decomposition is the same.
 - **Which stocks.** Those with values on at least 90% of the window, and in the universe that day.
 - **Correlation, not covariance.** Each stock is scaled by its own volatility first, so a few volatile stocks don't
   make up the first factors.

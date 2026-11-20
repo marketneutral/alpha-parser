@@ -1,5 +1,6 @@
 """pca_factor(x, window, k, refit): each stock's beta to the k-th statistical factor of x."""
 
+from qex.schedule import refit_rows
 import numpy as np
 import pandas as pd
 import pytest
@@ -41,7 +42,7 @@ def test_recovers_planted_factors():
 def test_value_is_the_beta_to_the_eigenportfolio():
     d, _, _ = _two_factor_data(T=300, N=30)
     r = d["r"]
-    out = _ev("pca_factor(field('r'), 120, 2, 1000)", d)               # one fit, at row 119
+    out = _ev("pca_factor(field('r'), 120, 2, 1)", d)                  # a fit every day; row 119's is the first
     window = r.iloc[:120]
     z = (window - window.mean()) / window.std()
     _, _, vt = np.linalg.svd(z.to_numpy(), full_matrices=False)
@@ -55,10 +56,12 @@ def test_value_is_the_beta_to_the_eigenportfolio():
 def test_held_between_refits_and_starts_with_a_full_window():
     d, _, _ = _two_factor_data(T=320)
     out = _ev("pca_factor(field('r'), 252, 1, 21)", d)
-    assert out.iloc[:251].isna().all().all() and out.iloc[251].notna().all()
-    changes = out.iloc[251:].diff().abs().sum(axis=1) > 0
-    refits = np.flatnonzero(changes.to_numpy())
-    assert set(refits) == {21, 42, 63}                               # rows 272, 293, 314: every 21 rows
+    rows = refit_rows(out.index, 251, 21)                             # the calendar's refit days (qex/schedule.py)
+    first = rows[0]
+    assert 251 <= first < 251 + 21                                    # the first block start with a full window
+    assert out.iloc[:first].isna().all().all() and out.iloc[first].notna().all()
+    changes = out.iloc[first:].diff().abs().sum(axis=1) > 0
+    assert set(first + np.flatnonzero(changes.to_numpy())) == set(rows[1:])   # changes only on the later refits
     daily = _ev("pca_factor(field('r'), 252, 1, 1)", d).iloc[251:]
     assert (daily.diff().abs().sum(axis=1).iloc[1:] > 0).all()
 
