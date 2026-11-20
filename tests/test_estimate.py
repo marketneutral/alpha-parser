@@ -535,3 +535,11 @@ def test_the_cross_sectional_stump_s_options_and_cost():
     with pytest.raises(ValueError, match="no option 'permutations'"):
         qex(XS.format("w1").replace("refit=63", "refit=63, permutations=10"))
     assert Q.complexity(qex(XS.format("w1"))).dof == 3
+
+
+def test_estimators_lists_the_built_ins_in_a_fresh_process():
+    import subprocess, sys
+    out = subprocess.run([sys.executable, "-c", "import qex; print(sorted(qex.estimators()['name']))"],
+                         capture_output=True, text=True, check=True).stdout
+    for name in ("ols", "ols_shrunk", "xs_ols", "pca", "stump", "stump_xs"):
+        assert repr(name) in out
