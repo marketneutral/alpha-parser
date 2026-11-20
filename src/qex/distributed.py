@@ -142,8 +142,11 @@ class SignalGraph:
 
     def stats(self) -> Dict[str, int]:
         """Return statistics about the graph."""
+        internal = sum(1 for s in self.nodes.values() if not getattr(type(s), "value_is_frame", True))
         return {
             'total_nodes': len(self.nodes),
+            'operators': len(self.nodes) - internal,           # what a complexity charge should count (qex.complexity)
+            'dof': _graph_dof(self.nodes.values()),
             'output_signals': len(self.outputs),
             'leaf_nodes': sum(1 for deps in self.dependencies.values() if not deps),
             'shared_nodes': sum(1 for key in self.nodes
@@ -497,3 +500,8 @@ class DistributedSignalEngine:
 
     def __exit__(self, *args):
         self.close()
+
+
+def _graph_dof(nodes) -> int:
+    from .estimate import EstimateFit
+    return sum(s.estimator.dof_of(s) for s in nodes if isinstance(s, EstimateFit))

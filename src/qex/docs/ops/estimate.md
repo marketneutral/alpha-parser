@@ -109,6 +109,28 @@ series is refused, with a message.
 and `p` to say whether the switch is real. Fix the state for an economic reason and let the stump learn only where to
 cut it; trying state after state is a search, and each is a trial.
 
+## What an estimate costs: operators and degrees of freedom
+
+A score that charges for complexity (qexarena's utility, alpha_lab's fitness) should charge for what the author chose,
+not for how qex builds its graph. `qex.complexity(signal)` gives two counts:
+
+- **operators**: the distinct operations written, each shared subexpression once. `ts_beta(y, x, 252)` is one, and so
+  is `ts_resid(y, x, 252)` or `pca_factor(r, 252, 2)`. The fit nodes qex builds inside them are not counted, and
+  `ts_beta(...)` and `estimate('ols', 'beta1', ...)` are one node, so the readable spelling costs nothing more.
+- **dof**: the degrees of freedom the expression's estimators learn by searching the data for what works. The stump
+  learns 3 per fit (its threshold, and the side each leaf takes). A beta, a residual or a principal component is a
+  description of the data, not a search for returns, and learns none. One fit counts once, however many of its
+  outputs are read.
+
+| Estimator | dof |
+|---|---|
+| `ols`, `ols_shrunk`, `xs_ols`, `pca` | 0 |
+| `stump` | 3 |
+
+The stump fits on the past only, so its own choices don't inflate a backtest the way an in-sample fit would. A dof
+charge prices flexibility instead: a model that can learn more gives an author's search more ways to find noise, and
+holds up less well. Every estimator must declare its `dof`; registering one without it is refused.
+
 ## Point in time, by protocol
 
 An estimator can be written to a protocol (or vectorized, as the built-ins are: below). The engine owns the schedule and
@@ -153,6 +175,7 @@ import qex
 
 class MeanGap(qex.Estimator):
     """How far the market's return today is from its mean over the window, in the window's standard deviations."""
+    dof = 0                                        # descriptive: nothing searched for
     name, version, axis = "mean_gap", "1", "series"
     n_inputs, outputs = (1, 1), ("z",)
     window, refit, refit_default = "required", "optional", 21
@@ -174,6 +197,7 @@ Per stock, the same idea against each stock's own history, and across stocks aga
 ```python
 class OwnGap(qex.Estimator):
     """Each stock's value today against its own mean over the window."""
+    dof = 0                                        # descriptive: nothing searched for
     name, axis, n_inputs, outputs = "own_gap", "stock", (1, 1), ("gap",)
 
     def fit(self, window, hyper, rng):             # one stock's rows x inputs
@@ -185,6 +209,7 @@ class OwnGap(qex.Estimator):
 
 class MedianGap(qex.Estimator):
     """Each stock's value today against the median of the universe's values over the window."""
+    dof = 0                                        # descriptive: nothing searched for
     name, axis, n_inputs, outputs = "median_gap", "cross_section", (1, 1), ("gap",)
 
     def fit(self, window, hyper, rng, members=None):     # rows x stocks x inputs; members: rows x stocks

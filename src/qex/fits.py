@@ -168,6 +168,7 @@ class Ols(Estimator):
     name, axis, n_inputs = "ols", "stock", (2, None)
     window, refit, refit_default = "required", 1, 1
     hyper = {"min_periods": None}
+    dof = 0                                          # descriptive: nothing searched for
     about = "each stock's rolling regression of y on the regressors: the slopes, the intercept, today's residual"
 
     def outputs_for(self, n_inputs):
@@ -243,6 +244,7 @@ class OlsShrunk(Estimator):
     hyper = {"min_periods": None, "groups": None}
     label_options = ("groups",)
     outputs = ("alpha", "resid", "beta1")
+    dof = 0                                          # descriptive: nothing searched for
     about = "each stock's rolling slope, Vasicek-shrunk toward the day's (or its group's) mean; its intercept, residual"
 
     def check(self, inputs, window, refit, hyper):
@@ -352,6 +354,7 @@ class XsOls(Estimator):
     given to every stock)."""
     name, axis, n_inputs = "xs_ols", "cross_section", (2, None)
     window, refit, refit_default = 1, 1, 1
+    dof = 0                                          # descriptive: nothing searched for
     about = "each day's regression across stocks: the residual, and the intercept and slopes (factor returns)"
 
     def outputs_for(self, n_inputs):
@@ -459,6 +462,7 @@ class Pca(Estimator):
     the k-th statistical factor (pca_factor). Correlation PCA; components tracked and signed across refits."""
     name, axis, n_inputs = "pca", "panel", (1, 1)
     window, refit, refit_default = "required", "optional", 21
+    dof = 0                                          # descriptive: nothing searched for
     about = "each stock's beta to the k-th statistical factor (correlation PCA across stocks)"
 
     def outputs_for(self, n_inputs):
@@ -533,6 +537,7 @@ class Stump(Estimator):
     window, refit, refit_default = "required", "optional", 21
     outputs = ("w1", "threshold", "gap", "p")
     hyper = {"min_leaf": None, "quantiles": 20, "permutations": 200}
+    dof = 3                                          # the threshold, and the side each leaf takes
     about = "a learned threshold on a market state that picks, on each side, the better of two signals (Hansen 2000)"
 
     def check(self, inputs, window, refit, hyper):

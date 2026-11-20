@@ -67,6 +67,9 @@ class Estimator:
         hyper       {name: default} of the options it takes by name beyond window and refit
         about       one sentence: what it measures
         label_options   the options that take labels (a group's name or a labels expression), not numbers
+        dof         required: how many parameters each fit learns by searching the data for what works (a
+                    threshold, a choice of side, a weight chosen for its returns), which a score may charge for
+                    (qex.complexity). Descriptive statistics (a beta, a mean, a component) are not searched: 0.
 
     An estimator is called by an expression and never sees one: its inputs arrive as values.
     """
@@ -82,6 +85,11 @@ class Estimator:
     hyper: dict = {}
     about: str = ""
     label_options: tuple = ()
+    dof: Optional[int] = None
+
+    def dof_of(self, fit) -> int:
+        """The dof one fit learns (it may depend on the fit's options); by default the class's dof."""
+        return self.dof
 
     def outputs_for(self, n_inputs: int) -> tuple:
         return tuple(self.outputs)
@@ -162,6 +170,9 @@ def register_estimator(cls: type) -> type:
     steps = cls.fit is not Estimator.fit and cls.step is not Estimator.step
     if computes == steps:
         raise TypeError(f"estimator {cls.name!r} implements either compute, or fit and step")
+    if cls.dof is None or isinstance(cls.dof, bool) or not isinstance(cls.dof, int) or cls.dof < 0:
+        raise TypeError(f"estimator {cls.name!r} must say how many parameters it learns by searching the data: "
+                        f"dof = 0 for a descriptive statistic (a beta, a mean), else the count (got {cls.dof!r})")
     if cls.axis not in ("series", "stock", "cross_section", "panel"):
         raise ValueError(f"estimator {cls.name!r}: its axis is 'series', 'stock', 'cross_section' or 'panel' "
                          f"(got {cls.axis!r})")
