@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.20.0
+
+**`estimate(name, output, inputs..., window=, refit=, options...)`: every fitted value through one operator** (new
+family *Estimates*, `ops/estimate.md`). qex had built the same thing four times (rolling least squares, its shrunk
+form, the daily cross-sectional fit, the principal components): each fits on a window, refits on a schedule and is
+read by small operators. An *estimator* is that pattern with a name, registered in Python and called by name.
+
+- **The fitted operators are sugar for `estimate`.** Their maths moved, unchanged, into four built-in estimators
+  (`qex/fits.py`): `ols` (`ts_beta`, `ts_alpha`, `ts_resid`), `ols_shrunk` (the shrunk fits, the group prior as
+  `groups=`), `xs_ols` (`regression_neut`, `regression_alpha`, `regression_beta`) and `pca` (`pca_factor`). Each
+  named operator now calls `estimate`: `ts_beta(y, x, 252)` is `estimate('ols', 'beta1', y, x, window=252)`. Their
+  classes (`TsBeta`, `RegressionNeut`, `PcaFactor`, ...) remain as views of one output with no maths of their own,
+  so `isinstance` checks, labels and the DAG's names still work.
+- **Nothing moves.** Every output keeps its operator's cache key, so an expression's identity is what it was
+  (qexarena's `expr_hash`, cached results). Checked against 0.19.0: 27 expressions over the four estimators, with and
+  without a universe, give identical cache keys and identical values bit for bit; `explain_missing` gives identical
+  reasons, and the look-ahead check identical refusals; the cache keys of all 894 distinct expressions in alpha_lab's
+  runs and of every qexarena submission are unchanged; qexarena's sealed-alpha gate passes; and the speed is the
+  same.
+- **What does change: sharing.** Every output of one fit reads it. `regression_neut` now shares its fit with
+  `regression_alpha` and `regression_beta` on the same inputs, and `ts_beta` with `ts_alpha` and `ts_resid`: the
+  internal fit node is an `EstimateFit` (keyed `TsFit`, `RegressionFit` or `PcaBasis`, as before), so the DAG shows
+  one more node above a `ts_beta` or a `regression_neut`. A fit's outputs are computed when first read, so a fit read
+  only for its slope never computes its residual. The kind check's message now names the operator written
+  (`ts_alpha() needs numbers`), not the internal fit.
+- **For readability, prefer the named operator wherever one exists**; `estimate` is for what has no name.
+- **One output that had no name:** `estimate('ols', 'betaj', y, x1, ..., xk, window=)`, the j-th slope of a joint
+  rolling fit (ts_alpha and ts_resid used it; nothing read it).
+- **A new estimator, `stump`**: a learned switch between two signals on a market state, threshold regression (Hansen
+  2000). Outputs `w1` (the weight on the first signal), `threshold`, `gap` and `p` (a permutation test inside the
+  window); options `min_leaf`, `quantiles`, `permutations`.
+- **Two ways to write an estimator:** `compute`, every output at once over the panel, vectorized (how the
+  built-ins are written), or **the protocol**, for a model whose maths qex does not have: `fit` gets only the rows of the window ending on the
+  refit day and `step` one day's row, the schedule is the engine's (on the calendar, `schedule.py`), and randomness is
+  seeded by the call and the refit's date. Point in time by construction, deterministic, and independent of where the
+  data starts. Every axis: `series` (market-level inputs, each output given to every stock), `stock` (`fit` and
+  `step` per stock, with optional vectorized `fit_many` and `step_many`), and `cross_section` and `panel` (`fit` gets
+  the window's rows x stocks x inputs and the universe's members, `step` the day's cross-section; no value outside the
+  universe). The three properties are tested on the stump and on a per-stock and a cross-sectional estimator.
+- **The registry:** `qex.Estimator`, `qex.register_estimator`, `qex.estimators()`, `qex.get_estimator`;
+  `'name@version'` picks a version; a name and version register once. `explain_missing` names estimate nodes as
+  written and calls the days before a first fit a short history; the look-ahead and kind checks cover them.
+- `estimate` takes its options by name (any the estimator declares; unknown ones are refused with the list).
+
+Tests in `tests/test_estimate.py`.
+
 ## 0.19.0
 
 **Refits on a calendar: `ts_match` and `pca_factor` no longer depend on where the data starts.** Both re-fit on a

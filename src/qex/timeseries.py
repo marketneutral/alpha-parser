@@ -7,6 +7,7 @@ import pandas as pd
 from scipy import stats
 
 from .signal import Signal
+from .estimate import EstimateOutput, estimate
 from .universe import in_universe
 
 # Default minimum periods for rolling operations (~1 month)
@@ -298,32 +299,33 @@ def _paired(y, x):
     return y.where(both), x.where(both)
 
 
-class TsBeta(Signal):
-    """Rolling beta (regression coefficient) of signal1 on signal2.
+class _RollingFitView(EstimateOutput):
+    """A named output of a rolling least-squares fit, estimate('ols', ...) or estimate('ols_shrunk', ...): the node is
+    the estimate's, its maths the estimator's (qex/fits.py). The class only names it, for its cache key and its
+    spelling, and reads the fit's parameters by their old names."""
+
+    signal1 = property(lambda self: self.fit.inputs[0])
+    signal2 = property(lambda self: self.fit.inputs[1])
+    regressors = property(lambda self: self.fit.inputs[1:])
+    more = property(lambda self: self.fit.inputs[2:] or None)
+    period = property(lambda self: self.fit.window)
+    min_periods = property(lambda self: self.fit.hyper["min_periods"])
+    groups = property(lambda self: self.fit.hyper.get("groups"))
+
+
+class TsBeta(_RollingFitView):
+    """Rolling beta (regression coefficient) of signal1 on signal2: ts_beta(y, x, period), which is
+    estimate('ols', 'beta1', y, x, window=period).
 
     Computes: cov(y, x) / var(x) where y=signal1, x=signal2, both over the days in the window
     where y and x are both valid (paired observations, as least squares does).
     Useful for hedge ratios, market beta, factor exposures.
     """
 
-    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None):
-        self.signal1 = signal1
-        self.signal2 = signal2
-        self.period = period
-        self.min_periods = _get_min_periods(period, min_periods)
 
-    def _compute(self, data):
-        y, x = _paired(self.signal1.evaluate(data), self.signal2.evaluate(data))
-        cov = y.rolling(self.period, min_periods=self.min_periods).cov(x)
-        var = x.rolling(self.period, min_periods=self.min_periods).var()
-        return cov / var
-
-    def _cache_key(self):
-        return ('TsBeta', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
-
-
-class TsBetaShrunk(Signal):
-    """Rolling beta of signal1 on signal2, shrunk toward the cross-sectional mean (Vasicek 1973).
+class TsBetaShrunk(_RollingFitView):
+    """Rolling beta of signal1 on signal2, shrunk toward the cross-sectional mean (Vasicek 1973):
+    ts_beta_shrunk(y, x, period[, min_periods][, groups]), which is estimate('ols_shrunk', 'beta1', ...).
 
     Each name's OLS beta b over the window is pulled toward the day's cross-sectional mean
     beta in proportion to how noisy it is:
@@ -345,173 +347,10 @@ class TsBetaShrunk(Signal):
     shrink by, so its stocks keep their own betas.
     """
 
-    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None, groups=None):
-        self.signal1 = signal1
-        self.signal2 = signal2
-        self.period = period
-        self.min_periods = max(_get_min_periods(period, min_periods), 3)
-        self.groups = groups
 
-    def _compute(self, data):
-        y = self.signal1.evaluate(data)
-        x = self.signal2.evaluate(data)
-        both = y.notna() & x.notna()
-        y, x = y.where(both), x.where(both)                      # paired observations only
-        roll = lambda v: v.rolling(self.period, min_periods=self.min_periods)
-        n = roll(both.astype(float).where(both)).count()
-        vx, vy, cov = roll(x).var(), roll(y).var(), roll(y).cov(x)
-        vx = vx.where(vx > 0)
-        b = cov / vx
-        resid = (vy - cov * b).clip(lower=0) * (n - 1) / (n - 2)
-        se2 = resid / ((n - 1) * vx)
-        if self.groups is not None:
-            return _shrink_within_groups(b, se2, self.groups, data)
-        cs = in_universe(b)                                    # the prior comes from the universe
-        tau2 = cs.var(axis=1)
-        w = (1 / (1 + se2.div(tau2.where(tau2 > 0), axis=0))).where(b.notna())
-        return w * b + (1 - w).mul(cs.mean(axis=1), axis=0)
-
-    def _cache_key(self):
-        key = ('TsBetaShrunk', self.signal1._cache_key(), self.signal2._cache_key(), self.period, self.min_periods)
-        if self.groups is None:
-            return key                                          # unchanged since 0.5: expressions are hashed by it
-        from .groups import _groups_key
-        return key + (_groups_key(self.groups),)
-
-
-def _shrink_within_groups(b: pd.DataFrame, se2: pd.DataFrame, groups, data) -> pd.DataFrame:
-    """Vasicek shrinkage with each group's prior: the mean and variance of the day's betas within the stock's group
-    (members of the universe only). No group: no value. A group with fewer than two betas: the stock's own beta."""
-    from .groups import _get_group_data, _group_codes, _group_totals
-    cs = in_universe(b)
-    codes, n_groups = _group_codes(cs, _get_group_data(data, groups))
-    v = cs.to_numpy(dtype=float)
-    key, sums, counts = _group_totals(v, codes, n_groups)
-    ok = (codes >= 0) & ~np.isnan(v)
-    with np.errstate(invalid='ignore', divide='ignore'):
-        means = sums / counts
-        dev = np.zeros(v.shape)
-        dev[ok] = (v[ok] - means[key[ok]]) ** 2
-        tau2 = np.bincount(key[ok], weights=dev[ok], minlength=sums.size) / np.where(counts >= 2, counts - 1, np.nan)
-    has = codes >= 0
-    prior_mean, prior_var = np.full(v.shape, np.nan), np.full(v.shape, np.nan)
-    prior_mean[has], prior_var[has] = means[key[has]], tau2[key[has]]
-    beta, s2 = b.to_numpy(dtype=float), se2.to_numpy(dtype=float)
-    with np.errstate(invalid='ignore', divide='ignore'):
-        w = 1 / (1 + s2 / np.where(prior_var > 0, prior_var, np.nan))
-        out = w * beta + (1 - w) * prior_mean
-    out = np.where(has & ~(prior_var > 0), beta, out)             # no spread in the group: nothing to shrink by
-    out[~has] = np.nan
-    return pd.DataFrame(out, index=b.index, columns=b.columns)
-
-
-def _paired_means(y, x, period: int, min_periods: int):
-    """y and x on their paired days, and each one's rolling mean over those days."""
-    y, x = _paired(y, x)
-    roll = lambda v: v.rolling(period, min_periods=min_periods).mean()
-    return y, x, roll(y), roll(x)
-
-
-def _multi_fit(y: pd.DataFrame, xs: list, period: int, min_periods: int, chunk: int = 256):
-    """Rolling least squares of y on several regressors and an intercept, per name, over each window's days where y
-    and every x have a value: (y, the x's, alpha, [beta_j]) on those days, NaN where a window has fewer than
-    max(min_periods, k + 2) such days. Regressors that duplicate each other get the minimum-norm fit."""
-    xs = [x if isinstance(x, pd.DataFrame) else pd.DataFrame({c: x for c in y.columns}, index=y.index) for x in xs]
-    xs = [x.reindex_like(y) for x in xs]
-    k = len(xs)
-    ok = y.notna().to_numpy().copy()
-    for x in xs:
-        ok &= x.notna().to_numpy()
-    Y = np.where(ok, y.to_numpy(dtype=float), 0.0)
-    X = np.stack([np.where(ok, x.to_numpy(dtype=float), 0.0) for x in xs], axis=2)          # dates x names x k
-    roll = lambda a: pd.DataFrame(a.reshape(a.shape[0], -1)).rolling(period, min_periods=1).sum().to_numpy() \
-        .reshape(a.shape)
-    n = roll(ok.astype(float))
-    sy, sx = roll(Y), roll(X)
-    sxx = roll(X[:, :, :, None] * X[:, :, None, :])
-    sxy = roll(X * Y[:, :, None])
-    T, N = Y.shape
-    alpha, betas = np.full((T, N), np.nan), np.full((T, N, k), np.nan)
-    enough = n >= max(min_periods, k + 2)
-    for lo in range(0, T, chunk):                                       # bounded memory: a few hundred dates at a time
-        hi = min(lo + chunk, T)
-        e = enough[lo:hi]
-        if not e.any():
-            continue
-        nn = n[lo:hi][e]
-        mx, my = sx[lo:hi][e] / nn[:, None], sy[lo:hi][e] / nn
-        cxx = sxx[lo:hi][e] - nn[:, None, None] * mx[:, :, None] * mx[:, None, :]
-        cxy = sxy[lo:hi][e] - nn[:, None] * mx * my[:, None]
-        diag = np.abs(np.diagonal(cxx, axis1=1, axis2=2)).prod(axis=1)
-        good = np.abs(np.linalg.det(cxx)) > 1e-10 * np.where(diag > 0, diag, np.inf)
-        b = np.empty_like(cxy)
-        if good.any():
-            b[good] = np.linalg.solve(cxx[good], cxy[good][:, :, None])[:, :, 0]
-        if (~good).any():                                               # duplicated regressors: the minimum-norm fit
-            b[~good] = (np.linalg.pinv(cxx[~good]) @ cxy[~good][:, :, None])[:, :, 0]
-        a = np.full((hi - lo, N), np.nan)
-        a[e] = my - (b * mx).sum(axis=1)
-        alpha[lo:hi] = a
-        bb = np.full((hi - lo, N, k), np.nan)
-        bb[e] = b
-        betas[lo:hi] = bb
-    yv = y.where(ok)
-    xv = [x.where(ok) for x in xs]
-    return yv, xv, pd.DataFrame(alpha, index=y.index, columns=y.columns), \
-        [pd.DataFrame(betas[:, :, j], index=y.index, columns=y.columns) for j in range(k)]
-
-
-class FitResult:
-    """A rolling time-series fit's value: y and the regressors on the fit's days, the slopes and the intercept, each
-    a dates x names frame. Not a frame itself: the internal TsFit node holds it, and ts_alpha and ts_resid read it."""
-
-    __slots__ = ("y", "xs", "betas", "alpha")
-
-    def __init__(self, y, xs, betas, alpha):
-        self.y, self.xs, self.betas, self.alpha = y, xs, betas, alpha
-
-
-class TsFit(Signal):
-    """The rolling regression behind ts_alpha and ts_resid (and their shrunk versions): an internal node, so every
-    operator on the same y, regressors, window and prior shares one fit, in a compute_context, in SignalGraph and on
-    Dask, and the DAG shows it shared.
-
-    With one regressor its slope is an input node, ts_beta (or ts_beta_shrunk), so a ts_beta written alongside is the
-    same node. With several, the joint fit is computed here (_multi_fit). Its value is a FitResult, not a frame.
-    """
-
-    value_is_frame = False
-
-    def __init__(self, y: Signal, xs: tuple, period: int, min_periods: int, shrunk: bool = False, groups=None):
-        self.y = y
-        self.xs = tuple(xs)
-        self.period = period
-        self.min_periods = min_periods
-        self.shrunk = shrunk
-        self.groups = groups
-        if len(self.xs) == 1:
-            self.slope = (TsBetaShrunk(y, self.xs[0], period, min_periods, groups) if shrunk
-                          else TsBeta(y, self.xs[0], period, min_periods))
-        else:
-            self.slope = None
-
-    def _compute(self, data):
-        if self.slope is None:
-            y, xs, alpha, betas = _multi_fit(self.y.evaluate(data), [x.evaluate(data) for x in self.xs],
-                                             self.period, self.min_periods)
-            return FitResult(y, xs, betas, alpha)
-        b = self.slope.evaluate(data)
-        y, x, my, mx = _paired_means(self.y.evaluate(data), self.xs[0].evaluate(data), self.period, self.min_periods)
-        return FitResult(y, [x], [b], my - b * mx)
-
-    def _cache_key(self):
-        from .groups import _groups_key
-        return ('TsFit', self.y._cache_key(), tuple(x._cache_key() for x in self.xs), self.period, self.min_periods,
-                self.shrunk, None if self.groups is None else _groups_key(self.groups))
-
-
-class TsAlpha(Signal):
-    """Rolling intercept of signal1 on signal2: the alpha of y = alpha + beta * x over the window.
+class TsAlpha(_RollingFitView):
+    """Rolling intercept of signal1 on signal2: the alpha of y = alpha + beta * x over the window,
+    ts_alpha(y, x1, ..., xk, period), which is estimate('ols', 'alpha', ...).
 
     Fitted on the days both have a value, like ts_beta: alpha = mean(y) - beta * mean(x), both means over
     those paired days. Part of the window, with ts_beta's minimum. In y's units per day: for daily returns
@@ -521,42 +360,13 @@ class TsAlpha(Signal):
     y = alpha + b1 x1 + b2 x2 + b3 x3 over each window's days where y and every x have a value (at least
     k + 2 of them): a multi-factor alpha, net of all the regressors at once.
 
-    Its input is a TsFit node, shared with ts_resid (and a ts_beta) on the same y, x and window.
+    Its fit is shared with ts_resid (and a ts_beta) on the same y, x and window: one node, read for each output.
     """
 
-    _shrunk = False
-
-    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None, *more: Signal,
-                 groups=None):
-        mp = _get_min_periods(period, min_periods)
-        if self._shrunk:
-            mp = max(mp, 3)
-        self.fit = TsFit(signal1, (signal2,) + tuple(more), period, mp, self._shrunk, groups)
-
-    # the fit's parameters, read through (not attributes, so the fit is the node's only input)
-    signal1 = property(lambda self: self.fit.y)
-    signal2 = property(lambda self: self.fit.xs[0])
-    more = property(lambda self: self.fit.xs[1:] or None)
-    period = property(lambda self: self.fit.period)
-    min_periods = property(lambda self: self.fit.min_periods)
-    groups = property(lambda self: self.fit.groups)
-
     def beta(self) -> Signal:
-        """The slope this fit uses (one regressor)."""
-        return self.fit.slope
-
-    def _compute(self, data):
-        return self.fit.evaluate(data).alpha
-
-    def _cache_key(self):
-        key = (type(self).__name__, self.signal1._cache_key(), self.signal2._cache_key(), self.period,
-               self.min_periods)
-        if self.more:
-            key += tuple(s._cache_key() for s in self.more)
-        if self.groups is not None:
-            from .groups import _groups_key
-            key += (_groups_key(self.groups),)
-        return key
+        """The slope this fit uses (one regressor): the ts_beta (or ts_beta_shrunk) node of the same fit."""
+        from .estimate import _output
+        return _output(self.fit, "beta1")
 
 
 class TsAlphaShrunk(TsAlpha):
@@ -567,11 +377,6 @@ class TsAlphaShrunk(TsAlpha):
     With groups, the beta is shrunk toward each group's mean, as in ts_beta_shrunk(y, x, period, groups).
     """
 
-    _shrunk = True
-
-    def __init__(self, signal1: Signal, signal2: Signal, period: int, min_periods: int = None, groups=None):
-        super().__init__(signal1, signal2, period, min_periods, groups=groups)
-
 
 class TsResid(TsAlpha):
     """Today's residual of y on x from the window's fit: y - alpha - beta * x, with alpha and beta from ts_alpha and
@@ -579,19 +384,10 @@ class TsResid(TsAlpha):
     market's, its idiosyncratic return. No value where y or x is missing today.
     """
 
-    def _compute(self, data):
-        f = self.fit.evaluate(data)
-        out = f.y - f.alpha
-        for x, b in zip(f.xs, f.betas):
-            out = out - b * x
-        return out
-
 
 class TsResidShrunk(TsAlphaShrunk):
     """Today's residual from ts_beta_shrunk's fit: y - alpha_shrunk - beta_shrunk * x. With groups, the beta is
     shrunk toward each group's mean."""
-
-    _compute = TsResid._compute
 
 
 class TsBetaEwma(Signal):
@@ -903,8 +699,9 @@ def ewma_cov(signal1: Signal, signal2: Signal, halflife: int) -> EwmaCov:
 
 
 def ts_beta(signal1: Signal, signal2: Signal, period: int, min_periods: int = None) -> TsBeta:
-    """Create a TsBeta signal (rolling beta: cov(y, x) / var(x)). min_periods defaults to min(20, period)."""
-    return TsBeta(signal1, signal2, period, min_periods)
+    """Rolling beta, cov(y, x) / var(x): estimate('ols', 'beta1', y, x, window=period). min_periods defaults to
+    min(20, period)."""
+    return estimate('ols', 'beta1', signal1, signal2, window=period, min_periods=min_periods)
 
 
 def _only_constants(s) -> bool:
@@ -949,7 +746,8 @@ def _shrunk_args(name: str, rest: tuple):
 def ts_beta_shrunk(signal1: Signal, signal2: Signal, period: int, *rest) -> TsBetaShrunk:
     """Create a TsBetaShrunk signal: the rolling beta, Vasicek-shrunk toward the day's mean beta, or with groups toward
     each group's: ts_beta_shrunk(y, x, period[, min_periods][, groups])."""
-    return TsBetaShrunk(signal1, signal2, period, *_shrunk_args("ts_beta_shrunk", rest))
+    min_periods, groups = _shrunk_args("ts_beta_shrunk", rest)
+    return estimate('ols_shrunk', 'beta1', signal1, signal2, window=period, min_periods=min_periods, groups=groups)
 
 
 def _fit_args(name: str, y, args: tuple):
@@ -977,28 +775,28 @@ def ts_alpha(signal1: Signal, *args) -> TsAlpha:
     """Create a TsAlpha signal: the rolling intercept of y on one or more regressors,
     ts_alpha(y, x1, ..., xk, period[, min_periods]). With one, mean(y) - beta * mean(x) over the paired days."""
     regs, period, min_periods = _fit_args("ts_alpha", signal1, args)
-    return TsAlpha(signal1, regs[0], period, min_periods, *regs[1:])
+    return estimate('ols', 'alpha', signal1, *regs, window=period, min_periods=min_periods)
 
 
 def ts_alpha_shrunk(signal1: Signal, signal2: Signal, period: int, *rest) -> TsAlphaShrunk:
     """Create a TsAlphaShrunk signal: the intercept that goes with ts_beta_shrunk's slope,
     ts_alpha_shrunk(y, x, period[, min_periods][, groups])."""
     min_periods, groups = _shrunk_args("ts_alpha_shrunk", rest)
-    return TsAlphaShrunk(signal1, signal2, period, min_periods, groups)
+    return estimate('ols_shrunk', 'alpha', signal1, signal2, window=period, min_periods=min_periods, groups=groups)
 
 
 def ts_resid(signal1: Signal, *args) -> TsResid:
     """Create a TsResid signal: today's y - alpha - sum(beta_j * x_j), from the window's fit,
     ts_resid(y, x1, ..., xk, period[, min_periods])."""
     regs, period, min_periods = _fit_args("ts_resid", signal1, args)
-    return TsResid(signal1, regs[0], period, min_periods, *regs[1:])
+    return estimate('ols', 'resid', signal1, *regs, window=period, min_periods=min_periods)
 
 
 def ts_resid_shrunk(signal1: Signal, signal2: Signal, period: int, *rest) -> TsResidShrunk:
     """Create a TsResidShrunk signal: today's residual from ts_beta_shrunk's fit,
     ts_resid_shrunk(y, x, period[, min_periods][, groups])."""
     min_periods, groups = _shrunk_args("ts_resid_shrunk", rest)
-    return TsResidShrunk(signal1, signal2, period, min_periods, groups)
+    return estimate('ols_shrunk', 'resid', signal1, signal2, window=period, min_periods=min_periods, groups=groups)
 
 
 def ts_beta_ewma(signal1: Signal, signal2: Signal, halflife: int) -> TsBetaEwma:

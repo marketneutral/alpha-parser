@@ -77,6 +77,7 @@ from .crosssection import (
 
 # Conditional operations
 from .conditional import Where, where, Coalesce, coalesce
+from .estimate import Estimator, register_estimator, estimators, get_estimator, estimate
 
 # Group operations
 from .groups import (
@@ -126,6 +127,8 @@ def __dir__():
 
 
 __all__ = [
+    # Estimators (estimate)
+    'Estimator', 'register_estimator', 'estimators', 'get_estimator', 'estimate',
     # Context
     'compute_context',
     'get_context',

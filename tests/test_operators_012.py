@@ -170,7 +170,7 @@ def test_regression_neut_tools_see_every_regressor():
     assert label(e) == "regression_neut(returns(5), returns(1), volatility(20), field('b'))"
     g = SignalGraph()
     g.add_signal(e, name="a")
-    assert g.stats()["total_nodes"] == 5
+    assert g.stats()["total_nodes"] == 6           # y, the three regressors, the fit, and regression_neut
     assert e._cache_key() != qex("regression_neut(returns(5), returns(1), field('b'), volatility(20))")._cache_key()
 
 

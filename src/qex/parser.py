@@ -19,6 +19,7 @@ from .timeseries import (
     ts_mean_events, ts_std_events, ts_sum_events, ts_count_events,
 )
 from .match import ts_match, ts_match_score
+from .estimate import estimate
 from .crosssection import (gaussrank, rank, zscore, demean, quantile, winsorize, scale, truncate, regression_neut, pca_factor,
     regression_alpha, regression_beta)
 from .conditional import where, coalesce
@@ -115,6 +116,7 @@ class QexParser:
             'gaussrank': gaussrank,
             'group_gaussrank': group_gaussrank,
             'pca_factor': pca_factor,
+            'estimate': estimate,
 
             # Conditional
             'where': where,
@@ -377,6 +379,15 @@ class QexParser:
             return {}
         allowed = KEYWORDS.get(func_name)
         first = node.keywords[0].arg
+        if func_name == "estimate":                     # its options are the estimator's: estimate() checks them
+            out = {}
+            for kw in node.keywords:
+                if kw.arg is None:
+                    raise ValueError("estimate() takes its options written out, not **unpacked")
+                if kw.arg in out:
+                    raise ValueError(f"estimate()'s {kw.arg} is given twice")
+                out[kw.arg] = self._visit_arg(kw.value)
+            return out
         if allowed is None:
             raise ValueError(f"{func_name}() takes its arguments by position, not by name: write "
                              f"{func_name}(x, 20), not {func_name}(x, {first or '...'}=20)")
@@ -461,6 +472,7 @@ def _collapse_whitespace(expression: str) -> str:
 # Operators that take keyword arguments, and the names they take by name. Every other operator takes its arguments by
 # position only. (Since 0.15.0; ts_match's five options would be unreadable by position.)
 KEYWORDS = {
+    "estimate": (),                                  # any option the named estimator takes: checked by estimate()
     "ts_match": ("metric", "within", "matching", "rebalance", "min_overlap"),
     "ts_match_score": ("metric", "within", "matching", "rebalance", "min_overlap", "stat"),
 }
@@ -470,6 +482,7 @@ POSITIONAL_ORDER = {
 }
 
 _ARG_RULES = {
+    "estimate": ("name", "name"),
     "returns": ("window", "name"), "volatility": ("window", "name"), "volume": ("window",), "adv": ("window",),
     "field": ("name",), "group": ("name",),
     **{f: ("x", "window") for f in ("ts_mean", "ts_std", "ts_sum", "ts_max", "ts_min", "ts_var", "ts_rank",

@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 
 from .signal import Signal
+from .estimate import EstimateOutput, estimate
 from .universe import in_universe, finite_in_universe, universe_members
-from .schedule import refit_rows
 
 
 class Rank(Signal):
@@ -224,8 +224,19 @@ def truncate(signal: Signal, max_weight: float) -> Truncate:
     return Truncate(signal, max_weight)
 
 
-class RegressionNeut(Signal):
-    """Cross-sectional residual of y on one or more regressors, with an intercept, separately each day.
+class _XsFitView(EstimateOutput):
+    """A named output of the day's cross-sectional fit, estimate('xs_ols', ...): the node is the estimate's, its maths
+    the estimator's (qex/fits.py). The class only names it, for its cache key and spelling."""
+
+    y = property(lambda self: self.fit.inputs[0])
+    x = property(lambda self: self.fit.inputs[1])
+    regressors = property(lambda self: self.fit.inputs[1:])
+    more = property(lambda self: self.fit.inputs[2:] or None)
+
+
+class RegressionNeut(_XsFitView):
+    """Cross-sectional residual of y on one or more regressors, with an intercept, separately each day:
+    regression_neut(y, x1, ..., xk), which is estimate('xs_ols', 'resid', y, x1, ..., xk).
 
     One regressor, on each date over the names where both y and x are valid:
         residual = (y - mean(y)) - b * (x - mean(x)),   b = cov(y, x) / var(x)
@@ -246,139 +257,27 @@ class RegressionNeut(Signal):
     clipping, rescaling) is only approximately neutral to x, and less so the more the cap binds.
     """
 
-    def __init__(self, y: Signal, x: Signal, *more: Signal):
-        self.y = y
-        self.x = x
-        self.more = tuple(more) if more else None        # regressors after the first; None keeps the one-x form
 
-    def _compute(self, data):
-        if self.more:
-            return self._compute_multiple(data)
-        y = finite_in_universe(self.y.evaluate(data))
-        x = finite_in_universe(self.x.evaluate(data).reindex_like(y))
-        valid = y.notna() & x.notna()
-        valid = valid & (valid.sum(axis=1) >= 3).to_numpy()[:, None]          # k + 2 names, k = 1
-        y, x = y.where(valid), x.where(valid)
-        yc = y.sub(y.mean(axis=1), axis=0)
-        xc = x.sub(x.mean(axis=1), axis=0)
-        var = (xc * xc).sum(axis=1)
-        b = ((yc * xc).sum(axis=1) / var.where(var > 0)).fillna(0.0)
-        return yc - xc.mul(b, axis=0)
-
-    def _compute_multiple(self, data):
-        import numpy as np
-        import pandas as pd
-        y = finite_in_universe(self.y.evaluate(data))
-        xs = [finite_in_universe(s.evaluate(data).reindex_like(y)) for s in (self.x,) + self.more]
-        Y = y.to_numpy(dtype=float)
-        X = np.stack([x.to_numpy(dtype=float) for x in xs], axis=2)          # dates x names x regressors
-        valid = np.isfinite(Y) & np.isfinite(X).all(axis=2)
-        out = np.full(Y.shape, np.nan)
-        for t in range(Y.shape[0]):
-            ok = valid[t]
-            if ok.sum() < X.shape[2] + 2:                # an exact fit: the residual would be rounding noise
-                continue
-            yc = Y[t, ok] - Y[t, ok].mean()
-            A = X[t, ok, :] - X[t, ok, :].mean(axis=0)
-            beta = np.linalg.lstsq(A, yc, rcond=None)[0]
-            out[t, ok] = yc - A @ beta
-        return pd.DataFrame(out, index=y.index, columns=y.columns)
-
-    def _cache_key(self):
-        more = tuple(s._cache_key() for s in self.more) if self.more else ()
-        return ('RegressionNeut', self.y._cache_key(), self.x._cache_key()) + more
-
-
-class RegressionFitResult:
-    """The cross-sectional fit's value: per day, the intercept and the k slopes (NaN on a day with no fit), and the
-    dates and names to give them to."""
-
-    __slots__ = ("index", "columns", "alpha", "betas")
-
-    def __init__(self, index, columns, alpha, betas):
-        self.index, self.columns, self.alpha, self.betas = index, columns, alpha, betas
-
-    def broadcast(self, values) -> pd.DataFrame:
-        """One number per day, given to every name."""
-        return pd.DataFrame(np.repeat(values[:, None], len(self.columns), axis=1), index=self.index,
-                            columns=self.columns)
-
-
-class RegressionFit(Signal):
-    """The cross-sectional regression behind regression_alpha and regression_beta: an internal node, so the intercept
-    and every slope of the same fit share it, in a compute_context, in SignalGraph and on Dask, and the DAG shows it
-    shared. Each day, over the names in the universe where y and every x are valid (at least k + 2), it fits
-    y_i = a + sum_j b_j x_ij + e_i by least squares, as regression_neut does. Its value is a RegressionFitResult."""
-
-    value_is_frame = False
-
-    def __init__(self, y: Signal, xs: tuple):
-        self.y = y
-        self.xs = tuple(xs)
-
-    def _compute(self, data):
-        y = finite_in_universe(self.y.evaluate(data))
-        xs = [finite_in_universe(s.evaluate(data).reindex_like(y)) for s in self.xs]
-        Y = y.to_numpy(dtype=float)
-        X = np.stack([x.to_numpy(dtype=float) for x in xs], axis=2)          # dates x names x regressors
-        valid = np.isfinite(Y) & np.isfinite(X).all(axis=2)
-        k = X.shape[2]
-        alpha, betas = np.full(Y.shape[0], np.nan), np.full((Y.shape[0], k), np.nan)
-        for t in range(Y.shape[0]):
-            ok = valid[t]
-            if ok.sum() < k + 2:                                             # regression_neut's minimum
-                continue
-            ym, xm = Y[t, ok].mean(), X[t, ok, :].mean(axis=0)
-            b = np.linalg.lstsq(X[t, ok, :] - xm, Y[t, ok] - ym, rcond=None)[0]
-            alpha[t], betas[t] = ym - b @ xm, b
-        return RegressionFitResult(y.index, y.columns, alpha, betas)
-
-    def _cache_key(self):
-        return ('RegressionFit', self.y._cache_key(), tuple(x._cache_key() for x in self.xs))
-
-
-class RegressionAlpha(Signal):
-    """The intercept of the day's cross-sectional fit (regression_neut's): one number per day, given to every stock.
+class RegressionAlpha(_XsFitView):
+    """The intercept of the day's cross-sectional fit (regression_neut's): one number per day, given to every stock;
+    regression_alpha(y, x1, ..., xk), which is estimate('xs_ols', 'alpha', ...).
 
     A property of the day, not of a stock: it is given to every name, in the universe or not, so its history is the
     same for all (NaN for every name on a day with no fit). With today's returns on characteristics known at
     yesterday's close, it is the return of a stock with none of them: on betas, the zero-beta portfolio's return
-    (Fama-MacBeth). Its input is a RegressionFit node, shared with regression_beta on the same y and regressors.
+    (Fama-MacBeth). Its fit is shared with regression_beta on the same y and regressors.
     """
-
-    def __init__(self, y: Signal, x: Signal, *more: Signal):
-        self.fit = RegressionFit(y, (x,) + tuple(more))
-
-    y = property(lambda self: self.fit.y)
-    x = property(lambda self: self.fit.xs[0])
-    more = property(lambda self: self.fit.xs[1:] or None)
-
-    def _compute(self, data):
-        f = self.fit.evaluate(data)
-        return f.broadcast(f.alpha)
-
-    def _cache_key(self):
-        more = tuple(s._cache_key() for s in self.more) if self.more else ()
-        return ('RegressionAlpha', self.y._cache_key(), self.x._cache_key()) + more
 
 
 class RegressionBeta(RegressionAlpha):
-    """The j-th slope of the day's cross-sectional fit: one number per day, given to every stock.
+    """The j-th slope of the day's cross-sectional fit: one number per day, given to every stock;
+    regression_beta(y, x1, ..., xk, j), which is estimate('xs_ols', 'betaj', ...).
 
     With today's returns on characteristics known at yesterday's close, it is the day's return to the j-th
     characteristic, net of the others: a factor return, whose average over time is its premium (Fama-MacBeth).
     """
 
-    def __init__(self, y: Signal, x: Signal, *more: Signal, j: int = 1):
-        super().__init__(y, x, *more)
-        self.j = j
-
-    def _compute(self, data):
-        f = self.fit.evaluate(data)
-        return f.broadcast(f.betas[:, self.j - 1])
-
-    def _cache_key(self):
-        return ('RegressionBeta',) + super()._cache_key()[1:] + (self.j,)
+    j = property(lambda self: int(self.output[4:]))
 
 
 def regression_alpha(y: Signal, x: Signal, *more: Signal) -> RegressionAlpha:
@@ -387,7 +286,7 @@ def regression_alpha(y: Signal, x: Signal, *more: Signal) -> RegressionAlpha:
         if not isinstance(s, Signal):
             raise ValueError(f"regression_alpha() takes y and one or more regressors, each an expression, not {s!r}: "
                              f"regression_alpha(y, x1, ..., xk)")
-    return RegressionAlpha(y, x, *more)
+    return estimate('xs_ols', 'alpha', y, x, *more)
 
 
 def regression_beta(y: Signal, *args) -> RegressionBeta:
@@ -409,106 +308,23 @@ def regression_beta(y: Signal, *args) -> RegressionBeta:
     if isinstance(j, bool) or not isinstance(j, (int, float)) or not float(j).is_integer() or not 1 <= j <= len(regs):
         raise ValueError(f"regression_beta()'s last argument says which regressor's slope to give: a whole number "
                          f"from 1 to {len(regs)}, not {j!r} ({usage})")
-    return RegressionBeta(y, regs[0], *regs[1:], j=int(j))
+    return estimate('xs_ols', f'beta{int(j)}', y, *regs)
 
 
 def regression_neut(y: Signal, x: Signal, *more: Signal) -> RegressionNeut:
-    """Create a RegressionNeut signal: y with its daily cross-sectional fit on x (and any further regressors) removed."""
-    return RegressionNeut(y, x, *more)
+    """y with its daily cross-sectional fit on x (and any further regressors) removed:
+    estimate('xs_ols', 'resid', y, x, ...)."""
+    return estimate('xs_ols', 'resid', y, x, *more)
 
 
 # --- statistical factors -------------------------------------------------------------------------
 
-PCA_MAX_COMPONENTS = 20          # components kept at each refit; pca_factor's k is at most this
-PCA_MIN_COVERAGE = 0.9           # a name enters a fit with values on at least this share of the window's days
+class PcaFactor(EstimateOutput):
+    """Each stock's beta to the k-th statistical factor of x: a principal component of x across stocks;
+    pca_factor(x, window, k, refit), which is estimate('pca', 'betak', x, window=, refit=). The maths is the pca
+    estimator's (qex/fits.py); this class only names the output.
 
-
-def _pca_fits(values, window: int, refit: int, members):
-    """The principal components of values (dates x names) refit every `refit` rows on the trailing `window` rows.
-
-    Returns [(position, names, betas)], one per refit position with a fit, in date order; betas is an m x n array,
-    row j the names' betas to the j-th eigenportfolio. Correlation PCA: each name is demeaned and divided by its
-    volatility over the window, missing days count as its mean. Components are tracked across refits (matched to the
-    previous fit's by overlap on the names both share) and signed to agree with it; the first fit is signed so that
-    its betas sum to a positive number (the first component is the market, long).
-    """
-    import numpy as np
-    from scipy.optimize import linear_sum_assignment
-
-    v = values.to_numpy(dtype=float)
-    v = np.where(np.isfinite(v), v, np.nan)
-    T, N = v.shape
-    fits, prev = [], None                              # prev: (names, unit eigenvectors) of the last fit
-    for p in refit_rows(values.index, window - 1, refit):          # on the calendar, not from the first row (schedule.py)
-        w = v[p - window + 1:p + 1]
-        ok = np.isfinite(w).sum(axis=0) >= np.ceil(PCA_MIN_COVERAGE * window)
-        if members is not None:
-            ok &= members[p]
-        names = np.flatnonzero(ok)
-        if names.size < 3:
-            continue
-        z = w[:, names]
-        mean = np.nanmean(z, axis=0)
-        sd = np.nanstd(z, axis=0, ddof=1)
-        keep = np.isfinite(sd) & (sd > 0)
-        names, z, mean, sd = names[keep], z[:, keep], mean[keep], sd[keep]
-        if names.size < 3:
-            continue
-        z = np.nan_to_num((z - mean) / sd)
-        _, _, vt = np.linalg.svd(z, full_matrices=False)
-        comps = vt[:min(PCA_MAX_COMPONENTS, vt.shape[0])]
-        if prev is not None:
-            common, ip, inew = np.intersect1d(prev[0], names, return_indices=True)
-            if common.size >= 2:
-                overlap = prev[1][:, ip] @ comps[:, inew].T                       # previous x new
-                rows, cols = linear_sum_assignment(-np.abs(overlap))             # rows: previous slots, sorted
-                order = list(cols) + [j for j in range(comps.shape[0]) if j not in set(cols)]   # unmatched: by variance
-                signs = np.ones(comps.shape[0])
-                signs[:len(rows)] = np.where(overlap[rows, cols] < 0, -1.0, 1.0)
-                comps = comps[order] * signs[:, None]
-            else:
-                prev = None
-        if prev is None:
-            s = np.sign(comps.sum(axis=1))
-            comps = comps * np.where(s == 0, 1, s)[:, None]
-        prev = (names, comps)
-        fits.append((p, names, comps * sd))                                       # beta of x_i: sigma_i * v_i
-    return fits
-
-
-class PcaBasis(Signal):
-    """The principal components of x, refit every `refit` rows on the trailing `window` rows: the decomposition every
-    pca_factor on the same x, window and refit shares. Internal: its value is the list of fits (see _pca_fits), not a
-    dates x names frame, and it is not written in qex; pca_factor(x, window, k, refit) builds it. As a node of the
-    graph, it is computed once and cached like any other node, and the DAG shows it shared."""
-
-    def __init__(self, signal: Signal, window: int, refit: int):
-        self.signal = signal
-        self.window = window
-        self.refit = refit
-
-    def _compute(self, data):
-        values = self.signal.evaluate(data)
-        members = universe_members(values.index, values.columns)
-        return PcaFits(values.index, values.columns, _pca_fits(values, self.window, self.refit, members))
-
-    def _cache_key(self):
-        return ('PcaBasis', self.signal._cache_key(), self.window, self.refit)
-
-
-class PcaFits(list):
-    """A PcaBasis's value: [(position, names, betas)] per refit, with the dates and names they index."""
-
-    def __init__(self, index, columns, fits):
-        super().__init__(fits)
-        self.index = index
-        self.columns = columns
-
-
-class PcaFactor(Signal):
-    """Each stock's beta to the k-th statistical factor of x: a principal component of x across stocks.
-
-    At each refit date (every `refit` rows, the first once `window` rows exist), qex runs a principal component analysis
+    At each refit date (on the calendar, the first once `window` rows exist), qex runs a principal component analysis
     of the trailing `window` rows of x, across the names with values on at least 90% of those days (and, inside a
     universe, in it that day). It is a correlation PCA: each name is demeaned and scaled by its own volatility over the
     window, so a few volatile stocks don't make up the first components. The value is each name's beta to the k-th
@@ -522,45 +338,25 @@ class PcaFactor(Signal):
         regression_neut(r, pca_factor(r, 252, 1), pca_factor(r, 252, 2), pca_factor(r, 252, 3))
                                            r with three statistical factors removed, r = returns(1)
 
-    Its input is a PcaBasis node, so every pca_factor on the same x, window and refit shares one decomposition per
-    refit, in a compute_context, in SignalGraph and on Dask. Cost: one SVD of a window x names matrix per refit, about
-    0.1 s for 252 x 3,000.
+    Every pca_factor on the same x, window and refit reads one fit (one decomposition per refit), in a
+    compute_context, in SignalGraph and on Dask. Cost: one SVD of a window x names matrix per refit, about 0.1 s for
+    252 x 3,000.
     """
 
-    def __init__(self, signal: Signal, window: int, k: int, refit: int = 21):
-        for name, val, low in (("window", window, 3), ("k", k, 1), ("refit", refit, 1)):
-            if isinstance(val, bool) or not isinstance(val, int) or val < low:
-                raise ValueError(f"pca_factor() {name} must be a whole number of at least {low} (got {val!r}).")
-        if k > PCA_MAX_COMPONENTS:
-            raise ValueError(f"pca_factor() keeps the first {PCA_MAX_COMPONENTS} components; k = {k} is beyond them.")
-        self.basis = PcaBasis(signal, window, refit)
-        self.k = k
-
-    @property
-    def window(self):
-        return self.basis.window
-
-    @property
-    def refit(self):
-        return self.basis.refit
-
-    def _compute(self, data):
-        import numpy as np
-        import pandas as pd
-        fits = self.basis.evaluate(data)
-        T, N = len(fits.index), len(fits.columns)
-        out = np.full((T, N), np.nan)
-        for i, (p, names, betas) in enumerate(fits):
-            end = fits[i + 1][0] if i + 1 < len(fits) else T
-            if self.k <= betas.shape[0]:
-                out[p:end, names] = betas[self.k - 1]
-        return in_universe(pd.DataFrame(out, index=fits.index, columns=fits.columns))
-
-    def _cache_key(self):
-        return ('PcaFactor', self.basis.signal._cache_key(), self.window, self.k, self.refit)
+    signal = property(lambda self: self.fit.inputs[0])
+    window = property(lambda self: self.fit.window)
+    refit = property(lambda self: self.fit.refit)
+    k = property(lambda self: int(self.output[4:]))
+    basis = property(lambda self: self.fit)
 
 
 def pca_factor(signal: Signal, window: int, k: int, refit: int = 21) -> PcaFactor:
-    """Create a PcaFactor signal: each stock's beta to the k-th principal component of signal over a trailing window,
-    refit every `refit` days (default 21) and held in between."""
-    return PcaFactor(signal, window, k, refit)
+    """Each stock's beta to the k-th principal component of signal over a trailing window, refit every `refit` days
+    (default 21) and held in between: estimate('pca', 'betak', signal, window=window, refit=refit)."""
+    from .fits import PCA_MAX_COMPONENTS
+    for name, val, low in (("window", window, 3), ("k", k, 1), ("refit", refit, 1)):
+        if isinstance(val, bool) or not isinstance(val, int) or val < low:
+            raise ValueError(f"pca_factor() {name} must be a whole number of at least {low} (got {val!r}).")
+    if k > PCA_MAX_COMPONENTS:
+        raise ValueError(f"pca_factor() keeps the first {PCA_MAX_COMPONENTS} components; k = {k} is beyond them.")
+    return estimate('pca', f'beta{k}', signal, window=window, refit=refit)
