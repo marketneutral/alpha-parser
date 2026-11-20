@@ -148,7 +148,7 @@ Each stock's statistical twin: one particular other stock, chosen from history. 
 Fitted values through one operator: today's fitted operators as built-in estimators, and new ones by name.
 [Estimates in detail →](ops/estimate.md)
 
-- [`estimate(name, output, inputs..., window=, refit=, options...)`](ops/estimate.md#estimate): The `output` of estimator `name` fitted on the inputs: `'ols'`, `'ols_shrunk'`, `'xs_ols'` and `'pca'` are `ts_beta`/`ts_alpha`/`ts_resid`, the shrunk fits, `regression_neut`/`_alpha`/`_beta` and `pca_factor`, of which those operators are the named spellings; `'stump'` is a learned switch between two signals on a market state. Prefer the named operator where there is one
+- [`estimate(name, output, inputs..., window=, refit=, options...)`](ops/estimate.md#estimate): The `output` of estimator `name` fitted on the inputs: `'ols'`, `'ols_shrunk'`, `'xs_ols'` and `'pca'` are `ts_beta`/`ts_alpha`/`ts_resid`, the shrunk fits, `regression_neut`/`_alpha`/`_beta` and `pca_factor`, of which those operators are the named spellings; `'stump'` is a learned switch between two signals on a market state, `'stump_xs'` a learned split of the stocks between two signals on each stock's own state. Prefer the named operator where there is one
 
 ## Logic and conditions
 

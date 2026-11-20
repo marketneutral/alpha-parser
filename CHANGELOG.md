@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.22.0
+
+**`stump_xs`: a learned split of the stocks between two signals, on each stock's own state.** The stump learns
+*when*, on one market state; `stump_xs` learns *which stocks*: "when a stock is in the top 10% by x, rank it by y,
+otherwise by z", with the 10% learned. `estimate('stump_xs', 'w1', state, y, z, returns(1), window=, refit=)` pools
+every (stock, day) of the window (state, y and z on day u - 1, each signal z-scored across the day's stocks, and the
+return on day u), and finds the threshold on the state that best separates where y beat z (least squares with one
+break on d = (y - z) x return). Outputs `w1` (per stock), `threshold`, `gap` (the average day's gap) and `p`: a
+Fama-MacBeth t-test on the days' gaps, Bonferroni over the thresholds tried, since a day's stocks are not independent
+draws (a sampled permutation test was tried first and gave p from 0.01 to 0.88 on nearly the same window). Options
+`min_share` (default 0.05), `quantiles` (20). Written to the protocol (`panel` axis): point in time and independent of
+where the data starts, tested; deterministic; dof 3. On the US 3000, five years, about half a second a fit.
+
 ## 0.21.0
 
 **`qex.complexity(signal)`: what a complexity charge should count.** qexarena and alpha_lab charged for every node of

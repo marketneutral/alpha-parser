@@ -479,3 +479,59 @@ def test_an_estimator_must_say_what_it_learns():
             return {"x": 0.0}
     with pytest.raises(TypeError, match="dof"):
         register_estimator(Silent)
+
+
+# --- the stump across stocks -------------------------------------------------------------------------------------------
+
+def _planted_xs(seed=1, T=700, N=200, effect=0.004, cut=0.9):
+    """Returns follow y for stocks in the top (1 - cut) of x that day, and z for the rest."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2012-01-02", periods=T)
+    cols = [f"S{i:03d}" for i in range(N)]
+    x = pd.DataFrame(np.cumsum(rng.normal(0, .3, (T, N)), 0), idx, cols)
+    y, z = (pd.DataFrame(rng.normal(size=(T, N)), idx, cols) for _ in range(2))
+    sig = pd.DataFrame(np.where(x.rank(axis=1, pct=True) > cut, y, z), idx, cols)
+    r = effect * sig.shift(1) + pd.DataFrame(rng.normal(0, .02, (T, N)), idx, cols)
+    return {"close": 50 * np.exp(r.fillna(0).cumsum()), "x": x, "y": y, "z": z}
+
+
+XS = "estimate('stump_xs', '{}', rank(field('x')), field('y'), field('z'), returns(1), window=252, refit=63)"
+
+
+def test_the_cross_sectional_stump_finds_a_planted_split():
+    d = _planted_xs()
+    out = {o: _ev(XS.format(o), d) for o in ("w1", "threshold", "p")}
+    assert set(out["threshold"].stack().dropna().round(3)) == {0.9}                # the top 10%, in rank units
+    assert (out["p"].stack().dropna() < 1e-6).all()
+    rk = _ev("rank(field('x'))", d)
+    w = out["w1"]
+    assert ((w == 1) == (rk > 0.9))[w.notna()].stack().all()             # y above, z below, stock by stock
+    assert (w.nunique(axis=1) == 2).any()
+
+
+def test_with_no_split_its_p_is_not_small():
+    p = _ev(XS.format("p"), _planted_xs(seed=3, effect=0.0)).iloc[:, 0].dropna().drop_duplicates()
+    assert p.median() > 0.1
+
+
+def test_the_cross_sectional_stump_is_point_in_time_and_start_independent():
+    d = _planted_xs()
+    later = {k: v.copy() for k, v in d.items()}
+    rng = np.random.default_rng(5)
+    for k in ("x", "y", "z"):
+        later[k].iloc[451:] = rng.normal(size=later[k].iloc[451:].shape)
+    for o in ("w1", "threshold", "p"):
+        a, b = _ev(XS.format(o), d), _ev(XS.format(o), later)
+        assert np.array_equal(a.iloc[:451].to_numpy(), b.iloc[:451].to_numpy(), equal_nan=True)
+    short = {k: v.iloc[100:] for k, v in d.items()}
+    a, b = _ev(XS.format("w1"), d), _ev(XS.format("w1"), short)
+    common = b.dropna(how="all").index
+    assert len(common) > 200 and np.array_equal(a.loc[common].to_numpy(), b.loc[common].to_numpy(), equal_nan=True)
+
+
+def test_the_cross_sectional_stump_s_options_and_cost():
+    with pytest.raises(ValueError, match="min_share"):
+        qex(XS.format("w1").replace("refit=63", "refit=63, min_share=0.6"))
+    with pytest.raises(ValueError, match="no option 'permutations'"):
+        qex(XS.format("w1").replace("refit=63", "refit=63, permutations=10"))
+    assert Q.complexity(qex(XS.format("w1"))).dof == 3

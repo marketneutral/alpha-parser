@@ -6,6 +6,8 @@ one of these estimators. The maths here is the maths those operators always had,
 numbers, and each output keeps its operator's cache key (output_key) and spelling (spell), so an expression's
 identity is unchanged.
 """
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -604,3 +606,100 @@ class Stump(Estimator):
         s = row[0]
         w1 = np.nan if not np.isfinite(s) else (state["w_lo"] if s <= state["threshold"] else state["w_hi"])
         return dict(w1=w1, threshold=state["threshold"], gap=state["gap"], p=state["p"])
+
+
+# --- the stump across stocks: a learned split on a stock's own state -------------------------------------------------
+
+@register_estimator
+class StumpXs(Estimator):
+    """A learned split of the stocks between two signals, on a stock-level state: a decision stump pooled over the
+    window's days and stocks.
+
+        estimate('stump_xs', 'w1', state, y, z, returns(1), window=1260, refit=63)
+
+    "When a stock is in the top 10% by x, rank it by y, otherwise by z", with the 10% learned. On each refit day it
+    pairs, for every stock in the universe on every day u - 1 of the window, the stock's state, y and z with its return
+    on day u. Within each day y and z are z-scored across the stocks, and d = (y - z) * return measures how much
+    ranking that stock by y instead of z earned. Pooling every (stock, day), it finds the threshold on the state that
+    best separates where y beat z from where it did not: the split that most reduces the squared error of d against
+    its mean on each side (least squares with one break, as the stump), at the state's quantiles. Each side keeps the
+    signal that earned more there. With rank(x) as the state, the threshold is in rank units: 0.9 is the top 10%.
+
+        w1          per stock: 1 if the stock's state today is on the side where y earned more, else 0
+        threshold   the threshold in force, in the state's units
+        gap         the average day's gap: y's edge over z among the stocks above the threshold, less its edge among
+                    those below (each the mean of d on its side that day)
+        p           whether the gap is real: a Fama-MacBeth t-test on the days' gaps (one number a day, since a day's
+                    stocks are not independent draws), two-sided, times the number of thresholds tried (Bonferroni,
+                    for having chosen the best), at most 1
+
+    Options: `min_share` (the smallest share of the window's (stock, day) pairs on a side; default 0.05) and
+    `quantiles` (default 20: thresholds at 5%, 10%, ... 95%). It uses every pair and no randomness.
+    """
+    name, axis, n_inputs = "stump_xs", "panel", (4, 4)
+    window, refit, refit_default = "required", "optional", 21
+    outputs = ("w1", "threshold", "gap", "p")
+    hyper = {"min_share": 0.05, "quantiles": 20}
+    dof = 3                                          # the threshold, and the side each leaf takes
+    about = "a learned threshold on each stock's state that picks, on each side, the better of two signals"
+
+    def check(self, inputs, window, refit, hyper):
+        ms, q = hyper["min_share"], hyper["quantiles"]
+        if isinstance(ms, bool) or not isinstance(ms, (int, float)) or not 0 < ms < 0.5:
+            raise ValueError(f"estimate('stump_xs')'s min_share is a share of the pairs, above 0 and below 0.5 "
+                             f"(got {ms!r})")
+        if not _whole(q, 2):
+            raise ValueError(f"estimate('stump_xs')'s quantiles must be a whole number, at least 2 (got {q!r})")
+        if window < 2:
+            raise ValueError("estimate('stump_xs')'s window must be at least 2 days")
+
+    @staticmethod
+    def _zscore(v, ok):
+        v = np.where(ok, v, np.nan)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            m, sd = np.nanmean(v, axis=1, keepdims=True), np.nanstd(v, axis=1, keepdims=True)
+            return (v - m) / np.where(sd > 0, sd, np.nan)
+
+    def fit(self, window, hyper, rng, members=None):
+        S, Y, Z = window[:-1, :, 0], window[:-1, :, 1], window[:-1, :, 2]      # known on day u - 1
+        R = window[1:, :, 3]                                                   # the return on day u
+        ok = np.isfinite(S) & np.isfinite(Y) & np.isfinite(Z) & np.isfinite(R)
+        if members is not None:
+            ok &= members[:-1]                                                 # in the universe when held
+        ok &= (ok.sum(axis=1) >= 3)[:, None]
+        D = (self._zscore(Y, ok) - self._zscore(Z, ok)) * R
+        ok &= np.isfinite(D)
+        s, d = S[ok], D[ok]
+        n = len(s)
+        min_n = int(np.ceil(hyper["min_share"] * n))
+        if n < 100 or min_n < 1:
+            return None
+        order = np.argsort(s, kind="mergesort")
+        s_sorted, d_sorted = s[order], d[order]
+        levels = np.linspace(0, 1, int(hyper["quantiles"]) + 1)[1:-1]
+        thresholds = np.unique(np.quantile(s_sorted, levels))
+        cuts = np.searchsorted(s_sorted, thresholds, side="right")
+        keep = (cuts >= min_n) & (n - cuts >= min_n)
+        thresholds, cuts = thresholds[keep], cuts[keep]
+        if not len(cuts):
+            return None
+        gain, k = Stump._best(s_sorted, d_sorted, cuts)
+        c, m = thresholds[k], cuts[k]
+        lo, hi = d_sorted[:m].mean(), d_sorted[m:].mean()
+        D0 = np.where(ok, D, 0.0)
+        above, below = ok & (S > c), ok & (S <= c)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            g = (D0 * above).sum(axis=1) / above.sum(axis=1) - (D0 * below).sum(axis=1) / below.sum(axis=1)
+        g = g[np.isfinite(g)]
+        p = np.nan
+        if len(g) >= 3 and g.std(ddof=1) > 0:
+            t = g.mean() / (g.std(ddof=1) / np.sqrt(len(g)))
+            p = min(1.0, len(cuts) * math.erfc(abs(t) / math.sqrt(2)))
+        gap = float(g.mean()) if len(g) else np.nan
+        return dict(threshold=float(c), w_lo=1.0 if lo > 0 else 0.0, w_hi=1.0 if hi > 0 else 0.0, gap=gap, p=float(p))
+
+    def step(self, state, row, hyper, members=None):
+        s = row[:, 0]
+        w1 = np.where(np.isfinite(s), np.where(s <= state["threshold"], state["w_lo"], state["w_hi"]), np.nan)
+        full = lambda v: np.full(len(s), v)
+        return dict(w1=w1, threshold=full(state["threshold"]), gap=full(state["gap"]), p=full(state["p"]))

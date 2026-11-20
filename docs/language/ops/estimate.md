@@ -61,6 +61,7 @@ and the way to the outputs that have no name, such as one slope of a joint fit.
 | `xs_ols` | each day's least squares across stocks | y, then one or more regressors | `resid`, `alpha`, `beta1` ... `betak` | 1 / 1 | |
 | `pca` | principal components across stocks | x | `beta1` ... `beta20` | required / 21 | |
 | `stump` | a learned switch on a market state (below) | state, r1, r2 | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_leaf`, `quantiles`, `permutations` |
+| `stump_xs` | a learned split of the stocks on each stock's own state (below) | state, y, z, return | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_share`, `quantiles` |
 
 `ts_match` stays its own operator: it reads *another* stock's value through the twins it chose, which is not an
 output of a fit.
@@ -107,6 +108,40 @@ series is refused, with a message.
 and `p` to say whether the switch is real. Fix the state for an economic reason and let the stump learn only where to
 cut it; trying state after state is a search, and each is a trial.
 
+## The stump across stocks: which signal for which stocks
+
+The stump learns *when*, on one state for the whole market. `stump_xs` learns *which stocks*, on each stock's own
+state: "when a stock is in the top 10% by x, rank it by y, otherwise by z", with the 10% learned.
+
+```qex
+let mom = zscore(rank(delay(returns(231), 21))),
+    rev = zscore(rank(-ts_mean(returns(21), 21))),
+    w   = estimate('stump_xs', 'w1', rank(field('mcap')), mom, rev, returns(1), window=1260, refit=63)
+in w * mom + (1 - w) * rev                         # momentum on one side of a learned size cut, reversal on the other
+```
+
+**What it fits.** On each refit day it pools every (stock, day) of the window: the stock's state, `y` and `z` on day
+*u* − 1 (each signal z-scored across that day's stocks) and its return on day *u*. With
+d = (y − z) × return, how much ranking that stock by `y` instead of `z` earned, it tries thresholds at the state's
+quantiles and keeps the one that best separates where `y` beat `z` from where it did not (least squares with one
+break, as the stump). Each side keeps the signal that earned more there. With `rank(x)` as the state the threshold is
+in rank units: 0.9 is the top 10%. The state, `y` and `z` are each stock's own, and the fourth input is each stock's
+daily return (`returns(1)`).
+
+| Output | Is |
+|---|---|
+| `w1` | per stock: 1 when the stock's state today is on the side where `y` earned more, else 0 |
+| `threshold` | the threshold in force, in the state's units |
+| `gap` | the average day's gap: `y`'s edge over `z` among the stocks above the threshold, less its edge among those below |
+| `p` | whether the gap is real: a Fama-MacBeth t-test on the days' gaps (one number a day: a day's stocks are not independent draws), two-sided, times the number of thresholds tried (for having chosen the best), at most 1 |
+
+| Option | Default | |
+|---|---|---|
+| `min_share` | 0.05 | the smallest share of the window's (stock, day) pairs on a side |
+| `quantiles` | 20 | the thresholds tried: the state's quantiles at 5%, 10%, ... 95% |
+
+It uses every pair and no randomness. On the US 3000 a fit of five years takes about half a second.
+
 ## What an estimate costs: operators and degrees of freedom
 
 A score that charges for complexity (qexarena's utility, alpha_lab's fitness) should charge for what the author chose,
@@ -123,7 +158,7 @@ not for how qex builds its graph. `qex.complexity(signal)` gives two counts:
 | Estimator | dof |
 |---|---|
 | `ols`, `ols_shrunk`, `xs_ols`, `pca` | 0 |
-| `stump` | 3 |
+| `stump`, `stump_xs` | 3 |
 
 The stump fits on the past only, so its own choices don't inflate a backtest the way an in-sample fit would. A dof
 charge prices flexibility instead: a model that can learn more gives an author's search more ways to find noise, and
