@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.0
+
+**`qex.complexity(signal)`: what a complexity charge should count.** qexarena and alpha_lab charged for every node of
+an expression's SignalGraph, internal nodes included, so the charge moved when qex's internals did (0.20.0 put a fit
+node above `ts_beta` and took the hidden slope from under `ts_resid`) though no number moved. `complexity` returns:
+
+- `operators`: the distinct operations written (a shared subexpression once), not the internal nodes (an estimator's
+  fit, `ts_match`'s selection). `ts_beta`, `ts_resid` and `pca_factor` count one each, and
+  `estimate('ols', 'beta1', ...)` is the same one as `ts_beta`.
+- `dof`: the degrees of freedom the expression's estimators learn by searching the data, per distinct fit: the stump's
+  threshold and two sides (3); a beta, residual or component, none. **Every estimator now declares `dof`**
+  (`Estimator.dof`, or `dof_of(fit)` when it depends on the options); registering one without it is refused.
+
+`Complexity.charge(per_operator, per_dof)` prices them. `SignalGraph.stats()` gains `operators` and `dof`.
+Documented in `ops/estimate.md` (What an estimate costs).
+
 ## 0.20.0
 
 **`estimate(name, output, inputs..., window=, refit=, options...)`: every fitted value through one operator** (new

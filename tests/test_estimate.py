@@ -120,6 +120,7 @@ def test_a_version_by_name():
 
 class _MeanGap(Estimator):
     name, version, axis = "test_mean_gap", "1", "series"
+    dof = 0
     n_inputs, outputs = (1, 1), ("z",)
 
     def fit(self, window, hyper, rng):
@@ -261,6 +262,7 @@ def test_the_stump_s_options(panel):
 
 class _StockZ(Estimator):
     """Each stock's value today against its own window: (x - mean) / sd, fitted on the window's rows."""
+    dof = 0                                        # descriptive: nothing searched for
     name, version, axis = "test_stock_z", "1", "stock"
     n_inputs, outputs = (1, 1), ("z",)
 
@@ -329,6 +331,7 @@ def test_a_per_stock_estimator_is_point_in_time_and_start_independent(panel):
 class _XsGap(Estimator):
     """Each stock's value against the median of the universe's values over the window (pooled): a cross-sectional
     (window 1) or panel (longer) estimator."""
+    dof = 0                                        # descriptive: nothing searched for
     name, version, axis = "test_xs_gap", "1", "cross_section"
     n_inputs, outputs = (1, 1), ("gap",)
 
@@ -426,6 +429,7 @@ def test_a_fit_computes_only_the_outputs_read(panel):
 
 class _Demeaned(Estimator):
     """A vectorized estimator: each stock's value less its rolling mean, and that mean."""
+    dof = 0                                        # descriptive: nothing searched for
     name, version, axis = "test_demeaned", "1", "stock"
     n_inputs, outputs = (1, 1), ("gap", "mean")
     refit, refit_default = 1, 1
@@ -440,3 +444,38 @@ def test_a_vectorized_estimator(panel):
     a = _ev("estimate('test_demeaned', 'gap', returns(5), window=20)", panel)
     b = _ev("returns(5) - ts_mean(returns(5), 20)", panel)            # min_periods 20 by default
     assert np.allclose(a.to_numpy(), b.to_numpy(), equal_nan=True)
+
+
+# --- complexity: what a score charges for ------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("expr, operators, dof", [
+    ("ts_beta(returns(1), returns(1, 'market'), 252)", 3, 0),          # returns(1), the market's, ts_beta
+    ("ts_resid(returns(1), returns(1, 'market'), 252)", 3, 0),         # one, however the fit is built
+    ("estimate('ols', 'beta1', returns(1), returns(1, 'market'), window=252)", 3, 0),
+    ("ts_beta(returns(1), returns(1, 'market'), 252) + ts_resid(returns(1), returns(1, 'market'), 252)", 5, 0),
+    ("pca_factor(returns(1), 252, 1) - pca_factor(returns(1), 252, 2)", 4, 0),
+    ("ts_match(returns(5), returns(1), 120)", 3, 0),
+    ("estimate('stump', 'w1', returns(1, 'market'), returns(1, 'market'), returns(5, 'market'), window=200)", 3, 3),     # the two series and the stump
+    ("let s = returns(1, 'market'), a = returns(5, 'market') "
+     "in estimate('stump', 'w1', s, s, a, window=200) * estimate('stump', 'p', s, s, a, window=200)", 5, 3),     # one fit, read twice: 3 dof
+])
+def test_complexity_counts_what_is_written_and_what_is_learned(expr, operators, dof):
+    c = Q.complexity(qex(expr))
+    assert (c.operators, c.dof) == (operators, dof)
+    g = Q.SignalGraph()
+    g.add_signal(qex(expr), name="a")
+    assert (g.stats()["operators"], g.stats()["dof"]) == (operators, dof)
+    assert c.charge(0.003, 0.015) == pytest.approx(0.003 * operators + 0.015 * dof)
+
+
+def test_an_estimator_must_say_what_it_learns():
+    class Silent(Estimator):
+        name, axis, n_inputs, outputs = "test_silent", "series", (1, 1), ("x",)
+
+        def fit(self, window, hyper, rng):
+            return 0
+
+        def step(self, state, row, hyper):
+            return {"x": 0.0}
+    with pytest.raises(TypeError, match="dof"):
+        register_estimator(Silent)
