@@ -256,17 +256,16 @@ def _walk(s, fields, seen, found, mode):
         w(s.selection)
         need_free(w(s.value), s.value, "ts_match()")
         out = FREE
-    elif name in ("TsFit", "RegressionFit"):                    # an internal fit: its inputs are walked
-        for k in kids:
-            w(k)
-        out = UNKNOWN
+    elif name == "EstimateFit":                                  # a fit: its inputs walked; one input's units pass
+        vals = [w(k) for k in kids]
+        out = vals[0] if len(s.inputs) == 1 else UNKNOWN
     elif name in _PAIR_FIRST:
         w(s.fit)
-        a, xs = w(s.fit.y), [w(x) for x in s.fit.xs]             # every regressor is walked, however many
+        a, xs = w(s.signal1), [w(x) for x in s.regressors]       # every regressor is walked, however many
         out = UNKNOWN if a.e is None or a.log or any(x.e is None or x.log for x in xs) else V(a.e, False, None)
     elif name in ("RegressionAlpha", "RegressionBeta"):         # like regression_neut: compared across stocks
         w(s.fit)
-        for k in (s.fit.y,) + s.fit.xs:
+        for k in s.fit.inputs:
             need_free(w(k), k, f"{label(s).split('(')[0]}()")
         out = FREE
     elif name in _PAIR_SUM or name in _PAIR_DIFF:
@@ -280,12 +279,17 @@ def _walk(s, fields, seen, found, mode):
         out = same(w(s.if_true), w(s.if_false), s, "chooses between")
     elif isinstance(s, cond.Coalesce):
         out = same(w(s.x), w(s.y), s, "fills")
-    elif name == "PcaBasis":
-        out = w(kids[0])                                 # checked where pca_factor compares it across stocks
     elif s.__class__.__module__ == cs.__name__:
+        if hasattr(s, "fit") and type(s.fit).__name__ == "EstimateFit":
+            w(s.fit)                                     # regression_neut, pca_factor: their inputs are compared
+            kids = list(s.fit.inputs)                    # across stocks
         for k in kids:
-            part = k.signal if type(k).__name__ == "PcaBasis" else k
-            need_free(w(k), part, f"{label(s).split('(')[0]}()")
+            need_free(w(k), k, f"{label(s).split('(')[0]}()")
+        out = FREE
+    elif name == "EstimateOutput" and s.fit.estimator.axis in ("cross_section", "panel"):
+        w(s.fit)                                         # a protocol estimator across stocks compares its inputs
+        for k in s.fit.inputs:
+            need_free(w(k), k, "estimate()")
         out = FREE
     elif s.__class__.__module__ == gr.__name__:
         groups = getattr(s, "groups", None)

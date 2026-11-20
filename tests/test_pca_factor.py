@@ -7,6 +7,7 @@ import pytest
 
 from qex import qex, compute_context, explain_missing
 import qex.crosssection as cs
+import qex.fits as fits                     # the pca estimator's maths
 from qex.universe import cross_section_universe
 
 NAN = np.nan
@@ -69,8 +70,8 @@ def test_held_between_refits_and_starts_with_a_full_window():
 def test_one_decomposition_shared_by_every_k(monkeypatch):
     d, _, _ = _two_factor_data(T=300, N=20)
     calls = []
-    real = cs._pca_fits
-    monkeypatch.setattr(cs, "_pca_fits", lambda *a: calls.append(1) or real(*a))
+    real = fits._pca_fits
+    monkeypatch.setattr(fits, "_pca_fits", lambda *a: calls.append(1) or real(*a))
     with compute_context():
         for k in range(1, 6):
             qex(f"pca_factor(field('r'), 120, {k})").evaluate(d)
@@ -183,8 +184,8 @@ def test_dask_computes_each_node_once(monkeypatch):
     import qex.primitives as pr
     d, _, _ = _two_factor_data(T=300, N=30)
     calls = {"svd": 0, "returns": 0}
-    real_fits, real_returns = cs._pca_fits, pr.Returns._compute
-    monkeypatch.setattr(cs, "_pca_fits", lambda *a: calls.__setitem__("svd", calls["svd"] + 1) or real_fits(*a))
+    real_fits, real_returns = fits._pca_fits, pr.Returns._compute
+    monkeypatch.setattr(fits, "_pca_fits", lambda *a: calls.__setitem__("svd", calls["svd"] + 1) or real_fits(*a))
 
     def counted(self, data):
         calls["returns"] += 1

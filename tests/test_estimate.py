@@ -147,7 +147,7 @@ def test_register_a_protocol_estimator_and_use_it(panel):
 def test_an_estimator_builds_or_fits_not_both():
     class Neither(Estimator):
         name = "test_neither"
-    with pytest.raises(TypeError, match="either build, or fit and step"):
+    with pytest.raises(TypeError, match="either compute, or fit and step"):
         register_estimator(Neither)
 
     class NoAxis(_MeanGap):
@@ -365,3 +365,78 @@ def test_a_panel_estimator_pools_the_window_and_is_point_in_time(panel):
     m = _ev(expr, later)
     assert np.allclose(g.iloc[:301].to_numpy(), m.iloc[:301].to_numpy(), equal_nan=True)
     assert not np.allclose(g.iloc[302:].to_numpy(), m.iloc[302:].to_numpy(), equal_nan=True)
+
+
+# --- the named operators are sugar -------------------------------------------------------------------------------------
+
+R, M = ("Returns", 1, "close"), ("Returns", 1, "market")
+
+PINNED = [                                                    # the keys these operators have had: alphas are known by them
+    ("ts_beta(returns(1), returns(1, 'market'), 63)", ('TsBeta', R, M, 63, 20)),
+    ("ts_beta(returns(1), returns(1, 'market'), 10)", ('TsBeta', R, M, 10, 10)),
+    ("ts_alpha(returns(1), returns(1, 'market'), returns(5), 63, 30)",
+     ('TsAlpha', R, M, 63, 30, ("Returns", 5, "close"))),
+    ("ts_resid(returns(1), returns(1, 'market'), 63)", ('TsResid', R, M, 63, 20)),
+    ("ts_beta_shrunk(returns(1), returns(1, 'market'), 63)", ('TsBetaShrunk', R, M, 63, 20)),
+    ("ts_resid_shrunk(returns(1), returns(1, 'market'), 63, 'sector')", ('TsResidShrunk', R, M, 63, 20, 'sector')),
+    ("regression_neut(returns(1), returns(5))", ('RegressionNeut', R, ("Returns", 5, "close"))),
+    ("regression_beta(returns(1), returns(5), returns(20), 2)",
+     ('RegressionBeta', R, ("Returns", 5, "close"), ("Returns", 20, "close"), 2)),
+    ("pca_factor(returns(1), 252, 2)", ('PcaFactor', R, 252, 2, 21)),
+]
+
+
+@pytest.mark.parametrize("expr, key", PINNED)
+def test_the_operators_keep_their_cache_keys(expr, key):
+    assert qex(expr)._cache_key() == key
+
+
+def test_a_named_operator_is_a_view_of_an_estimate():
+    from qex.estimate import EstimateOutput
+    from qex.timeseries import TsBeta
+    from qex.crosssection import PcaFactor, RegressionNeut
+    for named, est, cls in [("ts_beta(returns(1), returns(5), 63)", "estimate('ols', 'beta1', returns(1), returns(5), window=63)", TsBeta),
+                            ("regression_neut(returns(1), returns(5))", "estimate('xs_ols', 'resid', returns(1), returns(5))", RegressionNeut),
+                            ("pca_factor(returns(1), 63, 1)", "estimate('pca', 'beta1', returns(1), window=63)", PcaFactor)]:
+        a, b = qex(named), qex(est)
+        assert type(a) is type(b) is cls and isinstance(a, EstimateOutput)
+        assert "_compute" not in vars(cls)                          # no maths of its own
+        assert type(a.fit).__name__ == "EstimateFit"
+
+
+def test_every_output_of_a_fit_reads_one_fit():
+    fits = {qex(e).fit._cache_key() for e in ("ts_beta(returns(1), returns(5), 63)", "ts_alpha(returns(1), returns(5), 63)",
+                                              "ts_resid(returns(1), returns(5), 63)")}
+    assert len(fits) == 1
+    fits = {qex(e).fit._cache_key() for e in ("regression_neut(returns(1), returns(5))",
+                                              "regression_alpha(returns(1), returns(5))",
+                                              "regression_beta(returns(1), returns(5))")}
+    assert len(fits) == 1
+
+
+def test_a_fit_computes_only_the_outputs_read(panel):
+    node = qex("ts_beta(returns(1), returns(1, 'market'), 63)")
+    with compute_context():
+        node.evaluate(panel)
+        res = node.fit.evaluate(panel)
+    assert set(res._done) == {"beta1"}                               # not the means, the intercept or the residual
+    with compute_context():
+        qex("ts_resid(returns(1), returns(1, 'market'), 63)").evaluate(panel)
+
+
+class _Demeaned(Estimator):
+    """A vectorized estimator: each stock's value less its rolling mean, and that mean."""
+    name, version, axis = "test_demeaned", "1", "stock"
+    n_inputs, outputs = (1, 1), ("gap", "mean")
+    refit, refit_default = 1, 1
+
+    def compute(self, values, window, refit, hyper, data):
+        return {"mean": lambda get: values[0].rolling(window, min_periods=window).mean(),
+                "gap": lambda get: values[0] - get("mean")}
+
+
+def test_a_vectorized_estimator(panel):
+    _reg(_Demeaned)
+    a = _ev("estimate('test_demeaned', 'gap', returns(5), window=20)", panel)
+    b = _ev("returns(5) - ts_mean(returns(5), 20)", panel)            # min_periods 20 by default
+    assert np.allclose(a.to_numpy(), b.to_numpy(), equal_nan=True)

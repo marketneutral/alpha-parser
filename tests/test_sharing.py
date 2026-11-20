@@ -4,8 +4,8 @@ The signals below overlap on purpose:
 
 - two statistical factors from one PCA (pca_factor k = 1 and 2 share one PcaBasis);
 - a cross-sectional fit read for its intercept and a slope (one RegressionFit);
-- a sector-prior shrunk beta, used directly and inside the fit behind ts_resid_shrunk and ts_alpha_shrunk (one
-  TsBetaShrunk, one TsFit);
+- a sector-prior shrunk fit read for its beta, its alpha and its residual (one TsFit, read by ts_beta_shrunk,
+  ts_alpha_shrunk and ts_resid_shrunk), its beta also a regressor;
 - a two-regressor time-series fit read for its alpha and its residual (one TsFit);
 - returns(1) everywhere.
 
@@ -112,17 +112,20 @@ def test_the_shared_parts_are_single_nodes():
     kinds = Counter(k[0] for k in g.nodes)
     assert kinds["PcaBasis"] == 1                    # pca_factor k = 1 and k = 2, in three signals
     assert kinds["PcaFactor"] == 2
-    assert kinds["RegressionFit"] == 1               # regression_alpha and regression_beta on the same inputs
-    assert kinds["TsBetaShrunk"] == 1                # written directly, and the slope of the shrunk fit
+    assert kinds["RegressionFit"] == 3               # alpha and beta on the same inputs (one), each regression_neut's
+    assert kinds["TsBetaShrunk"] == 1
     assert kinds["TsFit"] == 2                       # the shrunk one-regressor fit and the two-regressor fit
     assert sum(1 for k in g.nodes if k == ("Returns", 1, "close")) == 1
 
     users = Counter(d for deps in g.dependencies.values() for d in deps)
     basis = next(k for k in g.nodes if k[0] == "PcaBasis")
-    fit = next(k for k in g.nodes if k[0] == "RegressionFit")
+    alpha = next(k for k in g.nodes if k[0] == "RegressionAlpha")
+    fit = g.dependencies[alpha][0]
     assert users[basis] == 2 and users[fit] == 2     # both factors read one basis; alpha and beta read one fit
+    shrunk_fit = next(k for k in g.nodes if k[0] == "TsFit" and k[5])
+    assert users[shrunk_fit] == 3                    # the shrunk beta, alpha and residual read one fit
     shrunk = next(k for k in g.nodes if k[0] == "TsBetaShrunk")
-    assert users[shrunk] == 2                        # the shrunk fit, and regression_neut's regressor
+    assert users[shrunk] == 1                        # regression_neut's regressor
 
 
 def test_every_node_is_wired_to_all_its_inputs():

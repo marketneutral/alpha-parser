@@ -96,29 +96,21 @@ def label(signal: Signal, nested: bool = False) -> str:
     if isinstance(signal, _dt.Field):
         return f"{signal.name}()" if signal.name in ("close", "open", "high", "low") else f"field('{signal.name}')"
     name = type(signal).__name__
-    if name in ("EstimateOutput", "EstimateFit"):                 # written estimate('name', 'output', inputs..., window=)
-        fit = signal.fit if name == "EstimateOutput" else signal
+    from .estimate import EstimateFit, EstimateOutput
+    if isinstance(signal, (EstimateOutput, EstimateFit)):        # as its named operator writes it, or estimate(...)
+        fit = signal.fit if isinstance(signal, EstimateOutput) else signal
         e = fit.estimator
-        args = [repr(e.name), repr(signal.output if name == "EstimateOutput" else "fit")]
-        args += [label(x) for x in fit.inputs] + [f"window={fit.window}", f"refit={fit.refit}"]
+        text = e.spell(signal.output, fit, label) if fit is not signal else e.spell_fit(fit, label)
+        if text is not None:
+            return text
+        args = [repr(e.name), repr(signal.output if fit is not signal else "fit")]
+        args += [label(x) for x in fit.inputs] + [f"window={fit.window}"]
+        if fit.refit != e.refit_default:
+            args.append(f"refit={fit.refit}")
         defaults = type(e).hyper
         args += [f"{k}={label(v) if isinstance(v, Signal) else repr(v)}" for k, v in fit.hyper.items()
-                 if v != defaults.get(k)]
+                 if v is not defaults.get(k) and v != defaults.get(k)]
         return f"estimate({', '.join(args)})"
-    if name == "TsFitBeta":                                       # the j-th slope of a joint fit: only estimate reaches it
-        fit = signal.fit
-        args = ["'ols'", repr(f"beta{signal.j}"), label(fit.y)] + [label(x) for x in fit.xs] + [f"window={fit.period}"]
-        return f"estimate({', '.join(args)})"
-    if hasattr(signal, "fit") and isinstance(getattr(signal, "fit"), Signal) or name in ("TsFit", "RegressionFit"):
-        fit = signal if name in ("TsFit", "RegressionFit") else signal.fit       # written as the user writes them
-        args = [label(fit.y)] + [label(x) for x in fit.xs]
-        if name in ("TsFit",) or isinstance(fit, _ts.TsFit):
-            args.append(str(fit.period))
-            if fit.groups is not None:
-                args.append(label(fit.groups) if isinstance(fit.groups, Signal) else repr(fit.groups))
-        if name == "RegressionBeta":
-            args.append(str(signal.j))
-        return f"{_snake(name)}({', '.join(args)})"
     if name in ("TsMatch", "TsMatchScore", "MatchSelection"):   # written as typed; the selection is internal
         sel = signal if name == "MatchSelection" else signal.selection
         args = ([label(signal.value)] if name == "TsMatch" else []) + [label(sel.key), str(sel.lookback)]
@@ -132,11 +124,6 @@ def label(signal: Signal, nested: bool = False) -> str:
             if v != defaults[opt] if not isinstance(v, Signal) else True:
                 args.append(f"{opt}={label(v) if isinstance(v, Signal) else repr(v)}")
         return f"{ {'TsMatch': 'ts_match', 'TsMatchScore': 'ts_match_score'}.get(name, 'match_selection')}({', '.join(args)})"
-    if name in ("PcaFactor", "PcaBasis"):               # written pca_factor(x, window, k[, refit]); the basis is internal
-        basis = signal.basis if name == "PcaFactor" else signal
-        args = [label(basis.signal), str(basis.window)] + ([str(signal.k)] if name == "PcaFactor" else [])
-        args += [str(basis.refit)] if basis.refit != 21 else []
-        return f"{'pca_factor' if name == 'PcaFactor' else 'pca_basis'}({', '.join(args)})"
     kids = children(signal)
     if name in _SYMBOLS and len(kids) == 2:
         text = f"{label(kids[0], True)} {_SYMBOLS[name]} {label(kids[1], True)}"
@@ -252,16 +239,13 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
         s = nodes[k]
         node_id = len(labels)
         labels.append(label(s))
-        if isinstance(s, _cs.PcaBasis) or not getattr(type(s), "value_is_frame", True):
+        if not getattr(type(s), "value_is_frame", True):
             # a decomposition or a fit, not a frame: its inputs' reasons pass through, the first input's first
-            if isinstance(s, _cs.PcaBasis):
-                code, cause, origin = (a.copy() for a in results[s.signal._cache_key()])
-            else:
-                code, cause, origin = np.zeros(shape, np.int8), np.zeros(shape, np.int8), np.zeros(shape, np.int32)
-                for c in children(s):
-                    rc = results[c._cache_key()]
-                    take = (code == PRESENT) & (rc[0] != PRESENT)
-                    code[take], cause[take], origin[take] = rc[0][take], rc[1][take], rc[2][take]
+            code, cause, origin = np.zeros(shape, np.int8), np.zeros(shape, np.int8), np.zeros(shape, np.int32)
+            for c in children(s):
+                rc = results[c._cache_key()]
+                take = (code == PRESENT) & (rc[0] != PRESENT)
+                code[take], cause[take], origin[take] = rc[0][take], rc[1][take], rc[2][take]
             results[k] = (code, cause, origin)
             for c in children(s):
                 ck = c._cache_key()
@@ -344,7 +328,7 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
             usable = got[0][0] == PRESENT
             if in_uni is not None:
                 usable &= in_uni
-            own(missing & (usable.sum(axis=1) < len(s.fit.xs) + 2)[:, None], TOO_FEW)
+            own(missing & (usable.sum(axis=1) < len(s.regressors) + 2)[:, None], TOO_FEW)
             own(missing, CALC)
         elif isinstance(s, _CROSS + _GROUP_OPS):
             if in_uni is not None:

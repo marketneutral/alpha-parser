@@ -67,6 +67,17 @@ def _check(s: Signal, seen: dict) -> str:
         out = EITHER
     elif isinstance(s, op.Constant):
         out = LABELS if isinstance(s.value, str) else NUMBERS
+    elif type(s).__name__ == "EstimateFit" or hasattr(s, "fit") and type(s.fit).__name__ == "EstimateFit":
+        fit = s if type(s).__name__ == "EstimateFit" else s.fit
+        where = name if fit is not s else "estimate()"         # named as written: ts_beta(), or estimate()
+        for part in fit.inputs:
+            need_numbers(part, where)
+        labels = {k for k in fit.estimator.label_options}
+        for k, v in fit.hyper.items():
+            if isinstance(v, Signal):
+                (_check(v, seen) if k in labels else need_numbers(v, where))
+        seen[id(fit)] = NUMBERS
+        out = NUMBERS
     elif isinstance(s, (gr.Group, gr.GroupCross, gr.Identifier)):
         for part in children(s):
             _check(part, seen)                            # a crossed grouping's parts may be labels or numbers
@@ -108,7 +119,7 @@ def _label_name(s: Signal) -> str:
     """How an operator is written, for the message: rank, +, ts_mean."""
     from .missing import _snake, _SYMBOLS
     n = type(s).__name__
-    if n in ("EstimateFit", "EstimateOutput", "TsFitBeta"):
+    if n in ("EstimateFit", "EstimateOutput"):
         return "estimate()"
     return f"'{_SYMBOLS[n]}'" if n in _SYMBOLS else "'-'" if n == "Neg" else "'~'" if n == "Not" else f"{_snake(n)}()"
 

@@ -188,7 +188,7 @@ Fitted values through one operator: today's fitted operators as built-in estimat
 
 | Operation | Description |
 |-----------|-------------|
-| `estimate(name, output, inputs..., window=, refit=, options...)` | The `output` of estimator `name` fitted on the inputs: `'ols'`, `'ols_shrunk'`, `'xs_ols'` and `'pca'` are `ts_beta`/`ts_alpha`/`ts_resid`, the shrunk fits, `regression_neut`/`_alpha`/`_beta` and `pca_factor` (the same node); `'stump'` is a learned switch between two signals on a market state. Prefer the named operator where there is one |
+| `estimate(name, output, inputs..., window=, refit=, options...)` | The `output` of estimator `name` fitted on the inputs: `'ols'`, `'ols_shrunk'`, `'xs_ols'` and `'pca'` are `ts_beta`/`ts_alpha`/`ts_resid`, the shrunk fits, `regression_neut`/`_alpha`/`_beta` and `pca_factor`, of which those operators are the named spellings; `'stump'` is a learned switch between two signals on a market state. Prefer the named operator where there is one |
 
 ## Logic and conditions
 

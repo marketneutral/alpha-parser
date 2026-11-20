@@ -35,8 +35,12 @@ DAG shows:
 | Internal node | Shared by |
 |---|---|
 | `PcaBasis` | every `pca_factor` on the same `x`, `window` and `refit` (one decomposition per refit) |
-| `TsFit` | `ts_alpha`, `ts_resid` and their shrunk versions on the same `y`, regressors, window and prior; with one regressor its slope is a `ts_beta` (or `ts_beta_shrunk`) node, the same node as a `ts_beta` written alongside |
-| `RegressionFit` | `regression_alpha` and every `regression_beta(..., j)` on the same `y` and regressors |
+| `TsFit` | `ts_beta`, `ts_alpha`, `ts_resid` (or their shrunk versions) on the same `y`, regressors, window and prior: one regression, read for each output |
+| `RegressionFit` | `regression_neut`, `regression_alpha` and every `regression_beta(..., j)` on the same `y` and regressors |
+
+Each is the fit of an estimator (`estimate`, of which these operators are the named spellings), an `EstimateFit`
+node; the key's first element still names it as before. A fit you register yourself is an `EstimateFit` too, shared
+the same way by every output of it.
 | `MatchSelection` | every `ts_match` and `ts_match_score` on the same `key` and options, whatever its `value`: the twins are chosen once |
 
 A node's inputs are every attribute that is a signal. (Before 0.14.0 the graph looked for a fixed list of attribute

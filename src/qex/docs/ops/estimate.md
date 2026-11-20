@@ -25,18 +25,23 @@ Calls with the same estimator, inputs, window, refit and options share one fit, 
 for three outputs of one fit costs one fit.
 
 **Prefer the named operator where there is one.** `ts_beta(y, x, 252)` says what it is in a way
-`estimate('ols', 'beta1', y, x, window=252)` does not, and they are the same node. Write `estimate` for what has no
-name: an estimator such as the stump, or an output such as one slope of a joint fit.
+`estimate('ols', 'beta1', y, x, window=252)` does not, and it is that estimate, written short. Write `estimate` for what
+has no name: an estimator such as the stump, or an output such as one slope of a joint fit.
 
 `name@version` picks a version (`estimate('ols@1', ...)`); the name alone is the latest. An unknown estimator, output or
 option is refused when the expression is read, with the list of what there is.
 
-## The operators are estimates too
+## The operators are estimates
 
-Every fitted operator qex has is a built-in estimator, and both ways of writing it are **the same node**: the same
-numbers, one cached computation, the same identity. **For readability, write the named operator** wherever the left
-column has one; the right column is what it means, and the way to the outputs that have no name, such as one slope of a
-joint fit.
+Every fitted operator in qex is **sugar for `estimate`**: `ts_beta(y, x, 252)` calls
+`estimate('ols', 'beta1', y, x, window=252)`, and the maths is the `ols` estimator's, written once. Both spellings are
+one node: the same numbers, one cached computation, the same identity (each keeps the cache key it always had, so an
+alpha's identity does not change). And every output of one fit reads that fit: `ts_beta`, `ts_alpha` and `ts_resid` on
+the same `y`, `x` and window are one regression, as are `regression_neut`, `regression_alpha` and `regression_beta` on
+the same inputs, and every `pca_factor` on one `x`, window and refit is one decomposition.
+
+**For readability, write the named operator** wherever the left column has one; the right column is what it means,
+and the way to the outputs that have no name, such as one slope of a joint fit.
 
 | Named operator | As `estimate` |
 |---|---|
@@ -106,7 +111,7 @@ cut it; trying state after state is a search, and each is a trial.
 
 ## Point in time, by protocol
 
-An estimator that is not built from qex's own operators is written to a protocol. The engine owns the schedule and
+An estimator can be written to a protocol (or vectorized, as the built-ins are: below). The engine owns the schedule and
 hands the estimator only what was known: `fit` gets the rows of the window ending on the refit day, and `step` gets one
 day's row, with the parameters fixed until the next refit. So an estimator cannot use a later day, even by mistake;
 an HMM written this way can only give filtered probabilities, never the smoothed ones that leak the future. A
@@ -129,7 +134,18 @@ stock.
 
 ## Writing an estimator (Python)
 
-An estimator is a class, registered once; an expression names it. Python never goes inside the string.
+An estimator is a class, registered once; an expression names it. Python never goes inside the string. It implements
+one of two things:
+
+- **`compute(values, window, refit, hyper, data)`**: every output at once, vectorized over the panel. This is how the
+  built-ins are written (rolling sums for `ols`, a least squares per day for `xs_ols`, an SVD per refit for `pca`).
+  Each output may be a frame, or a function `get -> frame` computed when first read, where `get('name')` gives
+  another output; so a fit read only for its slope never computes its residual. Fast, and the estimator is
+  responsible for using only the past.
+- **`fit` and `step`**: the protocol above. The engine owns the schedule and hands over only what was known, so the
+  estimator cannot look ahead. The way to write a model whose maths qex does not have.
+
+A protocol estimator, market-level:
 
 ```python
 import numpy as np
