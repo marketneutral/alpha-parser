@@ -543,3 +543,67 @@ def test_estimators_lists_the_built_ins_in_a_fresh_process():
                          capture_output=True, text=True, check=True).stdout
     for name in ("ols", "ols_shrunk", "xs_ols", "pca", "stump", "stump_xs"):
         assert repr(name) in out
+
+
+# --- the tree --------------------------------------------------------------------------------------------------------
+
+def _two_states(seed=2, T=2500, effect=0.004):
+    """r1 beats r2 only where a > 6 and b < 0 (the day before): a region a stump cannot draw and a depth-2 tree can."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2008-01-01", periods=T)
+    a = pd.Series(np.abs(np.cumsum(rng.normal(0, 1, T))) % 10, idx)
+    b = pd.Series(np.cumsum(rng.normal(0, .3, T)) % 6 - 3, idx)
+    region = (a.shift(1) > 6) & (b.shift(1) < 0)
+    r1 = pd.Series(rng.normal(0, .01, T), idx) + np.where(region, effect, -effect / 2)
+    r2 = pd.Series(rng.normal(0, .01, T), idx)
+    frame = lambda s: pd.DataFrame({c: s for c in "ABC"})
+    return {"close": frame(pd.Series(100.0, idx)), "a": frame(a), "b": frame(b), "r1": frame(r1), "r2": frame(r2)}, a, b
+
+
+TREE = "estimate('tree', '{}', field('a'), field('b'), field('r1'), field('r2'), window=1260, refit=63{})"
+
+
+def test_the_tree_finds_a_two_state_region():
+    d, a, b = _two_states()
+    w, leaf = (_ev(TREE.format(o, ""), d)["A"] for o in ("w1", "leaf"))
+    m = w.dropna().index
+    assert (w[m] == ((a > 6) & (b < 0))[m]).mean() > 0.9
+    assert set(leaf.dropna().unique()) <= {0.0, 1.0, 2.0, 3.0} and leaf.dropna().nunique() >= 3
+    stump = _ev("estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)", d)["A"]
+    assert (stump[m] == ((a > 6) & (b < 0))[m]).mean() < (w[m] == ((a > 6) & (b < 0))[m]).mean()
+
+
+def test_a_tree_of_depth_one_on_one_state_is_the_stump():
+    d, _, _ = _two_states()
+    t = _ev("estimate('tree', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63, depth=1)", d)
+    s = _ev("estimate('stump', 'w1', field('a'), field('r1'), field('r2'), window=1260, refit=63)", d)
+    assert t.equals(s)
+
+
+def test_the_tree_is_point_in_time_start_independent_and_repeatable():
+    d, _, _ = _two_states()
+    later = {k: v.copy() for k, v in d.items()}
+    rng = np.random.default_rng(4)
+    for k in ("a", "b", "r1", "r2"):
+        later[k].iloc[1801:, :] = rng.normal(0, 1, len(later[k]) - 1801)[:, None]
+    for o in ("w1", "leaf", "p"):
+        x, y = _ev(TREE.format(o, ""), d)["A"], _ev(TREE.format(o, ""), later)["A"]
+        assert x.iloc[:1801].equals(y.iloc[:1801])
+    short = {k: v.iloc[200:] for k, v in d.items()}
+    x, y = _ev(TREE.format("w1", ""), d)["A"], _ev(TREE.format("w1", ""), short)["A"]
+    common = y.dropna().index
+    assert len(common) > 500 and x[common].equals(y[common])
+    assert _ev(TREE.format("p", ""), d).equals(_ev(TREE.format("p", ""), d))
+
+
+def test_the_tree_s_cost_and_options():
+    assert Q.complexity(qex(TREE.format("w1", ""))).dof == 10                       # 3 splits x (cut, state) + 4 leaves
+    assert Q.complexity(qex(TREE.format("w1", ", depth=3"))).dof == 7 * 2 + 8
+    assert Q.complexity(qex("estimate('tree', 'w1', field('a'), field('r1'), field('r2'), window=252)")).dof == 7
+    with pytest.raises(ValueError, match="depth is 1, 2 or 3"):
+        qex(TREE.format("w1", ", depth=4"))
+    with pytest.raises(ValueError, match="min_leaf"):
+        qex(TREE.format("w1", ", min_leaf=1"))
+    d, _, _ = _two_states()
+    big = _ev(TREE.format("leaf", ", min_leaf=600"), d)["A"].dropna()                # leaves of 600 days: fewer splits
+    assert big.nunique() <= _ev(TREE.format("leaf", ""), d)["A"].dropna().nunique()

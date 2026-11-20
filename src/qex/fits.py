@@ -703,3 +703,129 @@ class StumpXs(Estimator):
         w1 = np.where(np.isfinite(s), np.where(s <= state["threshold"], state["w_lo"], state["w_hi"]), np.nan)
         full = lambda v: np.full(len(s), v)
         return dict(w1=w1, threshold=full(state["threshold"]), gap=full(state["gap"]), p=full(state["p"]))
+
+
+# --- a tree: the stump, deeper, on several market states ----------------------------------------------------------
+
+@register_estimator
+class Tree(Estimator):
+    """A learned decision tree between two signals on one or more market states: the stump, grown to a depth.
+
+        estimate('tree', 'w1', state1, state2, ..., r1, r2, window=1260, refit=63, depth=2)
+
+    The last two inputs are the two signals' daily returns, as for the stump; every input before them is a market
+    state. On each refit day it pairs the states on day u - 1 with the returns on day u over the window and grows a
+    tree by the stump's rule, greedily: at each node, over every state and its quantiles there, the split that most
+    reduces the squared error of r1 - r2 against its mean on each side; then the same on each side, to `depth`. A
+    node stops early when no split leaves `min_leaf` days on each side. Each leaf keeps the signal that earned more on
+    its days. The second split is fitted only on the days the first sent to its side: a tree, not stumps added.
+
+        w1      1 if today's states lead to a leaf where r1 earned more, else 0: the weight on the first signal
+        leaf    which leaf today's states lead to, numbered left to right from 0 (to see the regime the tree is in)
+        p       a permutation test of the whole tree: how often a tree grown the same way on shuffled days fits as well
+
+    With one state and depth 1 it is the stump. Options: `depth` (1 to 3, default 2), `min_leaf` (the fewest days on
+    each side of a split, LightGBM's min_data_in_leaf; given, the same at every level; by default a fifth of the
+    window at the first split, halved at each level below, so about 126 days in a leaf at depth 2 on five years), `quantiles` (20), `permutations`
+    (100; 0 for none). dof: each split's threshold, and its choice of state when there are several, and each leaf's
+    side, for the tree's full size: depth 2 on two states, 3 x 2 + 4 = 10.
+    """
+    name, axis, n_inputs = "tree", "series", (3, None)
+    window, refit, refit_default = "required", "optional", 21
+    outputs = ("w1", "leaf", "p")
+    hyper = {"depth": 2, "min_leaf": None, "quantiles": 20, "permutations": 100}
+    dof = 7                                          # depth 2 on one state; each fit's own count is dof_of
+    about = "a learned decision tree on market states that picks, in each leaf, the better of two signals"
+
+    def dof_of(self, fit):
+        depth, k = fit.hyper["depth"], len(fit.inputs) - 2
+        return (2 ** depth - 1) * (2 if k > 1 else 1) + 2 ** depth
+
+    def check(self, inputs, window, refit, hyper):
+        depth, ml, q, b = hyper["depth"], hyper["min_leaf"], hyper["quantiles"], hyper["permutations"]
+        if not _whole(depth, 1) or depth > 3:
+            raise ValueError(f"estimate('tree')'s depth is 1, 2 or 3 (got {depth!r}): a deeper tree has leaves of a "
+                             f"few days each")
+        if ml is not None and not _whole(ml, 2):
+            raise ValueError(f"estimate('tree')'s min_leaf must be a whole number of days, at least 2 (got {ml!r})")
+        if not _whole(q, 2):
+            raise ValueError(f"estimate('tree')'s quantiles must be a whole number, at least 2 (got {q!r})")
+        if not _whole(b, 0):
+            raise ValueError(f"estimate('tree')'s permutations must be a whole number, 0 or more (got {b!r})")
+        if window < 10:
+            raise ValueError("estimate('tree')'s window must be at least 10 days")
+
+    @staticmethod
+    def _grow(S, d, idx, depth, min_leaf, levels):
+        """The tree on the days idx: a leaf (mean of d) or (state, threshold, low subtree, high subtree)."""
+        if depth == 0 or len(idx) < 2 * min_leaf[0]:
+            return ("leaf", float(d[idx].mean()))
+        best = None
+        for j in range(S.shape[1]):
+            s = S[idx, j]
+            order = np.argsort(s, kind="mergesort")
+            s_sorted, d_sorted = s[order], d[idx][order]
+            thresholds = np.unique(np.quantile(s_sorted, levels))
+            cuts = np.searchsorted(s_sorted, thresholds, side="right")
+            keep = (cuts >= min_leaf[0]) & (len(idx) - cuts >= min_leaf[0])
+            if not keep.any():
+                continue
+            gain, k = Stump._best(s_sorted, d_sorted, cuts[keep])
+            if best is None or gain > best[0]:
+                best = (gain, j, float(thresholds[keep][k]))
+        if best is None:
+            return ("leaf", float(d[idx].mean()))
+        _, j, c = best
+        lo, hi = idx[S[idx, j] <= c], idx[S[idx, j] > c]
+        return ("split", j, c, Tree._grow(S, d, lo, depth - 1, min_leaf[1:], levels),
+                Tree._grow(S, d, hi, depth - 1, min_leaf[1:], levels))
+
+    @classmethod
+    def _fit_gain(cls, node, S, d, idx):
+        """sum over leaves of n * mean^2: the tree's reduction of squared error, up to a constant."""
+        if node[0] == "leaf":
+            return len(idx) * d[idx].mean() ** 2 if len(idx) else 0.0
+        _, j, c, lo, hi = node
+        return cls._fit_gain(lo, S, d, idx[S[idx, j] <= c]) + cls._fit_gain(hi, S, d, idx[S[idx, j] > c])
+
+    def fit(self, window, hyper, rng, members=None):
+        k = window.shape[1] - 2
+        S, d = window[:-1, :k], window[1:, k] - window[1:, k + 1]       # the states at u - 1, the returns on day u
+        ok = np.isfinite(S).all(axis=1) & np.isfinite(d)
+        S, d = S[ok], d[ok]
+        depth = int(hyper["depth"])
+        if hyper["min_leaf"] is not None:                              # given: the same at every level
+            min_leaf = [int(hyper["min_leaf"])] * depth
+        else:                                                          # a fifth of the window, halved per level
+            min_leaf = [max(2, (len(window) - 1) // 5 // 2 ** i) for i in range(depth)]
+        if len(d) < 2 * min_leaf[0]:
+            return None
+        levels = np.linspace(0, 1, int(hyper["quantiles"]) + 1)[1:-1]
+        idx = np.arange(len(d))
+        tree = self._grow(S, d, idx, depth, min_leaf, levels)
+        if tree[0] == "leaf":
+            return None
+        gain = self._fit_gain(tree, S, d, idx)
+        b, p = int(hyper["permutations"]), np.nan
+        if b:
+            beaten = 0
+            for _ in range(b):
+                dp = rng.permutation(d)
+                t = self._grow(S, dp, idx, depth, min_leaf, levels)
+                beaten += self._fit_gain(t, S, dp, idx) >= gain - 1e-15
+            p = (1 + beaten) / (b + 1)
+        return dict(tree=tree, p=float(p))
+
+    def step(self, state, row, hyper, members=None):
+        s = row[:-2]
+        if not np.isfinite(s).all():
+            return dict(w1=np.nan, leaf=np.nan, p=state["p"])
+        node, leaf, width = state["tree"], 0, 2 ** int(hyper["depth"])
+        while node[0] == "split":
+            width //= 2
+            if s[node[1]] > node[2]:
+                leaf += width
+                node = node[4]
+            else:
+                node = node[3]
+        return dict(w1=1.0 if node[1] > 0 else 0.0, leaf=float(leaf), p=state["p"])

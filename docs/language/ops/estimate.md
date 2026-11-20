@@ -61,6 +61,7 @@ and the way to the outputs that have no name, such as one slope of a joint fit.
 | `xs_ols` | each day's least squares across stocks | y, then one or more regressors | `resid`, `alpha`, `beta1` ... `betak` | 1 / 1 | |
 | `pca` | principal components across stocks | x | `beta1` ... `beta20` | required / 21 | |
 | `stump` | a learned switch on a market state (below) | state, r1, r2 | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_leaf`, `quantiles`, `permutations` |
+| `tree` | a learned decision tree on one or more market states (below) | states..., r1, r2 | `w1`, `leaf`, `p` | required / 21 | `depth`, `min_leaf`, `quantiles`, `permutations` |
 | `stump_xs` | a learned split of the stocks on each stock's own state (below) | state, y, z, return | `w1`, `threshold`, `gap`, `p` | required / 21 | `min_share`, `quantiles` |
 
 `ts_match` stays its own operator: it reads *another* stock's value through the twins it chose, which is not an
@@ -107,6 +108,67 @@ series is refused, with a message.
 **Small samples.** Regimes are rare, and a side that learned from two crises learned two anecdotes: hence `min_leaf`,
 and `p` to say whether the switch is real. Fix the state for an economic reason and let the stump learn only where to
 cut it; trying state after state is a search, and each is a trial.
+
+## The tree: twenty questions about the market
+
+A stump asks the market one question ("is volatility above 15%?") and holds one signal for each answer. A **tree**
+asks a second question, and which question depends on the first answer: the way a trader thinks, "if the market is
+calm, hold momentum; if it is nervous, it depends how nervous". Each final answer, a **leaf**, holds the signal that
+earned more on the days that ended there.
+
+```qex
+let mom = zscore(rank(delay(returns(231), 21))),
+    rev = zscore(rank(-ts_mean(returns(21), 21))),
+    pm  = regression_beta(returns(1), delay(mom, 1)),                    # each signal's daily return
+    pr  = regression_beta(returns(1), delay(rev, 1)),
+    vol = sqrt(ewma(power(returns(1, 'market'), 2), 11)) * sqrt(252),     # the market's volatility, a year
+    up  = returns(504, 'market'),                                         # the market's two-year return
+    w   = estimate('tree', 'w1', vol, up, pm, pr, window=1260, refit=63, depth=2)
+in w * mom + (1 - w) * rev
+```
+
+Fitted on US stocks (the 3,000 largest) over the five years to the end of 2015, this tree learned:
+
+```
+                     market volatility ≤ 15.7% a year?
+                  ┌─────────── yes ──┴── no ───────────┐
+       2-year market return ≤ 34%?           volatility ≤ 22.6%?
+          ┌── yes ──┴── no ──┐              ┌── yes ──┴── no ──┐
+      MOMENTUM          MOMENTUM        REVERSAL          MOMENTUM
+   403 days, +19%/yr  605 days, +8%/yr  126 days, −33%/yr  126 days, +2%/yr
+                  (momentum's return over reversal's, a year, on those days)
+```
+
+Read it top down. On calm days, hold momentum: it beat reversal by 8 to 19% a year there. When the market gets
+nervous (volatility between 16% and 23%), switch to reversal: momentum lagged it by 33% a year on those days, the
+momentum crash of Daniel and Moskowitz (2016). In the most violent days the call is close to a coin flip (+2% a year
+on 126 days). Its `p` was 0.01: a tree grown the same way on shuffled days fit this well once in a hundred.
+
+Three things the picture teaches:
+
+- **A split can decide nothing.** Both of the calm side's leaves hold momentum, so the question about the two-year
+  return changes no position. It still costs dof: the tree was searched for it.
+- **Deep leaves are small.** Each level halves the data. The nervous leaf holds 126 days, about six months of a
+  five-year window, which is the floor (`min_leaf`) at depth 2: a leaf below it is not allowed. Read a leaf's
+  number of days before believing its side.
+- **Trees are greedy.** The first split is chosen alone, the best single question; the second is the best question
+  *given* the first answer. It is fitted only on that side's days, which is what makes it a tree and not two stumps
+  added together.
+
+**Outputs.** `w1`: 1 when today's market leads to a leaf that holds the first signal, else 0. `leaf`: which leaf
+today is in, numbered left to right from 0 (0 to 3 at depth 2), to see the regime the tree thinks the market is in.
+`p`: the permutation test of the whole tree.
+
+| Option | Default | |
+|---|---|---|
+| `depth` | 2 | how many questions: 1 (the stump), 2 or 3 |
+| `min_leaf` | a fifth of the window, halved per level | the fewest days on each side of a split, at each level (LightGBM's `min_data_in_leaf`); given, the same at every level |
+| `quantiles` | 20 | the thresholds tried at each node: its states' quantiles at 5%, 10%, ... 95% |
+| `permutations` | 100 | the shuffles behind `p` (0: no `p`) |
+
+The inputs are any number of market states, then the two signals' returns. With one state and `depth=1` it is the
+stump, exactly. Its dof grow fast: depth 2 on two states is 10, depth 3 is 22, so the charge asks a deep tree to
+earn a great deal more than a stump.
 
 ## The stump across stocks: which signal for which stocks
 
@@ -159,6 +221,7 @@ not for how qex builds its graph. `qex.complexity(signal)` gives two counts:
 |---|---|
 | `ols`, `ols_shrunk`, `xs_ols`, `pca` | 0 |
 | `stump`, `stump_xs` | 3 |
+| `tree` | each split's threshold (and its choice of state, with several), and each leaf's side: depth 2 on two states, 3 × 2 + 4 = 10 |
 
 The stump fits on the past only, so its own choices don't inflate a backtest the way an in-sample fit would. A dof
 charge prices flexibility instead: a model that can learn more gives an author's search more ways to find noise, and
