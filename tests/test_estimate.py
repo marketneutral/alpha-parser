@@ -607,3 +607,48 @@ def test_the_tree_s_cost_and_options():
     d, _, _ = _two_states()
     big = _ev(TREE.format("leaf", ", min_leaf=600"), d)["A"].dropna()                # leaves of 600 days: fewer splits
     assert big.nunique() <= _ev(TREE.format("leaf", ""), d)["A"].dropna().nunique()
+
+
+# --- the tree's regularizers -------------------------------------------------------------------------------------------
+
+def _churn(expr, d):
+    w = _ev(expr, d)["A"].dropna()
+    return w, w.diff().abs().mean()
+
+
+def test_alpha_keeps_the_tree_from_splitting_on_noise():
+    d, _, _ = _two_states(seed=7, effect=0.0)
+    _, plain = _churn(TREE.format("w1", ""), d)
+    w, tested = _churn(TREE.format("w1", ", alpha=0.05"), d)
+    assert tested < plain / 10                                      # no splits: the book stops switching
+    assert _ev(TREE.format("leaf", ", alpha=0.05"), d)["A"].dropna().nunique() == 1
+
+
+def test_alpha_keeps_a_real_split():
+    d, a, b = _two_states()
+    w = _ev(TREE.format("w1", ", alpha=0.05"), d)["A"].dropna()
+    inside = ((a > 6) & (b < 0))[w.index]
+    assert (w[inside] > 0.5).mean() > 0.5 and (w[~inside] <= 0.5).mean() > 0.85
+
+
+def test_soft_and_honest_shrink_toward_the_blend_on_noise():
+    d, _, _ = _two_states(seed=7, effect=0.0)
+    w, _ = _churn(TREE.format("w1", ", soft=1, honest=1"), d)
+    assert ((w > 0.02) & (w < 0.98)).mean() > 0.9                    # fractional weights, not 0 or 1
+
+
+def test_honest_still_finds_the_planted_region():
+    d, a, b = _two_states()
+    w = _ev(TREE.format("w1", ", honest=1"), d)["A"].dropna()
+    inside = ((a > 6) & (b < 0))[w.index]
+    assert (w[inside] > 0.5).mean() > 0.7 and (w[~inside] <= 0.5).mean() > 0.8
+
+
+def test_the_regularizers_options():
+    with pytest.raises(ValueError, match="soft is on or off"):
+        qex(TREE.format("w1", ", soft=2"))
+    with pytest.raises(ValueError, match="alpha is a significance level"):
+        qex(TREE.format("w1", ", alpha=1.5"))
+    with pytest.raises(ValueError, match="needs permutations above 0"):
+        qex(TREE.format("w1", ", alpha=0.05, permutations=0"))
+    assert Q.complexity(qex(TREE.format("w1", ", alpha=0.05, soft=1, honest=1"))).dof == 10   # searched all the same

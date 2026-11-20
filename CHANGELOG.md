@@ -7,7 +7,7 @@
 stump's rule (at each node, over every state and its quantiles, the split that most reduces the squared error of
 r1 - r2 on each side), each split fitted only on the days the one above sent to its side. Each leaf holds the signal
 that earned more there. Outputs `w1`, `leaf` (which leaf today is in) and `p` (a permutation test of the whole tree).
-Options `depth` (1 to 3), `min_leaf` (the fewest days on each side of a split; by default a fifth of the window,
+Regularizers, each off by default: `alpha` (a split only if its own permutation test passes), `soft` (a leaf's weight is its confidence, Phi(t)), `honest` (splits on alternate months, leaves judged on the others); measured on made-up data in `ops/estimate.md`. Options `depth` (1 to 3), `min_leaf` (the fewest days on each side of a split; by default a fifth of the window,
 halved per level; given, the same at every level), `quantiles`, `permutations`. With one state and depth 1 it is the
 stump, exactly (tested). dof per fit: each split's threshold, and its choice of state when there are several, and
 each leaf's side: depth 2 on two states is 10. Point in time, start-independent and repeatable (tested).

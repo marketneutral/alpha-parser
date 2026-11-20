@@ -167,6 +167,37 @@ today is in, numbered left to right from 0 (0 to 3 at depth 2), to see the regim
 | `min_leaf` | a fifth of the window, halved per level | the fewest days on each side of a split, at each level (LightGBM's `min_data_in_leaf`); given, the same at every level |
 | `quantiles` | 20 | the thresholds tried at each node: its states' quantiles at 5%, 10%, ... 95% |
 | `permutations` | 100 | the shuffles behind `p` (0: no `p`) |
+| `alpha` | off | a split is made only if it is real on its own days (below) |
+| `soft` | off | a leaf's weight is its confidence, not 0 or 1 (below) |
+| `honest` | off | splits chosen on half the days, leaves judged on the other half (below) |
+
+**Regularizing a tree.** Five years hold one or two crises, so a deep leaf can learn an anecdote. Three options make
+the tree harder to fool, each off by default:
+
+- `alpha=0.05`: **split only if it is real.** At each node the days are shuffled and the best split found again,
+  `permutations` times; the split is made only if fewer than 5% of the shuffles split as well. Otherwise the node is
+  a leaf (conditional inference trees: Hothorn, Hornik and Zeileis 2006). `p` is then the root split's test.
+- `soft=1`: **a leaf holds its confidence.** Its weight is the probability, from its t-statistic, that the first
+  signal beats the second there: near 1 or 0 for a large, clear leaf, near 0.5 (the blend) for a small, noisy one.
+  The book moves gradually instead of flipping.
+- `honest=1`: **don't judge a leaf on the days that drew it.** The splits are chosen on alternate months and each
+  leaf's side decided on the others (Wager and Athey 2018).
+
+On made-up data (a region of 12% of days where the first signal wins, and pure noise, 2,500 days, a five-year
+window):
+
+| | finds the region (inside / outside) | on noise: how much the weight moves a day |
+|---|---|---|
+| plain | 0.90 / 0.94 | 0.134: it switches on noise |
+| `alpha=0.05` | 0.66 / 0.91 | 0.003: no splits, one leaf |
+| `soft=1` | 0.90 / 0.94 | 0.120 |
+| `honest=1` | 0.86 / 0.88 | 0.131 |
+| all three | 0.00 / 1.00: finds nothing | 0.002, weights 0.01 to 0.65 |
+
+So `alpha` does what it says, at a cost in power. **`soft` alone barely matters**, and that is worth knowing: a
+leaf the tree *chose* looks confident by construction, since its split was picked to separate the two sides. It
+needs `honest`: judged on other days, a noisy leaf's weight falls toward 0.5. All three at once, on five years, are
+too strict to find a real 12% region. Use `alpha`, or `soft` with `honest`.
 
 The inputs are any number of market states, then the two signals' returns. With one state and `depth=1` it is the
 stump, exactly. Its dof grow fast: depth 2 on two states is 10, depth 3 is 22, so the charge asks a deep tree to
