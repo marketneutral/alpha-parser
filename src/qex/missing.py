@@ -96,6 +96,19 @@ def label(signal: Signal, nested: bool = False) -> str:
     if isinstance(signal, _dt.Field):
         return f"{signal.name}()" if signal.name in ("close", "open", "high", "low") else f"field('{signal.name}')"
     name = type(signal).__name__
+    if name in ("EstimateOutput", "EstimateFit"):                 # written estimate('name', 'output', inputs..., window=)
+        fit = signal.fit if name == "EstimateOutput" else signal
+        e = fit.estimator
+        args = [repr(e.name), repr(signal.output if name == "EstimateOutput" else "fit")]
+        args += [label(x) for x in fit.inputs] + [f"window={fit.window}", f"refit={fit.refit}"]
+        defaults = type(e).hyper
+        args += [f"{k}={label(v) if isinstance(v, Signal) else repr(v)}" for k, v in fit.hyper.items()
+                 if v != defaults.get(k)]
+        return f"estimate({', '.join(args)})"
+    if name == "TsFitBeta":                                       # the j-th slope of a joint fit: only estimate reaches it
+        fit = signal.fit
+        args = ["'ols'", repr(f"beta{signal.j}"), label(fit.y)] + [label(x) for x in fit.xs] + [f"window={fit.period}"]
+        return f"estimate({', '.join(args)})"
     if hasattr(signal, "fit") and isinstance(getattr(signal, "fit"), Signal) or name in ("TsFit", "RegressionFit"):
         fit = signal if name in ("TsFit", "RegressionFit") else signal.fit       # written as the user writes them
         args = [label(fit.y)] + [label(x) for x in fit.xs]
@@ -316,6 +329,15 @@ def explain_missing(signal: Signal, data: Dict[str, pd.DataFrame], universe: Opt
             twin_code, twin_cause, twin_origin = rv[0][rows, col], rv[1][rows, col], rv[2][rows, col]
             take = missing & (peers >= 0) & (code == PRESENT) & (twin_code != PRESENT)
             code[take], cause[take], origin[take] = twin_code[take], twin_cause[take], twin_origin[take]
+            own(missing, CALC)
+        elif type(s).__name__ == "EstimateOutput":
+            # an estimator's output: its inputs' reasons first (missing that day), then before its first fit a short
+            # history, and after it a calculation that could not be made (a window too thin to fit)
+            for res in got:
+                inherit(missing, res)
+            has = np.isfinite(v).any(axis=1)
+            first = int(np.argmax(has)) if has.any() else shape[0]
+            own(missing & (np.arange(shape[0]) < first)[:, None], HISTORY)
             own(missing, CALC)
         elif isinstance(s, (_cs.RegressionAlpha,)):
             # one number per day for every name: missing only on a day with no fit, for too few names

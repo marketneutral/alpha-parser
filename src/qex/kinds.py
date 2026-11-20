@@ -108,6 +108,8 @@ def _label_name(s: Signal) -> str:
     """How an operator is written, for the message: rank, +, ts_mean."""
     from .missing import _snake, _SYMBOLS
     n = type(s).__name__
+    if n in ("EstimateFit", "EstimateOutput", "TsFitBeta"):
+        return "estimate()"
     return f"'{_SYMBOLS[n]}'" if n in _SYMBOLS else "'-'" if n == "Neg" else "'~'" if n == "Not" else f"{_snake(n)}()"
 
 

@@ -143,6 +143,13 @@ Each stock's statistical twin: one particular other stock, chosen from history. 
 - [`ts_match(value, key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)`](ops/matching.md#ts_match): The `value` of each stock's twin: the stock whose `key` over the last `lookback` days was most alike, chosen every `rebalance` weekdays on a fixed calendar, from the past only; options by name
 - [`ts_match_score(key, lookback, metric='corr', within=None, matching='nearest', rebalance=21, min_overlap=None)`](ops/matching.md#ts_match_score): How alike each stock and its twin were when chosen: a correlation, or a distance for the distance metrics; reads the same selection as `ts_match`; options by name
 
+## Estimates
+
+Fitted values through one operator: today's fitted operators as built-in estimators, and new ones by name.
+[Estimates in detail →](ops/estimate.md)
+
+- [`estimate(name, output, inputs..., window=, refit=, options...)`](ops/estimate.md#estimate): The `output` of estimator `name` fitted on the inputs: `'ols'`, `'ols_shrunk'`, `'xs_ols'` and `'pca'` are `ts_beta`/`ts_alpha`/`ts_resid`, the shrunk fits, `regression_neut`/`_alpha`/`_beta` and `pca_factor` (the same node); `'stump'` is a learned switch between two signals on a market state. Prefer the named operator where there is one
+
 ## Logic and conditions
 
 [Logic and conditions in detail →](ops/logic.md)

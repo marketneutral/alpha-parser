@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.20.0
+
+**`estimate(name, output, inputs..., window=, refit=, options...)`: every fitted value through one operator** (new
+family *Estimates*, `ops/estimate.md`). qex had built the same thing four times (rolling least squares, its shrunk
+form, the daily cross-sectional fit, the principal components): each fits on a window, refits on a schedule and is
+read by small operators. An *estimator* is that pattern with a name, registered in Python and called by name.
+
+- **Today's operators are built-in estimators, and the same node.** `ols` (`ts_beta`, `ts_alpha`, `ts_resid`),
+  `ols_shrunk` (the shrunk fits, the group prior as `groups=`), `xs_ols` (`regression_neut`, `regression_alpha`,
+  `regression_beta`) and `pca` (`pca_factor`). A built-in *builds the named operator's node*, so
+  `estimate('ols', 'beta1', y, x, window=252)` and `ts_beta(y, x, 252)` have one cache key, one cached computation and
+  the same numbers (tested for every built-in output). **No operator changes**, and none of their cache keys.
+  **For readability, prefer the named operator wherever one exists**; `estimate` is for what has no name.
+- **One output that had no name:** `estimate('ols', 'betaj', y, x1, ..., xk, window=)`, the j-th slope of a joint
+  rolling fit (ts_alpha and ts_resid used it; nothing read it).
+- **A new estimator, `stump`**: a learned switch between two signals on a market state, threshold regression (Hansen
+  2000). Outputs `w1` (the weight on the first signal), `threshold`, `gap` and `p` (a permutation test inside the
+  window); options `min_leaf`, `quantiles`, `permutations`.
+- **The protocol, for estimators not built from qex's operators:** `fit` gets only the rows of the window ending on the
+  refit day and `step` one day's row, the schedule is the engine's (on the calendar, `schedule.py`), and randomness is
+  seeded by the call and the refit's date. Point in time by construction, deterministic, and independent of where the
+  data starts; all three tested on the stump. This version supports the `series` axis (market-level inputs, outputs
+  given to every stock); the built-ins cover the others through their own nodes.
+- **The registry:** `qex.Estimator`, `qex.register_estimator`, `qex.estimators()`, `qex.get_estimator`;
+  `'name@version'` picks a version; a name and version register once. `explain_missing` names estimate nodes as
+  written and calls the days before a first fit a short history; the look-ahead and kind checks cover them.
+- `estimate` takes its options by name (any the estimator declares; unknown ones are refused with the list).
+
+Tests in `tests/test_estimate.py`.
+
 ## 0.19.0
 
 **Refits on a calendar: `ts_match` and `pca_factor` no longer depend on where the data starts.** Both re-fit on a
